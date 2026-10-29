@@ -1,6 +1,6 @@
 @echo off
 echo ===================================================
-echo     MONOPOLY CORP - LAUNCHING ALL SERVICES
+echo   CAPITAL FEDERATION - LAUNCHING ALL SERVICES
 echo ===================================================
 
 :: Setup ADB reverse port forwarding for connected Android physical phones
@@ -11,12 +11,12 @@ if %errorlevel% equ 0 (
 )
 
 echo [1/2] Starting Node.js Backend Server on port 4000...
-start "Monopoly Corp - Backend" cmd /k "cd /d %~dp0backend && node ./src/server.js"
+start "Capital Federation - Backend" cmd /k "cd /d %~dp0backend && node ./src/server.js"
 
 timeout /t 3 /nobreak >nul
 
 echo [2/2] Starting Web Admin Dashboard on port 5173...
-start "Monopoly Corp - Web Admin" cmd /k "cd /d %~dp0admin && npm.cmd run dev"
+start "Capital Federation - Web Admin" cmd /k "cd /d %~dp0admin && npm.cmd run dev"
 
 timeout /t 2 /nobreak >nul
 

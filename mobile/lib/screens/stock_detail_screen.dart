@@ -2814,11 +2814,11 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
 
             final bool isAuctionReady = data['isAuctionReady'] == true;
             final int hoursLeft = (data['hoursLeft'] as num?)?.toInt() ?? 0;
-            final double pnakFine = (data['pnakSanctionFine'] as num?)?.toDouble() ?? 100000000.0;
+            final double pnafFine = (data['pnafSanctionFine'] as num?)?.toDouble() ?? 100000000.0;
             final double bankPrincipal = (data['bankLoanPrincipal'] as num?)?.toDouble() ?? 0.0;
             final double bankInterest = (data['bankLoanInterest'] as num?)?.toDouble() ?? 0.0;
             final double totalBankDebt = (data['totalBankDebt'] as num?)?.toDouble() ?? (bankPrincipal + bankInterest);
-            final double totalCost = (data['totalRedemptionCost'] as num?)?.toDouble() ?? (pnakFine + totalBankDebt);
+            final double totalCost = (data['totalRedemptionCost'] as num?)?.toDouble() ?? (pnafFine + totalBankDebt);
             final bool canAfford = user.balanceIb >= totalCost;
             final bool isExpired = isAuctionReady || hoursLeft <= 0;
 
@@ -2930,7 +2930,7 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 const Text('⚖️ Denda Sanksi PNAF', style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 12)),
-                                Text(CurrencyFormatter.formatFull(pnakFine), style: const TextStyle(color: Color(0xFFFBBF24), fontSize: 12, fontWeight: FontWeight.bold)),
+                                Text(CurrencyFormatter.formatFull(pnafFine), style: const TextStyle(color: Color(0xFFFBBF24), fontSize: 12, fontWeight: FontWeight.bold)),
                               ],
                             ),
                             const SizedBox(height: 8),

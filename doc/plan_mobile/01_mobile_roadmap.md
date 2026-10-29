@@ -1,6 +1,6 @@
-# Roadmap Pengujian & Pengembangan Klien Mobile Flutter
+﻿# Roadmap Pengujian & Pengembangan Klien Mobile Flutter
 
-Dokumen ini berisi panduan pengujian aplikasi Android (Flutter), konektivitas ke server backend, serta daftar rencana fitur klien mobile **Monopoly Corp**.
+Dokumen ini berisi panduan pengujian aplikasi Android (Flutter), konektivitas ke server backend, serta daftar rencana fitur klien mobile **Capital Federation**.
 
 ---
 

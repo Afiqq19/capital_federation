@@ -1,6 +1,6 @@
-# Panduan Arsitektur Mobile: Pasar Negosiasi P2P, Brankas Akta & Ruang Sidang Live PNAK
+﻿# Panduan Arsitektur Mobile: Pasar Negosiasi P2P, Brankas Akta & Ruang Sidang Live PNAF
 
-Dokumen ini menjelaskan alur teknis, modularitas kode, dan interaksi fitur pada aplikasi Flutter Monopoly Corp.
+Dokumen ini menjelaskan alur teknis, modularitas kode, dan interaksi fitur pada aplikasi Flutter Capital Federation.
 
 ---
 
@@ -8,15 +8,15 @@ Dokumen ini menjelaskan alur teknis, modularitas kode, dan interaksi fitur pada 
 Fitur diorganisir secara modular di dalam `mobile/lib/features/`:
 - `corporate_deals/`:
   - `models/deal_model.dart`: Definisi objek `PrivateDealModel` dan `DealDeedModel`.
-  - `services/deals_service.dart`: Klien API untuk katalog global, inbox P2P, penandatanganan akta, brankas, dan gugatan PNAK.
+  - `services/deals_service.dart`: Klien API untuk katalog global, inbox P2P, penandatanganan akta, brankas, dan gugatan PNAF.
   - `screens/corporate_deals_screen.dart`: Layar terpadu 3 sub-tab (Katalog Global, Tawaran Masuk P2P, Brankas Akta Tersimpan).
   - `widgets/deal_card.dart`: Kartu penawaran dengan badge status dan aksi kontekstual.
   - `widgets/partial_buy_sheet.dart`: Modal kalkulasi dan pembelian eceran saham (misal 1% dari 10%).
-  - `widgets/deed_card.dart`: Sertifikat akta notariil resmi, meterai digital, dan tombol gugatan wanprestasi PNAK.
+  - `widgets/deed_card.dart`: Sertifikat akta notariil resmi, meterai digital, dan tombol gugatan wanprestasi PNAF.
   - `widgets/p2p_negotiation_sheet.dart`: Lembar divestasi saham ke calon pembeli spesifik atau publik.
   - `widgets/formal_deed_modal.dart`: Tinjau draft akta sebelum diterbitkan.
 - `court_commercial/`:
-  - `screens/court_live_room_screen.dart`: Ruang sidang interaktif PNAK dengan jadwal 10:00 WIB, tombol check-in kehadiran resmi, chat argumen para pihak, vonis putusan Verstek, dan hitung mundur 60 detik keluar ruangan.
+  - `screens/court_live_room_screen.dart`: Ruang sidang interaktif PNAF dengan jadwal 10:00 WIB, tombol check-in kehadiran resmi, chat argumen para pihak, vonis putusan Verstek, dan hitung mundur 60 detik keluar ruangan.
 
 ---
 
@@ -34,9 +34,9 @@ Fitur diorganisir secara modular di dalam `mobile/lib/features/`:
 
 ---
 
-## 3. Sidang Arbitrase & Putusan Verstek PNAK
+## 3. Sidang Arbitrase & Putusan Verstek PNAF
 1. **Pendaftaran Gugatan**:
-   - Jika salah satu pihak ingkar janji atau membatalkan sepihak, pihak yang dirugikan dapat menekan tombol **`[ ⚖️ GUGAT WANPRESTASI KE PNAK ]`** langsung dari sertifikat akta.
+   - Jika salah satu pihak ingkar janji atau membatalkan sepihak, pihak yang dirugikan dapat menekan tombol **`[ ⚖️ GUGAT WANPRESTASI KE PNAF ]`** langsung dari sertifikat akta.
 2. **Kehadiran Para Pihak (Check-In)**:
    - Jadwal sidang ditetapkan otomatis pukul **10:00 WIB**.
    - Terdapat tombol resmi: **`[ 🟢 SAYA HADIR DI PERSIDANGAN ]`**.

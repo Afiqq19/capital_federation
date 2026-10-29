@@ -1052,7 +1052,7 @@ class _HomeTabState extends State<HomeTab> {
             ),
           ),
         ]
-        // 3. SITA EKSEKUSI PNAK BANNER (JIKA PT DISITA NEGARA NON-DEFISIT)
+        // 3. SITA EKSEKUSI PNAF BANNER (JIKA PT DISITA NEGARA NON-DEFISIT)
         else if (isSeized) ...[
           Container(
             margin: const EdgeInsets.only(bottom: 16),
@@ -1081,13 +1081,13 @@ class _HomeTabState extends State<HomeTab> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
-                            'PERUSAHAAN DISITA NEGARA & PNAK',
+                            'PERUSAHAAN DISITA NEGARA & PNAF',
                             style: TextStyle(color: Color(0xFFF87171), fontSize: 13, fontWeight: FontWeight.w900),
                           ),
                           Text(
                             activeEntity['seizeReason'] != null && activeEntity['seizeReason'].toString().isNotEmpty
                                 ? activeEntity['seizeReason'].toString()
-                                : 'Eksekusi Kepaniteraan Pengadilan Niaga Konoha (PNAK) & Bank Sentral.',
+                                : 'Eksekusi Kepaniteraan Pengadilan Niaga Federasi (PNAF) & Bank Sentral.',
                             style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 11),
                           ),
                         ],
@@ -1097,7 +1097,7 @@ class _HomeTabState extends State<HomeTab> {
                 ),
                 const SizedBox(height: 10),
                 const Text(
-                  '⚠️ Seluruh pemasukan omzet bisnis, dividen, dan penarikan kas perseroan dibekukan oleh negara. Untuk mengambil alih kembali perseroan, Anda wajib melunasi Denda Sanksi PNAK dan seluruh kewajiban Utang Pokok beserta Bunga Bank Sentral.',
+                  '⚠️ Seluruh pemasukan omzet bisnis, dividen, dan penarikan kas perseroan dibekukan oleh negara. Untuk mengambil alih kembali perseroan, Anda wajib melunasi Denda Sanksi PNAF dan seluruh kewajiban Utang Pokok beserta Bunga Bank Sentral.',
                   style: TextStyle(color: Color(0xFFE2E8F0), fontSize: 11, height: 1.4),
                 ),
                 const SizedBox(height: 12),
@@ -2218,7 +2218,7 @@ class _HomeTabState extends State<HomeTab> {
                   children: [
                     CircularProgressIndicator(color: Color(0xFFEF4444)),
                     SizedBox(height: 16),
-                    Text('Menghitung rincian kewajiban sanksi PNAK & pelunasan bank...', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
+                    Text('Menghitung rincian kewajiban sanksi PNAF & pelunasan bank...', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
                   ],
                 ),
               );
@@ -2248,11 +2248,11 @@ class _HomeTabState extends State<HomeTab> {
               );
             }
 
-            final double pnakFine = (data['pnakSanctionFine'] as num?)?.toDouble() ?? 100000000.0;
+            final double pnafFine = (data['pnafSanctionFine'] as num?)?.toDouble() ?? 100000000.0;
             final double bankPrincipal = (data['bankLoanPrincipal'] as num?)?.toDouble() ?? 0.0;
             final double bankInterest = (data['bankLoanInterest'] as num?)?.toDouble() ?? 0.0;
             final double totalBankDebt = (data['totalBankDebt'] as num?)?.toDouble() ?? (bankPrincipal + bankInterest);
-            final double totalCost = (data['totalRedemptionCost'] as num?)?.toDouble() ?? (pnakFine + totalBankDebt);
+            final double totalCost = (data['totalRedemptionCost'] as num?)?.toDouble() ?? (pnafFine + totalBankDebt);
             final bool canAfford = user.balanceIb >= totalCost;
 
             return StatefulBuilder(
@@ -2315,8 +2315,8 @@ class _HomeTabState extends State<HomeTab> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                const Text('⚖️ Denda Sanksi PNAK', style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 12)),
-                                Text(CurrencyFormatter.formatFull(pnakFine), style: const TextStyle(color: Color(0xFFFBBF24), fontSize: 12, fontWeight: FontWeight.bold)),
+                                const Text('⚖️ Denda Sanksi PNAF', style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 12)),
+                                Text(CurrencyFormatter.formatFull(pnafFine), style: const TextStyle(color: Color(0xFFFBBF24), fontSize: 12, fontWeight: FontWeight.bold)),
                               ],
                             ),
                             const SizedBox(height: 8),
@@ -2425,7 +2425,7 @@ class _HomeTabState extends State<HomeTab> {
     if (activeEntity != null && activeEntity['isSeized'] == true && !isInject) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Perusahaan ini sedang DISITA Negara/PNAK! Seluruh penarikan kas dibekukan.'),
+          content: Text('Perusahaan ini sedang DISITA Negara/PNAF! Seluruh penarikan kas dibekukan.'),
           backgroundColor: Color(0xFFEF4444),
         ),
       );

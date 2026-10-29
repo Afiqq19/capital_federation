@@ -72,7 +72,7 @@ class DealDeedModel {
   final String digitalMeteraiId;
   final String notaryName;
   final double clauseBreachPenaltyPct;
-  final String status; // 'VALID_NOTARIZED', 'DISPUTED_PNAK', 'ANNULLED'
+  final String status; // 'VALID_NOTARIZED', 'DISPUTED_PNAF', 'ANNULLED'
   final String signedAt;
 
   DealDeedModel({
@@ -113,8 +113,8 @@ class DealDeedModel {
       pricePerShare: (json['price_per_share'] as num?)?.toDouble() ?? 0.0,
       totalAmountIb: ((json['total_amount_ib'] ?? json['total_price_ib']) as num?)?.toDouble() ?? 0.0,
       adminFeeIb: (json['admin_fee_ib'] as num?)?.toDouble() ?? 0.0,
-      digitalMeteraiId: json['digital_meterai_id']?.toString() ?? json['meterai_status']?.toString() ?? 'MTR-KONOHA-LUNAS',
-      notaryName: json['notary_name']?.toString() ?? 'Notaris Publik Konoha S.H., M.Kn.',
+      digitalMeteraiId: json['digital_meterai_id']?.toString() ?? json['meterai_status']?.toString() ?? 'MTR-FEDERASI-LUNAS',
+      notaryName: json['notary_name']?.toString() ?? 'Notaris Publik Federasi S.H., M.Kn.',
       clauseBreachPenaltyPct: (json['clause_breach_penalty_pct'] as num?)?.toDouble() ?? 15.0,
       status: json['status']?.toString() ?? 'VALID_NOTARIZED',
       signedAt: json['signed_at']?.toString() ?? json['created_at']?.toString() ?? '',

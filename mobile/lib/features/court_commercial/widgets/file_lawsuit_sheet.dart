@@ -68,7 +68,7 @@ class _FileLawsuitSheetState extends State<FileLawsuitSheet> {
     if (user.balanceIb < _courtFee) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Saldo Kas Pribadi Anda (${CurrencyFormatter.formatFull(user.balanceIb)}) tidak mencukupi untuk biaya panitera PNAK (IB 250.000).'),
+          content: Text('Saldo Kas Pribadi Anda (${CurrencyFormatter.formatFull(user.balanceIb)}) tidak mencukupi untuk biaya panitera PNAF (IB 250.000).'),
           backgroundColor: Colors.red,
         ),
       );
@@ -86,7 +86,7 @@ class _FileLawsuitSheetState extends State<FileLawsuitSheet> {
       caseType: _caseType,
       title: title,
       claimAmountIb: claimAmount,
-      notes: notes.isNotEmpty ? notes : 'Permohonan gugatan resmi diajukan melalui aplikasi terpadu PNAK Konoha.',
+      notes: notes.isNotEmpty ? notes : 'Permohonan gugatan resmi diajukan melalui aplikasi terpadu PNAF Federasi.',
     );
 
     setState(() => _isSubmitting = false);
@@ -104,7 +104,7 @@ class _FileLawsuitSheetState extends State<FileLawsuitSheet> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('⚖️ ${res['message'] ?? 'Gugatan berhasil diregister ke PNAK!'}\nBerita gugatan langsung disiarkan ke bursa!'),
+            content: Text('⚖️ ${res['message'] ?? 'Gugatan berhasil diregister ke PNAF!'}\nBerita gugatan langsung disiarkan ke bursa!'),
             backgroundColor: const Color(0xFF10B981),
             duration: const Duration(seconds: 5),
           ),
@@ -159,11 +159,11 @@ class _FileLawsuitSheetState extends State<FileLawsuitSheet> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'FORMULIR PENGADUAN & GUGATAN PNAK',
+                        'FORMULIR PENGADUAN & GUGATAN PNAF',
                         style: TextStyle(color: Color(0xFFF5B942), fontSize: 13, fontWeight: FontWeight.w900),
                       ),
                       Text(
-                        'Kepaniteraan Niaga & Arbitrase Korporasi Republik Konoha',
+                        'Kepaniteraan Niaga & Arbitrase Korporasi Republik Federasi',
                         style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10),
                       ),
                     ],
@@ -194,15 +194,15 @@ class _FileLawsuitSheetState extends State<FileLawsuitSheet> {
                   const Divider(color: Color(0xFF1E293B), height: 8),
                   _buildTypeTile(
                     'BANKRUPTCY',
-                    '⚖️ Permohonan PKPU & Restrukturisasi BSK',
-                    'Meminta moratorium penundaan cicilan kredit pinjaman Bank Sentral (BSK).',
+                    '⚖️ Permohonan PKPU & Restrukturisasi BCF',
+                    'Meminta moratorium penundaan cicilan kredit pinjaman Bank Sentral (BCF).',
                     const Color(0xFF10B981),
                   ),
                   const Divider(color: Color(0xFF1E293B), height: 8),
                   _buildTypeTile(
                     'REGULATORY',
                     '🚨 Laporan Manipulasi Pasar & Goreng Saham',
-                    'Melaporkan emiten spekulan mencurigakan ke Otoritas Pengawas OPFK.',
+                    'Melaporkan emiten spekulan mencurigakan ke Otoritas Pengawas OPFF.',
                     const Color(0xFFF43F5E),
                   ),
                 ],
@@ -219,7 +219,7 @@ class _FileLawsuitSheetState extends State<FileLawsuitSheet> {
               decoration: InputDecoration(
                 filled: true,
                 fillColor: const Color(0xFF070B14),
-                hintText: 'Contoh: ajel / PT. Syafiq Makmur Tbk. / Bank Sentral Konoha',
+                hintText: 'Contoh: ajel / PT. Syafiq Makmur Tbk. / Bank Sentral Federasi',
                 hintStyle: const TextStyle(color: Color(0xFF64748B), fontSize: 11),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF1E293B))),
                 enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF1E293B))),
@@ -329,7 +329,7 @@ class _FileLawsuitSheetState extends State<FileLawsuitSheet> {
                   const Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Biaya Registrasi Panitera PNAK:', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10)),
+                      Text('Biaya Registrasi Panitera PNAF:', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10)),
                       Text('Meterai Digital & Berita Acara', style: TextStyle(color: Color(0xFF64748B), fontSize: 9)),
                     ],
                   ),
@@ -348,7 +348,7 @@ class _FileLawsuitSheetState extends State<FileLawsuitSheet> {
                     ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2))
                     : const Icon(Icons.draw_rounded, size: 18),
                 label: Text(
-                  _isSubmitting ? 'MEREGISTER GUGATAN...' : '✍️ TANDATANGANI & DAFTARKAN KE PNAK',
+                  _isSubmitting ? 'MEREGISTER GUGATAN...' : '✍️ TANDATANGANI & DAFTARKAN KE PNAF',
                   style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
                 ),
                 style: ElevatedButton.styleFrom(

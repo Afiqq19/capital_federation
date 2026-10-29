@@ -45,7 +45,7 @@ module.exports = function(io) {
       const logMsgId = uuidv4();
       await query.run(
         'INSERT INTO court_chat_messages (id, case_id, sender_name, sender_role, message) VALUES (?, ?, ?, ?, ?)',
-        [logMsgId, caseId, 'Panitera Sidang PNAK', 'PANITERA', `🟢 ${partyName} (${isPlaintiff ? 'Pihak Penggugat' : 'Pihak Tergugat'}) Telah Hadir Memenuhi Panggilan Sidang.`]
+        [logMsgId, caseId, 'Panitera Sidang PNAF', 'PANITERA', `🟢 ${partyName} (${isPlaintiff ? 'Pihak Penggugat' : 'Pihak Tergugat'}) Telah Hadir Memenuhi Panggilan Sidang.`]
       );
 
       const updated = await query.get('SELECT * FROM court_cases WHERE id = ?', [caseId]);
@@ -61,7 +61,7 @@ module.exports = function(io) {
 
       res.json({
         success: true,
-        message: 'Presensi kehadiran Anda resmi dicatat oleh Panitera Sidang PNAK.',
+        message: 'Presensi kehadiran Anda resmi dicatat oleh Panitera Sidang PNAF.',
         case: updated
       });
     } catch (err) {
@@ -208,7 +208,7 @@ module.exports = function(io) {
       if (verdictType === 'VERSTEK_PLAINTIFF_WIN') {
         verdictStatus = 'VERDICT_PAILIT';
         awardedAmount = c.claim_amount_ib || 1000000000.0;
-        notes = `⚖️ PUTUSAN VERSTEK MAJELIS HAKIM PNAK: Tergugat (${c.defendant_name}) dinyatakan MANGKIR dan kehilangan hak membela diri. Gugatan Penggugat dikabulkan PENUH. Sita eksekusi ganti rugi sebesar IB ${awardedAmount.toLocaleString('id-ID')} dicairkan seketika ke Kas Pribadi Penggugat.`;
+        notes = `⚖️ PUTUSAN VERSTEK MAJELIS HAKIM PNAF: Tergugat (${c.defendant_name}) dinyatakan MANGKIR dan kehilangan hak membela diri. Gugatan Penggugat dikabulkan PENUH. Sita eksekusi ganti rugi sebesar IB ${awardedAmount.toLocaleString('id-ID')} dicairkan seketika ke Kas Pribadi Penggugat.`;
 
         // Eksekusi pencairan uang jika ada plaintiff_user_id
         if (c.plaintiff_user_id) {
@@ -225,14 +225,14 @@ module.exports = function(io) {
       // -------------------------------------------------------------
       else if (verdictType === 'GUGUR_DISMISSED') {
         verdictStatus = 'VERDICT_REJECTED';
-        notes = `⚖️ PUTUSAN MAJELIS HAKIM PNAK: Penggugat (${c.plaintiff_name}) dinyatakan MANGKIR dan lalai membuktikan tuntutan. Gugatan dinyatakan GUGUR DEMI HUKUM.`;
+        notes = `⚖️ PUTUSAN MAJELIS HAKIM PNAF: Penggugat (${c.plaintiff_name}) dinyatakan MANGKIR dan lalai membuktikan tuntutan. Gugatan dinyatakan GUGUR DEMI HUKUM.`;
       } 
       // -------------------------------------------------------------
       // SKENARIO C: BATAL (Keduanya Sama-Sama Mangkir)
       // -------------------------------------------------------------
       else if (verdictType === 'BATAL_ANNULLED') {
         verdictStatus = 'VERDICT_REJECTED';
-        notes = `⚖️ PENETAPAN HAKIM PNAK: Kedua belah pihak mangkir dari sidang. Perkara No. ${c.case_number} dinyatakan BATAL & GUGUR.`;
+        notes = `⚖️ PENETAPAN HAKIM PNAF: Kedua belah pihak mangkir dari sidang. Perkara No. ${c.case_number} dinyatakan BATAL & GUGUR.`;
       } 
       // -------------------------------------------------------------
       // SKENARIO D: MEDIASI / SIDANG KEDUANYA HADIR
@@ -240,7 +240,7 @@ module.exports = function(io) {
       else {
         verdictStatus = 'VERDICT_PKPU';
         awardedAmount = Math.round((c.claim_amount_ib || 1000000000.0) * 0.5);
-        notes = `⚖️ VONIS MEDIASI ARBITRASE PNAK: Tergugat diwajibkan membayar kompensasi restrukturisasi sebesar IB ${awardedAmount.toLocaleString('id-ID')} kepada Penggugat dalam waktu 30 hari bursa.`;
+        notes = `⚖️ VONIS MEDIASI ARBITRASE PNAF: Tergugat diwajibkan membayar kompensasi restrukturisasi sebesar IB ${awardedAmount.toLocaleString('id-ID')} kepada Penggugat dalam waktu 30 hari bursa.`;
         if (c.plaintiff_user_id) {
           await query.run('UPDATE users SET balance_ib = balance_ib + ? WHERE id = ?', [awardedAmount, c.plaintiff_user_id]);
         }
@@ -256,7 +256,7 @@ module.exports = function(io) {
       // Siarkan Breaking News Ketuk Palu
       const newsItem = {
         id: uuidv4(),
-        title: `⚖️ KETUK PALU PNAK: Perkara No. ${c.case_number} Resmi Diputus!`,
+        title: `⚖️ KETUK PALU PNAF: Perkara No. ${c.case_number} Resmi Diputus!`,
         content: notes,
         affected_sector: 'Semua Sektor',
         sentiment: verdictType === 'VERSTEK_PLAINTIFF_WIN' ? 'BEARISH' : 'NEUTRAL',

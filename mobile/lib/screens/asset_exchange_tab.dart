@@ -47,7 +47,7 @@ class _AssetExchangeTabState extends State<AssetExchangeTab> with SingleTickerPr
     final user = context.read<GameProvider>().user;
     final sellerName = (company.ownerUsername != null && company.ownerUsername!.isNotEmpty)
         ? company.ownerUsername!
-        : 'Konsorsium Kurator Niaga Konoha';
+        : 'Konsorsium Kurator Niaga Federasi';
     final buyerName = user?.username ?? 'Anda';
 
     showModalBottomSheet(
@@ -112,7 +112,7 @@ class _AssetExchangeTabState extends State<AssetExchangeTab> with SingleTickerPr
                               style: TextStyle(color: Color(0xFFF59E0B), fontSize: 13.5, fontWeight: FontWeight.w900),
                             ),
                             Text(
-                              'Akta Notariat & Balai Restrukturisasi Niaga Konoha',
+                              'Akta Notariat & Balai Restrukturisasi Niaga Federasi',
                               style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
                             ),
                           ],
@@ -591,7 +591,7 @@ class _AssetExchangeTabState extends State<AssetExchangeTab> with SingleTickerPr
                               Icon(Icons.gavel_rounded, color: Color(0xFFF5B942), size: 14),
                               SizedBox(width: 5),
                               Text(
-                                'PNAK Konoha',
+                                'PNAF Federasi',
                                 style: TextStyle(color: Color(0xFFF5B942), fontSize: 10.5, fontWeight: FontWeight.w900),
                               ),
                             ],
@@ -602,7 +602,7 @@ class _AssetExchangeTabState extends State<AssetExchangeTab> with SingleTickerPr
                   ),
                   const SizedBox(height: 4),
                   const Text(
-                    'Akuisisi perusahaan fase krisis atau tawar aset sitaan lelang Bank Sentral Konoha (BSK).',
+                    'Akuisisi perusahaan fase krisis atau tawar aset sitaan lelang Bank Sentral Federasi (BCF).',
                     style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
                   ),
                   const SizedBox(height: 12),

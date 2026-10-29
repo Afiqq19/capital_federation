@@ -1,4 +1,4 @@
-// Monopoly Corp - Prisma Schema
+// Capital Federation - Prisma Schema
 generator client {
   provider = "prisma-client-js"
 }

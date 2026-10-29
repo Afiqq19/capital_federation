@@ -36,7 +36,7 @@ const TABS = [
   { id: 'corporate', label: 'Operasional PT & Pailit', icon: Building2, tone: 'emerald' },
   { id: 'monetary', label: 'Moneter & Bank Sentral', icon: Landmark, tone: 'sky' },
   { id: 'market', label: 'Bursa Efek & IPO', icon: TrendingUp, tone: 'violet' },
-  { id: 'legal', label: 'Hukum Niaga & PNAK', icon: Scale, tone: 'rose' },
+  { id: 'legal', label: 'Hukum Niaga & PNAF', icon: Scale, tone: 'rose' },
 ];
 
 export default function SettingsPage() {
@@ -362,8 +362,8 @@ export default function SettingsPage() {
                   </FormField>
 
                   <FormField
-                    label="Biaya Pendaftaran Gugatan PNAK (IB)"
-                    hint="Biaya pendaftaran perkara sengketa wanprestasi di Pengadilan Niaga Konoha yang disetor penggugat."
+                    label="Biaya Pendaftaran Gugatan PNAF (IB)"
+                    hint="Biaya pendaftaran perkara sengketa wanprestasi di Pengadilan Niaga Federasi yang disetor penggugat."
                   >
                     <Input
                       type="number"
@@ -838,7 +838,7 @@ export default function SettingsPage() {
         )}
 
         {/* ========================================================= */}
-        {/* TAB 5: HUKUM NIAGA & PNAK */}
+        {/* TAB 5: HUKUM NIAGA & PNAF */}
         {/* ========================================================= */}
         {activeTab === 'legal' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -852,7 +852,7 @@ export default function SettingsPage() {
               <div className="space-y-4">
                 <FormField
                   label="Denda Pelanggaran Manipulasi Pasar (IB)"
-                  hint="Besaran denda ganti rugi yang diputuskan Hakim Pengadilan Niaga Konoha (PNAK) terhadap pelaku manipulasi saham atau insider trading."
+                  hint="Besaran denda ganti rugi yang diputuskan Hakim Pengadilan Niaga Federasi (PNAF) terhadap pelaku manipulasi saham atau insider trading."
                 >
                   <Input
                     type="number"
@@ -868,10 +868,10 @@ export default function SettingsPage() {
                 <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 text-xs space-y-2.5">
                   <div className="flex items-center gap-2 text-rose-400 font-bold">
                     <ShieldAlert size={16} />
-                    <span>Yurisdiksi Pengadilan Niaga Konoha (PNAK)</span>
+                    <span>Yurisdiksi Pengadilan Niaga Arbitrase Federasi (PNAF)</span>
                   </div>
                   <p className="text-slate-300 leading-relaxed">
-                    Setiap putusan sidang vonis PNAK yang menyatakan tergugat bersalah akan memotong saldo kas pelaku dan menyetorkan denda tersebut langsung ke Kas Negara.
+                    Setiap putusan sidang vonis PNAF yang menyatakan tergugat bersalah akan memotong saldo kas pelaku dan menyetorkan denda tersebut langsung ke Kas Negara.
                   </p>
                   <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-slate-400">
                     <span>Biaya Pendaftaran Perkara:</span>

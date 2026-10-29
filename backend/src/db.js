@@ -2,7 +2,7 @@ const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
 
-const dbPath = path.resolve(__dirname, '../data/monopoly.db');
+const dbPath = path.resolve(__dirname, '../data/capital_federation.db');
 const dbDir = path.dirname(dbPath);
 if (!fs.existsSync(dbDir)) {
   fs.mkdirSync(dbDir, { recursive: true });
@@ -555,7 +555,7 @@ async function initDb() {
       price_per_share REAL NOT NULL,
       total_price_ib REAL NOT NULL,
       meterai_status TEXT DEFAULT 'LUNAS_IB_10000',
-      status TEXT DEFAULT 'ACTIVE', -- 'ACTIVE', 'DISPUTED_PNAK', 'BREACHED_WANPRESTASI', 'ANNULLED'
+      status TEXT DEFAULT 'ACTIVE', -- 'ACTIVE', 'DISPUTED_PNAF', 'BREACHED_WANPRESTASI', 'ANNULLED'
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -571,7 +571,7 @@ async function initDb() {
 
     CREATE TABLE IF NOT EXISTS state_treasury_ledger (
       id TEXT PRIMARY KEY,
-      source_type TEXT NOT NULL, -- 'PNAK_FILING_FEE', 'METERAI_FEE', 'TRANSACTION_TAX', 'SEIZURE_FINE', 'AUCTION_PROCEEDS', 'BAILOUT_DISBURSEMENT'
+      source_type TEXT NOT NULL, -- 'PNAF_FILING_FEE', 'METERAI_FEE', 'TRANSACTION_TAX', 'SEIZURE_FINE', 'AUCTION_PROCEEDS', 'BAILOUT_DISBURSEMENT'
       title TEXT NOT NULL,
       amount_ib REAL NOT NULL,
       direction TEXT NOT NULL, -- 'INCOME' atau 'EXPENSE'
@@ -801,10 +801,10 @@ async function initDb() {
     const defaultCases = [
       {
         id: 'case-001',
-        case_number: '018/Pdt.Sus-Pailit/2026/PNAK',
+        case_number: '018/Pdt.Sus-Pailit/2026/PNAF',
         case_type: 'BANKRUPTCY',
-        title: 'Permohonan Pailit atas Wanprestasi Kredit Sindikasi BSK',
-        plaintiff_name: 'Bank Sentral Konoha (BSK)',
+        title: 'Permohonan Pailit atas Wanprestasi Kredit Sindikasi BCF',
+        plaintiff_name: 'Bank Sentral Federasi (BCF)',
         defendant_name: 'PT. Nusantara Properti Megah',
         claim_amount_ib: 4500000000.0,
         court_hearing_date: '30 Okt 2026, 09:30 WIB',
@@ -813,7 +813,7 @@ async function initDb() {
       },
       {
         id: 'case-002',
-        case_number: '042/Pdt.Sus-Sengketa/2026/PNAK',
+        case_number: '042/Pdt.Sus-Sengketa/2026/PNAF',
         case_type: 'DISPUTE',
         title: 'Gugatan Pembatalan Akta Jual Beli Saham Tanpa Izin RUPS',
         plaintiff_name: 'Konsorsium Pemegang Saham Minoritas',
@@ -825,15 +825,15 @@ async function initDb() {
       },
       {
         id: 'case-003',
-        case_number: '009/Pdt.Sus-Bursa/2026/PNAK',
+        case_number: '009/Pdt.Sus-Bursa/2026/PNAF',
         case_type: 'REGULATORY',
         title: 'Tuntutan Ganti Rugi Manipulasi Harga & Indikasi Goreng Saham',
-        plaintiff_name: 'OPFK (Otoritas Pengawas Finansial Konoha)',
+        plaintiff_name: 'OPFF (Otoritas Pengawas Finansial Federasi)',
         defendant_name: 'Sindikat Spekulan Energi',
         claim_amount_ib: 850000000.0,
         court_hearing_date: '25 Okt 2026',
         status: 'VERDICT_PAILIT',
-        verdict_notes: 'Vonis Hakim: Terbukti bersalah. Denda disita untuk kas negara Konoha dan aset dilelang.'
+        verdict_notes: 'Vonis Hakim: Terbukti bersalah. Denda disita untuk kas negara Federasi dan aset dilelang.'
       }
     ];
 
@@ -849,8 +849,8 @@ async function initDb() {
 
   // Seed default macro indicator in central_bank_settings
   await query.run("INSERT OR IGNORE INTO central_bank_settings (key, value) VALUES ('economic_state', 'NORMAL')");
-  await query.run("INSERT OR IGNORE INTO central_bank_settings (key, value) VALUES ('country_name', 'Republik Federasi Indigo')");
-  await query.run("INSERT OR IGNORE INTO central_bank_settings (key, value) VALUES ('market_index_name', 'IPMC (Indigo Prime Monetary & Capital Exchange)')");
+  await query.run("INSERT OR REPLACE INTO central_bank_settings (key, value) VALUES ('country_name', 'Republik Federasi Indigo')");
+  await query.run("INSERT OR REPLACE INTO central_bank_settings (key, value) VALUES ('market_index_name', 'IPMC (Indigo Prime Monetary & Capital Exchange)')");
 
   // Seed State Treasury Ledger if empty
   const treasuryCount = await query.get('SELECT COUNT(*) as count FROM state_treasury_ledger');
@@ -863,16 +863,16 @@ async function initDb() {
         amount_ib: 850000000.0,
         direction: 'INCOME',
         reference_id: 'case-003',
-        notes: 'Denda pelanggaran manipulasi pasar bursa disita untuk kas kas negara federasi'
+        notes: 'Denda pelanggaran manipulasi pasar bursa disita untuk kas negara federasi'
       },
       {
         id: 'trs-002',
-        source_type: 'PNAK_FILING_FEE',
-        title: 'Penerimaan Biaya Registrasi Perkara Kepaniteraan PNAK',
+        source_type: 'PNAF_FILING_FEE',
+        title: 'Penerimaan Biaya Registrasi Perkara Kepaniteraan PNAF',
         amount_ib: 750000.0,
         direction: 'INCOME',
         reference_id: 'case-001',
-        notes: 'Penerimaan PNBP Kepaniteraan Niaga Konoha 3 Perkara'
+        notes: 'Penerimaan PNBP Kepaniteraan Niaga Federasi 3 Perkara'
       },
       {
         id: 'trs-003',
@@ -900,7 +900,7 @@ async function initDb() {
         [t.id, t.source_type, t.title, t.amount_ib, t.direction, t.reference_id, t.notes]
       );
     }
-    console.log('🏛️ Initial State Treasury (Kas Negara Konoha) ledger seeded.');
+    console.log('🏛️ Initial State Treasury (Kas Negara Federasi) ledger seeded.');
   }
 
   // Seed Sample Global Deals in Private Placement Directory if empty
@@ -915,7 +915,7 @@ async function initDb() {
           id, deal_number, seller_user_id, seller_name, buyer_user_id, buyer_name,
           company_id, company_name, company_symbol, total_shares_offered, percentage_offered,
           percentage_remaining, price_per_share, gross_amount, deal_type, allow_partial, status
-        ) VALUES (?, ?, ?, ?, NULL, 'Pasar Terbuka Konoha', ?, ?, ?, 1000000, 10.0, 10.0, 2500.0, 2500000000.0, 'GLOBAL', 1, 'ACTIVE_GLOBAL')`,
+        ) VALUES (?, ?, ?, ?, NULL, 'Pasar Terbuka Federasi', ?, ?, ?, 1000000, 10.0, 10.0, 2500.0, 2500000000.0, 'GLOBAL', 1, 'ACTIVE_GLOBAL')`,
         [
           'deal-global-01', 'DEAL/IPMC/2026/0881', sampleSeller.id,
           `${sampleSeller.username} (${sampleSeller.pt_name || 'Konsorsium'})`,

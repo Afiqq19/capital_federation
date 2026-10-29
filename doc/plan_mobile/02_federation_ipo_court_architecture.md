@@ -1,24 +1,24 @@
-# 📱 PLAN MOBILE: REPUBLIK KONOHA, E-IPO BOOKBUILDING & PENGADILAN NIAGA (PNAK)
+﻿# 📱 PLAN MOBILE: REPUBLIK FEDERASI, E-IPO BOOKBUILDING & PENGADILAN NIAGA (PNAF)
 
 Dokumen ini merupakan perencanaan teknis modul klien mobile (Flutter) untuk implementasi:
-1. Nomenklatur & Lore **Republik Konoha**.
+1. Nomenklatur & Lore **Republik FEDERASI**.
 2. Sistem **E-IPO Bookbuilding Berjadwal & Penjatahan Strategis (Allotment)**.
-3. Modul **Pengadilan Niaga & Arbitrase Korporasi Konoha (PNAK)**.
+3. Modul **Pengadilan Niaga & Arbitrase Korporasi FEDERASI (PNAF)**.
 4. **Refaktorisasi Modular Arsitektur Folder** (Anti-Monolith).
 
 ---
 
-## 🏛️ 1. Nomenklatur Resmi Republik Konoha di Klien Mobile
+## 🏛️ 1. Nomenklatur Resmi Republik FEDERASI di Klien Mobile
 
-Semua tampilan UI yang sebelumnya menggunakan nama dunia nyata disesuaikan dengan nomenklatur Konoha:
+Semua tampilan UI yang sebelumnya menggunakan nama dunia nyata disesuaikan dengan nomenklatur FEDERASI:
 
-| Tampilan Lama | Nomenklatur Baru (Konoha) | Penjelasan UI |
+| Tampilan Lama | Nomenklatur Baru (FEDERASI) | Penjelasan UI |
 | :--- | :--- | :--- |
-| `IHSG` | `IPMC (Indeks Pasar Modal Konoha)` | Ticker indeks gabungan di app bar pasar. |
-| `Bank Indonesia / BI` | `BSK (Bank Sentral Konoha)` | Header tab pinjaman & lelang jaminan. |
-| `OJK / Regulasi Bursa` | `OPFK / Komite IPMC` | Badge UMA, Suspensi, dan Regulasi Kepatuhan. |
-| `Rupiah / IDR` | `IB (Indigo Billion)` | Mata uang resmi ekonomi Konoha. |
-| `Pengadilan Niaga` | `PNAK (Pengadilan Niaga Konoha)` | Layar ruang sidang sengketa bisnis & kepailitan. |
+| `IHSG` | `IPMC (Indeks Pasar Modal FEDERASI)` | Ticker indeks gabungan di app bar pasar. |
+| `Bank Indonesia / BI` | `BCF (Bank Sentral FEDERASI)` | Header tab pinjaman & lelang jaminan. |
+| `OJK / Regulasi Bursa` | `OPFF / Komite IPMC` | Badge UMA, Suspensi, dan Regulasi Kepatuhan. |
+| `Rupiah / IDR` | `IB (Indigo Billion)` | Mata uang resmi ekonomi FEDERASI. |
+| `Pengadilan Niaga` | `PNAF (Pengadilan Niaga FEDERASI)` | Layar ruang sidang sengketa bisnis & kepailitan. |
 
 ---
 
@@ -55,15 +55,15 @@ Pemilik PT Emiten membuka menu **"Penjatahan Mitra IPO"**:
 
 ---
 
-## ⚖️ 3. Desain Fitur Pengadilan Niaga Konoha (PNAK)
+## ⚖️ 3. Desain Fitur Pengadilan Niaga FEDERASI (PNAF)
 
 ### 3.1 Layar Ruang Sidang Virtual (`court_room_screen.dart`):
 - Tema antarmuka: Kayu mahoni elegan, pilar marmer, dan timbangan keadilan emas ⚖️.
 - Suara efek (*sound effect*) audio ketukan palu hakim 3x saat putusan dibacakan.
-- Daftar Perkara Aktif di Republik Konoha:
-  1. **Perkara Kepailitan & PKPU:** Gagal bayar pinjaman Bank Sentral Konoha (BSK). Putusan: Penetapan jadwal restrukturisasi atau lelang sita jaminan.
+- Daftar Perkara Aktif di Republik FEDERASI:
+  1. **Perkara Kepailitan & PKPU:** Gagal bayar pinjaman Bank Sentral FEDERASI (BCF). Putusan: Penetapan jadwal restrukturisasi atau lelang sita jaminan.
   2. **Perkara Sengketa Saham & Akuisisi Ilegal:** Gugatan atas pelanggaran akta perjanjian jual beli saham atau hostile takeover manipulatif.
-  3. **Perkara Pelanggaran Pasar Modal:** Gugatan OPFK terhadap pelaku goreng saham / insider trading dengan vonis denda ganti rugi.
+  3. **Perkara Pelanggaran Pasar Modal:** Gugatan OPFF terhadap pelaku goreng saham / insider trading dengan vonis denda ganti rugi.
 
 ---
 
@@ -94,7 +94,7 @@ mobile/lib/
 │   │   └── services/
 │   │       └── deed_service.dart
 │   │
-│   ├── court_commercial/                 # Fitur Pengadilan Niaga Konoha (PNAK)
+│   ├── court_commercial/                 # Fitur Pengadilan Niaga FEDERASI (PNAF)
 │   │   ├── screens/
 │   │   │   └── court_room_screen.dart
 │   │   ├── widgets/
@@ -103,9 +103,9 @@ mobile/lib/
 │   │   └── models/
 │   │       └── court_case.dart
 │   │
-│   └── macro_konoha/                     # Banner Indikator Negara Konoha
+│   └── macro_FEDERASI/                     # Banner Indikator Negara FEDERASI
 │       └── widgets/
-│           └── konoha_macro_banner.dart
+│           └── FEDERASI_macro_banner.dart
 │
 ├── screens/                              # 5 Layar Tab Utama
 ├── services/                             # ApiService & SocketService

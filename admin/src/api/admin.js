@@ -37,9 +37,9 @@ export const adminApi = {
   triggerEvent: (payload) => request('/api/admin/events/trigger', { method: 'POST', body: payload }),
   injectNews: (payload) => request('/api/admin/news/inject', { method: 'POST', body: payload }),
 
-  // ---- Pengadilan Niaga Konoha (PNAK) & Makro Konoha ----
-  konohaMacro: () => request('/api/konoha/macro'),
-  setKonohaMacroState: (state) => request('/api/konoha/macro/state', { method: 'POST', body: { economicState: state, state } }),
+  // ---- Pengadilan Niaga Federasi (PNAF) & Makro Federasi ----
+  federationMacro: () => request('/api/federation/macro'),
+  setFederationMacroState: (state) => request('/api/federation/macro/state', { method: 'POST', body: { economicState: state, state } }),
   courtCases: () => request('/api/court/cases'),
   fileCourtCase: (payload) => request('/api/court/file-case', { method: 'POST', body: payload }),
   issueVerdict: (payload) => request('/api/court/verdict', { method: 'POST', body: payload }),

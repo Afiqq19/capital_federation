@@ -567,7 +567,7 @@ class _UserProfileSheetState extends State<_UserProfileSheet> with SingleTickerP
           _buildRuleCard(
             icon: Icons.account_balance_rounded,
             title: 'Ketentuan Fasilitas Bank Sentral',
-            desc: 'Kredit macet lebih dari 3 siklus akan berakibat pada penyitaan aset perseroan oleh Kurator Pengadilan Niaga Konoha.',
+            desc: 'Kredit macet lebih dari 3 siklus akan berakibat pada penyitaan aset perseroan oleh Kurator Pengadilan Niaga Federasi.',
           ),
           const SizedBox(height: 8),
           _buildRuleCard(

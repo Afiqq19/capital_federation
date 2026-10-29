@@ -1,6 +1,6 @@
-# Arsitektur Folder Web Admin & Panduan Hosting Domain / Public Link
+﻿# Arsitektur Folder Web Admin & Panduan Hosting Domain / Public Link
 
-Dokumen ini menjelaskan struktur folder baru Web Admin **Monopoly Corp / IPMC Terminal**, cara kerja build Vite, serta konfigurasi deployment jika nanti di-hosting ke domain publik (misal: `https://admin.monopolycorp.com` atau hosting VPS/cPanel/Vercel).
+Dokumen ini menjelaskan struktur folder baru Web Admin **Capital Federation / IPMC Terminal**, cara kerja build Vite, serta konfigurasi deployment jika nanti di-hosting ke domain publik (misal: `https://admin.capitalfederation.com` atau hosting VPS/cPanel/Vercel).
 
 ---
 
@@ -98,7 +98,7 @@ Web Admin ini dibuat menggunakan React + Vite. Aplikasi ini adalah **Single Page
 ```
 ┌─────────────────────────────────┐           ┌─────────────────────────────────┐
 │     PENGUNJUNG / ADMIN          │           │       SERVER NODE.JS / API      │
-│  Domain: admin.monopolycorp.com │           │  Domain: api.monopolycorp.com   │
+│  Domain: admin.capitalfederation.com │           │  Domain: api.capitalfederation.com   │
 │  (File statis dari admin/dist/) │  HTTP/WS  │  (Port 4000 di VPS/Cloud)       │
 │                                 │ ────────> │                                 │
 │  - React UI                     │ <──────── │  - REST API (/api/admin/...)    │
@@ -119,7 +119,7 @@ export const API_URL = import.meta.env.VITE_API_URL || `http://${window.location
 2. **Saat di-Hosting (Produksi)**:
    - Buat file `admin/.env.production` yang berisi:
      ```env
-     VITE_API_URL=https://api.monopolycorp.com
+     VITE_API_URL=https://api.capitalfederation.com
      ```
    - Saat Anda menjalankan `npm run build`, Vite akan menanamkan URL backend tersebut secara otomatis ke dalam bundle `dist/`.
 
@@ -135,14 +135,14 @@ Jika Anda menyewa VPS Ubuntu (misal DigitalOcean, Biznet, Linode, AWS):
    cd admin
    npm run build
    ```
-2. **Unggah isi folder `admin/dist/`** ke `/var/www/monopoly_admin` di server VPS.
-3. **Konfigurasi Nginx (`/etc/nginx/sites-available/monopoly_admin`)**:
+2. **Unggah isi folder `admin/dist/`** ke `/var/www/capital_federation_admin` di server VPS.
+3. **Konfigurasi Nginx (`/etc/nginx/sites-available/capital_federation_admin`)**:
    ```nginx
    server {
        listen 80;
-       server_name admin.monopolycorp.com;
+       server_name admin.capitalfederation.com;
 
-       root /var/www/monopoly_admin;
+       root /var/www/capital_federation_admin;
        index index.html;
 
        # Wajib untuk React SPA (mencegah 404 saat refresh halaman)
@@ -169,7 +169,7 @@ Jika Anda menyewa VPS Ubuntu (misal DigitalOcean, Biznet, Linode, AWS):
        }
    }
    ```
-4. Pasang SSL gratis dengan Certbot: `sudo certbot --nginx -d admin.monopolycorp.com`.
+4. Pasang SSL gratis dengan Certbot: `sudo certbot --nginx -d admin.capitalfederation.com`.
 
 ### Opsi 2: Menggunakan Vercel / Netlify (Gratis untuk Frontend)
 Jika ingin hosting frontend Web Admin gratis di Vercel:

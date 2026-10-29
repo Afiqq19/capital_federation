@@ -22,7 +22,7 @@ const io = new Server(server, {
 });
 
 const PORT = process.env.PORT || 4000;
-const JWT_SECRET = process.env.JWT_SECRET || 'monopoly_corp_super_secret_jwt_key_2026';
+const JWT_SECRET = process.env.JWT_SECRET || 'capital_federation_super_secret_jwt_key_2026';
 
 process.on('uncaughtException', (err) => {
   console.error('Unhandled Exception caught:', err);
@@ -586,7 +586,7 @@ app.post('/api/company/withdraw', async (req, res) => {
       if (!comp) return res.status(404).json({ error: 'Perusahaan tidak ditemukan' });
 
       if (comp.is_seized === 1) {
-        return res.status(403).json({ error: `Perusahaan ${comp.name} sedang DISITA oleh Negara/PNAK! Seluruh penarikan kas dibekukan.` });
+        return res.status(403).json({ error: `Perusahaan ${comp.name} sedang DISITA oleh Negara/PNAF! Seluruh penarikan kas dibekukan.` });
       }
 
       const currentBalance = comp.company_balance_ib || 0;
@@ -635,7 +635,7 @@ app.post('/api/company/withdraw', async (req, res) => {
       if (!user.has_pt) return res.status(400).json({ error: 'Anda belum mendirikan PT' });
       const primaryComp = await query.get('SELECT is_seized, name FROM companies WHERE owner_id = ? AND is_bot = 0', [userId]);
       if (primaryComp && primaryComp.is_seized === 1) {
-        return res.status(403).json({ error: `PT Utama ${primaryComp.name} sedang DISITA oleh Negara/PNAK! Seluruh penarikan kas dibekukan.` });
+        return res.status(403).json({ error: `PT Utama ${primaryComp.name} sedang DISITA oleh Negara/PNAF! Seluruh penarikan kas dibekukan.` });
       }
       if (user.company_balance_ib < numAmount) {
         return res.status(400).json({ error: 'Saldo kas perusahaan tidak mencukupi untuk penarikan' });
@@ -1628,7 +1628,7 @@ app.post('/api/company/negotiation/deal', async (req, res) => {
 
 
 // ====================================================
-// MODUL PENGADILAN NIAGA & ARBITRASE KONOHA (PNAK)
+// MODUL PENGADILAN NIAGA & ARBITRASE FEDERASI (PNAF)
 // ====================================================
 
 // Daftar Seluruh Perkara Sidang Niaga
@@ -1655,7 +1655,7 @@ app.post('/api/court/file-case', async (req, res) => {
       if (plUser) {
         const courtFee = 250000;
         if (plUser.balance_ib < courtFee) {
-          return res.status(400).json({ error: 'Saldo Kas Pribadi tidak mencukupi untuk biaya panitera PNAK (IB 250.000)' });
+          return res.status(400).json({ error: 'Saldo Kas Pribadi tidak mencukupi untuk biaya panitera PNAF (IB 250.000)' });
         }
         await query.run('UPDATE users SET balance_ib = balance_ib - ? WHERE id = ?', [courtFee, plUser.id]);
         io.emit('user:balance_updated', { userId: plUser.id, newBalance: plUser.balance_ib - courtFee });
@@ -1681,8 +1681,8 @@ app.post('/api/court/file-case', async (req, res) => {
 
     // Otomatis Siarkan Berita Breaking News ke Seluruh Klien Bursa & Ticker
     const formattedClaim = `IB ${Number(claimAmountIb || 0).toLocaleString('id-ID')}`;
-    const newsTitle = `🚨 GUGATAN PNAK: ${plaintiffName} Menggugat ${defendantName}!`;
-    const newsContent = `Kepaniteraan Pengadilan Niaga Konoha meregister gugatan perkara No. ${caseNumber} (${title}) dengan total tuntutan ganti rugi ${formattedClaim}. Sidang perdana dijadwalkan pada: ${hearingSchedule}.`;
+    const newsTitle = `🚨 GUGATAN PNAF: ${plaintiffName} Menggugat ${defendantName}!`;
+    const newsContent = `Kepaniteraan Pengadilan Niaga Federasi meregister gugatan perkara No. ${caseNumber} (${title}) dengan total tuntutan ganti rugi ${formattedClaim}. Sidang perdana dijadwalkan pada: ${hearingSchedule}.`;
     const newsId = uuidv4();
     const nowIso = new Date().toISOString();
 
@@ -1705,13 +1705,13 @@ app.post('/api/court/file-case', async (req, res) => {
       sentiment: 'BEARISH',
     });
 
-    res.json({ success: true, case: newCase, message: `Gugatan berhasil diregister di PNAK dengan Nomor Perkara: ${caseNumber}` });
+    res.json({ success: true, case: newCase, message: `Gugatan berhasil diregister di PNAF dengan Nomor Perkara: ${caseNumber}` });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Vonis Ketukan Palu Hakim Niaga Konoha
+// Vonis Ketukan Palu Hakim Niaga Federasi
 app.post('/api/court/verdict', async (req, res) => {
   try {
     const { caseId, verdictStatus, verdictNotes } = req.body;
@@ -1720,7 +1720,7 @@ app.post('/api/court/verdict', async (req, res) => {
 
     await query.run(
       'UPDATE court_cases SET status = ?, verdict_notes = ? WHERE id = ?',
-      [verdictStatus, verdictNotes || 'Vonis telah dijatuhkan secara sah oleh Majelis Hakim Niaga Konoha.', caseId]
+      [verdictStatus, verdictNotes || 'Vonis telah dijatuhkan secara sah oleh Majelis Hakim Niaga Federasi.', caseId]
     );
 
     const updated = await query.get('SELECT * FROM court_cases WHERE id = ?', [caseId]);
@@ -1729,8 +1729,8 @@ app.post('/api/court/verdict', async (req, res) => {
     // Siarkan Berita Pengadilan ke Bursa
     const newsId = uuidv4();
     const nowIso = new Date().toISOString();
-    const newsTitle = `⚖️ VONIS HAKIM PNAK: Perkara No. ${updated.case_number}`;
-    const newsContent = `Majelis Hakim Pengadilan Niaga Konoha resmi menjatuhkan amar putusan "${verdictStatus}" terhadap Tergugat ${updated.defendant_name}. Diktum Majelis: ${verdictNotes || 'Putusan berkekuatan hukum tetap.'}`;
+    const newsTitle = `⚖️ VONIS HAKIM PNAF: Perkara No. ${updated.case_number}`;
+    const newsContent = `Majelis Hakim Pengadilan Niaga Federasi resmi menjatuhkan amar putusan "${verdictStatus}" terhadap Tergugat ${updated.defendant_name}. Diktum Majelis: ${verdictNotes || 'Putusan berkekuatan hukum tetap.'}`;
 
     await query.run(
       'INSERT INTO news (id, title, content, affected_sector, sentiment, published_at) VALUES (?, ?, ?, ?, ?, ?)',
@@ -1962,30 +1962,30 @@ app.post('/api/ipo/allotment', async (req, res) => {
 });
 
 // ====================================================
-// MODUL MAKROEKONOMI REPUBLIK KONOHA
+// MODUL MAKROEKONOMI REPUBLIK FEDERASI INDIGO
 // ====================================================
 
-// Indikator Makroekonomi Konoha
-app.get('/api/konoha/macro', async (req, res) => {
+// Indikator Makroekonomi Federasi
+app.get('/api/federation/macro', async (req, res) => {
   try {
     const settings = await query.all('SELECT * FROM central_bank_settings');
     const mapped = Object.fromEntries(settings.map(s => [s.key, s.value]));
     res.json({
-      countryName: mapped.country_name || 'Republik Konoha',
-      marketIndexName: mapped.market_index_name || 'IPMC (Indeks Pasar Modal Konoha)',
+      countryName: mapped.country_name || 'Republik Federasi Indigo',
+      marketIndexName: mapped.market_index_name || 'IPMC (Indigo Prime Monetary & Capital Exchange)',
       economicState: mapped.economic_state || 'NORMAL',
       interestRate: parseFloat(mapped.interest_rate || '6.5'),
       inflationRate: mapped.economic_state === 'CRISIS' ? 14.2 : (mapped.economic_state === 'RECESSION' ? 7.8 : 3.1),
       currencyName: 'IB (Indigo Billion)',
-      courtAuthority: 'PNAK (Pengadilan Niaga Konoha)'
+      courtAuthority: 'PNAF (Pengadilan Niaga Arbitrase Federasi)'
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Ubah Status Siklus Ekonomi Konoha (Admin Authority)
-app.post('/api/konoha/macro/state', async (req, res) => {
+// Ubah Status Siklus Ekonomi Federasi (Admin Authority)
+app.post('/api/federation/macro/state', async (req, res) => {
   try {
     const economicState = (req.body.economicState || req.body.state || '').toUpperCase();
     const validStates = ['BOOM', 'NORMAL', 'RECESSION', 'CRISIS'];
@@ -1998,7 +1998,7 @@ app.post('/api/konoha/macro/state', async (req, res) => {
       [economicState]
     );
 
-    // Sesuaikan suku bunga BSK otomatis sesuai iklim makro
+    // Sesuaikan suku bunga BCF otomatis sesuai iklim makro
     let newRate = 6.5;
     if (economicState === 'BOOM') newRate = 4.5;
     if (economicState === 'RECESSION') newRate = 9.5;
@@ -2020,7 +2020,7 @@ app.post('/api/konoha/macro/state', async (req, res) => {
       }
     }
 
-    io.emit('konoha:macro_changed', { economicState, interestRate: newRate });
+    io.emit('federation:macro_changed', { economicState, interestRate: newRate });
     io.emit('central_bank:rate', { interestRate: newRate });
 
     // Siarkan berita krisis / boom ke bursa
@@ -3914,7 +3914,7 @@ app.post('/api/takeover/negotiate', async (req, res) => {
       }
     }
     if (!sellerName) {
-      sellerName = 'Konsorsium Kurator Niaga Konoha';
+      sellerName = 'Konsorsium Kurator Niaga Federasi';
       sellerUserId = 'consortium-trustee';
     }
 
@@ -4097,7 +4097,7 @@ app.post('/api/takeover/negotiate', async (req, res) => {
     const newsItem = {
       id: uuidv4(),
       title: `🏢 AKUISISI HISTORIS: ${user.username} Resmi Mengakuisisi ${pct}% Saham ${company.name} (${company.symbol})!`,
-      content: `Penyelamatan emiten krisis disepakati bersama ${sellerName} dengan nilai transaksi IB ${rawAcquisitionPrice.toLocaleString('id-ID')}. Akta Notaris Resmi No. ${deedNumber} telah diterbitkan dan tercatat di Brankas Notariat Niaga Konoha.`,
+      content: `Penyelamatan emiten krisis disepakati bersama ${sellerName} dengan nilai transaksi IB ${rawAcquisitionPrice.toLocaleString('id-ID')}. Akta Notaris Resmi No. ${deedNumber} telah diterbitkan dan tercatat di Brankas Notariat Niaga Federasi.`,
       affected_sector: company.sector,
       sentiment: 'BULLISH',
       published_at: new Date().toISOString()

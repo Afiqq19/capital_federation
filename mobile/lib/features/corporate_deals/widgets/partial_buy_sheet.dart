@@ -49,7 +49,7 @@ class _PartialBuySheetState extends State<PartialBuySheet> {
     final int lotsToBuy = (sharesToBuy / 100).round();
     final double grossAmount = sharesToBuy * widget.deal.pricePerShare;
     final double adminFee = grossAmount * 0.001; // 0.1% pajak transaksi
-    const double meteraiFee = 10000.0; // Bea Meterai Digital Konoha
+    const double meteraiFee = 10000.0; // Bea Meterai Digital Federasi
     final double totalRequired = grossAmount + adminFee + meteraiFee;
 
     final double userBalance = user?.balanceIb ?? 0.0;
@@ -184,8 +184,8 @@ class _PartialBuySheetState extends State<PartialBuySheet> {
                   _buildCostRow('Volume Lembar Saham', '${CurrencyFormatter.formatNumber(sharesToBuy)} lembar (${CurrencyFormatter.formatNumber(lotsToBuy)} lot)'),
                   _buildCostRow('Harga Eksekusi per Lembar', 'IB ${widget.deal.pricePerShare.toStringAsFixed(0)}'),
                   _buildCostRow('Nilai Saham Bersih', CurrencyFormatter.formatFull(grossAmount)),
-                  _buildCostRow('Pajak Transaksi BSK (0.1%)', CurrencyFormatter.formatFull(adminFee)),
-                  _buildCostRow('Bea Meterai Digital PNAK', CurrencyFormatter.formatFull(meteraiFee)),
+                  _buildCostRow('Pajak Transaksi IPMC (0.1%)', CurrencyFormatter.formatFull(adminFee)),
+                  _buildCostRow('Bea Meterai Digital PNAF', CurrencyFormatter.formatFull(meteraiFee)),
                   const Divider(color: Color(0xFF334155), height: 18),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,

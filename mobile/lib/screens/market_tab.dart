@@ -6,7 +6,7 @@ import '../providers/game_provider.dart';
 import '../utils/formatters.dart';
 import '../widgets/trading_modal.dart';
 import 'stock_detail_screen.dart';
-import '../features/macro_konoha/widgets/konoha_macro_banner.dart';
+import '../features/macro_federation/widgets/federation_macro_banner.dart';
 import '../features/court_commercial/screens/court_commercial_screen.dart';
 import '../features/corporate_deals/screens/corporate_deals_screen.dart';
 import '../features/ipo/widgets/eipo_modal_sheet.dart';
@@ -1293,7 +1293,7 @@ class _MarketTabState extends State<MarketTab> {
                               ),
                             ),
                             Text(
-                              'Pasar Modal Resmi Republik Konoha',
+                              'Pasar Modal Resmi Republik Federasi',
                               style: TextStyle(
                                 color: Color(0xFF94A3B8),
                                 fontSize: 10,
@@ -1333,9 +1333,9 @@ class _MarketTabState extends State<MarketTab> {
               ),
             ),
 
-            // Banner Indikator Makroekonomi Republik Konoha & Akses PNAK
+            // Banner Indikator Makroekonomi Republik Federasi & Akses PNAF
             SliverToBoxAdapter(
-              child: KonohaMacroBanner(
+              child: FederationMacroBanner(
                 onCourtTap: () {
                   Navigator.push(
                     context,

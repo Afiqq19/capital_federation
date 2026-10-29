@@ -1,4 +1,4 @@
-# 🏦 MONOPOLY CORP - Multi-Platform Stock Market & Business Tycoon Game
+# 🏦 CAPITAL FEDERATION - Multi-Platform Stock Market & Business Tycoon Game
 
 Proyek simulasi ekonomi konglomerasi finansial multi-platform yang terdiri dari:
 1. **Backend Server** (Node.js + Express + Socket.io + SQLite ACID)

@@ -9,7 +9,7 @@ module.exports = function(io, simulationEngine) {
     try {
       const rows = await query.all('SELECT source_type, direction, SUM(amount_ib) as total FROM state_treasury_ledger GROUP BY source_type, direction');
       
-      let baseReserve = 500000000000.0; // Cadangan Kas Devisa Awal Negara Konoha IB 500 Miliar
+      let baseReserve = 500000000000.0; // Cadangan Kas Devisa Awal Negara Federasi IB 500 Miliar
       let totalIncome = 0.0;
       let totalExpense = 0.0;
       let finesTotal = 0.0;
@@ -23,7 +23,7 @@ module.exports = function(io, simulationEngine) {
         if (r.direction === 'INCOME') {
           totalIncome += amt;
           if (r.source_type === 'SEIZURE_FINE') finesTotal += amt;
-          if (r.source_type === 'PNAK_FILING_FEE') filingFeesTotal += amt;
+          if (r.source_type === 'PNAF_FILING_FEE') filingFeesTotal += amt;
           if (r.source_type === 'METERAI_FEE') meteraiTotal += amt;
           if (r.source_type === 'TRANSACTION_TAX') taxTotal += amt;
           if (r.source_type === 'CORPORATE_TAX') corporateTaxTotal += amt;
@@ -111,7 +111,7 @@ module.exports = function(io, simulationEngine) {
       const newsItem = {
         id: uuidv4(),
         title: `🏛️ STIMULUS KAS NEGARA: Dana Talangan IB ${amount.toLocaleString('id-ID')} Dikucurkan ke ${comp.symbol}!`,
-        content: `Otoritas Finansial Konoha meresmikan injeksi likuiditas kas negara untuk menyelamatkan operasional perseroan ${comp.name}. Saham langsung meroket +${(araPct * 100).toFixed(0)}% (ARA) dan status UMA resmi dicabut!`,
+        content: `Otoritas Finansial Federasi meresmikan injeksi likuiditas kas negara untuk menyelamatkan operasional perseroan ${comp.name}. Saham langsung meroket +${(araPct * 100).toFixed(0)}% (ARA) dan status UMA resmi dicabut!`,
         affected_sector: comp.sector,
         sentiment: 'BULLISH',
         published_at: new Date().toISOString()
@@ -155,14 +155,14 @@ module.exports = function(io, simulationEngine) {
       // Catat pengeluaran kas negara (mengurangi saldo kas likuid negara)
       await query.run(
         'INSERT INTO state_treasury_ledger (id, source_type, title, amount_ib, direction, reference_id, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [uuidv4(), 'BAILOUT_DISBURSEMENT', `Penyaluran Dividen Kemakmuran Rakyat Konoha (${users.length} Pemain)`, totalDisbursed, 'EXPENSE', 'BLT_KONOHA', note || 'Stimulus daya beli masyarakat']
+        [uuidv4(), 'BAILOUT_DISBURSEMENT', `Penyaluran Dividen Kemakmuran Rakyat Federasi (${users.length} Pemain)`, totalDisbursed, 'EXPENSE', 'BLT_FEDERASI', note || 'Stimulus daya beli masyarakat']
       );
 
       // Siarkan breaking news
       const newsItem = {
         id: uuidv4(),
-        title: `💰 DIVIDEN KEMAKMURAN RAKYAT KONOHA DICAIRKAN!`,
-        content: `Pemerintah Konoha menyalurkan surplus kas negara sebesar IB ${perUser.toLocaleString('id-ID')} langsung ke setiap kas pribadi seluruh konglomerat dan rakyat Konoha!`,
+        title: `💰 DIVIDEN KEMAKMURAN RAKYAT FEDERASI DICAIRKAN!`,
+        content: `Pemerintah Federasi menyalurkan surplus kas negara sebesar IB ${perUser.toLocaleString('id-ID')} langsung ke setiap kas pribadi seluruh konglomerat dan warga Capital Federation!`,
         affected_sector: 'Semua Sektor',
         sentiment: 'BULLISH',
         published_at: new Date().toISOString()

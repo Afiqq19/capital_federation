@@ -135,7 +135,7 @@ module.exports = function(io, simulationEngine) {
       const hoursLeft = Math.max(0, Math.round(msLeft / (1000 * 60 * 60)));
 
       // Sanksi Denda PNAF (Minimal IB 100.000.000 atau 5% valuasi dasar)
-      const pnakSanctionFine = Math.max(100000000.0, Math.round((comp.base_price || 2000) * 50000));
+      const pnafSanctionFine = Math.max(100000000.0, Math.round((comp.base_price || 2000) * 50000));
 
       // Cek pinjaman aktif pemilik di tabel loans
       const ownerId = comp.owner_id;
@@ -155,7 +155,7 @@ module.exports = function(io, simulationEngine) {
       }
 
       const totalBankDebt = bankLoanPrincipal + bankLoanInterest;
-      const totalRedemptionCost = pnakSanctionFine + totalBankDebt;
+      const totalRedemptionCost = pnafSanctionFine + totalBankDebt;
       const isOwner = Boolean(ownerId && userId && String(ownerId) === String(userId));
 
       res.json({
@@ -170,7 +170,7 @@ module.exports = function(io, simulationEngine) {
         seizureDeadline,
         isAuctionReady,
         hoursLeft,
-        pnakSanctionFine,
+        pnafSanctionFine,
         bankLoanPrincipal,
         bankLoanInterest,
         totalBankDebt,
@@ -220,7 +220,7 @@ module.exports = function(io, simulationEngine) {
       if (!user) return res.status(404).json({ error: 'Pemain / Pemilik tidak ditemukan' });
 
       // Hitung total kewajiban
-      const pnakSanctionFine = Math.max(100000000.0, Math.round((comp.base_price || 2000) * 50000));
+      const pnafSanctionFine = Math.max(100000000.0, Math.round((comp.base_price || 2000) * 50000));
       const activeLoans = await query.all("SELECT * FROM loans WHERE user_id = ? AND status = 'ACTIVE'", [userId]);
       let bankLoanPrincipal = 0.0;
       let bankLoanInterest = 0.0;
@@ -231,11 +231,11 @@ module.exports = function(io, simulationEngine) {
         bankLoanInterest += Math.max(0, interest);
       }
       const totalBankDebt = bankLoanPrincipal + bankLoanInterest;
-      const totalRedemptionCost = pnakSanctionFine + totalBankDebt;
+      const totalRedemptionCost = pnafSanctionFine + totalBankDebt;
 
       if (user.balance_ib < totalRedemptionCost) {
         return res.status(400).json({
-          error: `Saldo Kas Pribadi tidak cukup untuk menebus perseroan. Butuh IB ${totalRedemptionCost.toLocaleString('id-ID')} (Denda Sanksi PNAF: IB ${pnakSanctionFine.toLocaleString('id-ID')}, Utang Bank: IB ${totalBankDebt.toLocaleString('id-ID')}). Saldo Anda saat ini: IB ${(user.balance_ib || 0).toLocaleString('id-ID')}.`
+          error: `Saldo Kas Pribadi tidak cukup untuk menebus perseroan. Butuh IB ${totalRedemptionCost.toLocaleString('id-ID')} (Denda Sanksi PNAF: IB ${pnafSanctionFine.toLocaleString('id-ID')}, Utang Bank: IB ${totalBankDebt.toLocaleString('id-ID')}). Saldo Anda saat ini: IB ${(user.balance_ib || 0).toLocaleString('id-ID')}.`
         });
       }
 
@@ -247,7 +247,7 @@ module.exports = function(io, simulationEngine) {
       await query.run(
         `INSERT INTO state_treasury_ledger (id, source_type, title, amount_ib, direction, reference_id, notes) 
          VALUES (?, 'SEIZURE_FINE', ?, ?, 'INCOME', ?, ?)`,
-        [ledgerFineId, `Penerimaan Pelunasan Denda Sitaan & Sanksi PNAF (${comp.symbol})`, pnakSanctionFine, comp.symbol, `Denda sanksi pemulihan hak perseroan ${comp.name}`]
+        [ledgerFineId, `Penerimaan Pelunasan Denda Sitaan & Sanksi PNAF (${comp.symbol})`, pnafSanctionFine, comp.symbol, `Denda sanksi pemulihan hak perseroan ${comp.name}`]
       );
 
       // Jika ada utang bank, lunaskan di database dan setor pokok+bunga ke kas negara
@@ -283,7 +283,7 @@ module.exports = function(io, simulationEngine) {
       const newsItem = {
         id: uuidv4(),
         title: `🏛️ PENEBUSAN SITAAN TUNTAS: Perseroan ${comp.name} (${comp.symbol}) Resmi Bebas!`,
-        content: `Konglomerat ${user.username} telah melunasi Denda Sanksi PNAF sebesar IB ${pnakSanctionFine.toLocaleString('id-ID')} dan melunasi seluruh utang kredit bank beserta bunganya sebesar IB ${totalBankDebt.toLocaleString('id-ID')}. Hak kendali perseroan resmi dikembalikan secara penuh!`,
+        content: `Konglomerat ${user.username} telah melunasi Denda Sanksi PNAF sebesar IB ${pnafSanctionFine.toLocaleString('id-ID')} dan melunasi seluruh utang kredit bank beserta bunganya sebesar IB ${totalBankDebt.toLocaleString('id-ID')}. Hak kendali perseroan resmi dikembalikan secara penuh!`,
         affected_sector: comp.sector,
         sentiment: 'BULLISH',
         published_at: new Date().toISOString()

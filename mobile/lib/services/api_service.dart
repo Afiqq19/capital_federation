@@ -6,7 +6,9 @@ import '../models/portfolio.dart';
 import '../models/news.dart';
 
 class ApiService {
-  static String baseUrl = 'http://127.0.0.1:4000';
+  static String baseUrl = 'https://capitalfederation.xie.my.id';
+  // static String baseUrl = 'http://127.0.0.1:4000';
+
 
   static void setBaseUrl(String url) {
     var sanitized = url.trim();
@@ -20,12 +22,14 @@ class ApiService {
   }
 
   static final List<String> _candidateHosts = [
+    'https://capitalfederation.xie.my.id', // Production Hosting Domain
     'http://127.0.0.1:4000',   // USB Cable via adb reverse (tercepat di HP fisik via kabel)
     'http://localhost:4000',    // Localhost
     'http://10.75.94.106:4000', // Wi-Fi / LAN IP PC aktif saat ini
     'http://10.75.94.242:4000', // Wi-Fi / LAN IP PC alternatif
     'http://10.75.94.156:4000', // Wi-Fi LAN IP alternatif
     'http://10.0.2.2:4000',     // Android Emulator
+    'http://192.168.1.100:5000', // Hosting
   ];
 
   static Future<void> autoDiscoverHost() async {
@@ -976,10 +980,10 @@ class ApiService {
     }
   }
 
-  // Indikator Makroekonomi Republik Konoha & IPMC
-  static Future<Map<String, dynamic>?> getKonohaMacro() async {
+  // Indikator Makroekonomi Republik Federasi & IPMC
+  static Future<Map<String, dynamic>?> getFederationMacro() async {
     try {
-      final response = await http.get(Uri.parse('$baseUrl/api/konoha/macro')).timeout(const Duration(seconds: 4));
+      final response = await http.get(Uri.parse('$baseUrl/api/federation/macro')).timeout(const Duration(seconds: 4));
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
       }
@@ -987,7 +991,7 @@ class ApiService {
     return null;
   }
 
-  // Daftar Perkara Sidang Pengadilan Niaga Konoha (PNAK)
+  // Daftar Perkara Sidang Pengadilan Niaga Federasi (PNAF)
   static Future<List<Map<String, dynamic>>> getCourtCases() async {
     try {
       final response = await http.get(Uri.parse('$baseUrl/api/court/cases')).timeout(const Duration(seconds: 4));
@@ -998,7 +1002,7 @@ class ApiService {
     return [];
   }
 
-  // Pendaftaran Pengaduan / Gugatan Sidang ke PNAK
+  // Pendaftaran Pengaduan / Gugatan Sidang ke PNAF
   static Future<Map<String, dynamic>> fileCourtCase({
     required String plaintiffName,
     String? plaintiffUserId,
@@ -1030,7 +1034,7 @@ class ApiService {
       ).timeout(const Duration(seconds: 6));
       return jsonDecode(response.body);
     } catch (e) {
-      return {'error': 'Gagal mendaftarkan gugatan ke PNAK: Gangguan koneksi'};
+      return {'error': 'Gagal mendaftarkan gugatan ke PNAF: Gangguan koneksi'};
     }
   }
 

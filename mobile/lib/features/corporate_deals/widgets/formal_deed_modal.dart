@@ -66,7 +66,7 @@ class FormalDeedModal extends StatelessWidget {
   Widget build(BuildContext context) {
     final String buyerName = buyerType == 'P2P' && buyerCandidate != null
         ? '${buyerCandidate['username']} (${buyerCandidate['pt_name'] ?? 'Konglomerat'})'
-        : 'Konsorsium Publik & Investor Institusi Global Konoha';
+        : 'Konsorsium Publik & Investor Institusi Global Federasi';
 
     final String aktaNo =
         'AKTA/IPMC/${DateTime.now().year}${DateTime.now().month.toString().padLeft(2, '0')}/${1000 + (DateTime.now().millisecond % 9000)}';
@@ -157,7 +157,7 @@ class FormalDeedModal extends StatelessWidget {
                         border: Border.all(color: const Color(0xFF1E293B)),
                       ),
                       child: const Text(
-                        'Pada hari ini telah disepakati perjanjian pemindahtanganan hak kepemilikan saham perseroan terbatas secara sah dan mengikat antara para pihak di hadapan Otoritas Pasar Modal Republik Konoha:',
+                        'Pada hari ini telah disepakati perjanjian pemindahtanganan hak kepemilikan saham perseroan terbatas secara sah dan mengikat antara para pihak di hadapan Otoritas Pasar Modal Republik Federasi Indigo:',
                         style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 10, height: 1.4),
                       ),
                     ),
@@ -248,7 +248,7 @@ class FormalDeedModal extends StatelessWidget {
                             Icon(Icons.verified_rounded, color: Color(0xFFF5B942), size: 14),
                             SizedBox(width: 6),
                             Text(
-                              'METERAI DIGITAL RESMI REPUBLIK KONOHA IB 10.000 (LUNAS)',
+                              'METERAI DIGITAL RESMI REPUBLIK FEDERASI IB 10.000 (LUNAS)',
                               style: TextStyle(color: Color(0xFFF5B942), fontSize: 8.5, fontWeight: FontWeight.bold),
                             ),
                           ],

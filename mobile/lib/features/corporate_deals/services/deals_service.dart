@@ -127,15 +127,15 @@ class DealsService {
     return [];
   }
 
-  // Gugat wanprestasi ke Pengadilan Niaga Konoha (PNAK) langsung dari akta
-  static Future<Map<String, dynamic>> disputeToPnak({
+  // Gugat wanprestasi ke Pengadilan Niaga Federasi (PNAF) langsung dari akta
+  static Future<Map<String, dynamic>> disputeToPnaf({
     required String deedId,
     required String plaintiffUserId,
     String? grievanceReason,
   }) async {
     try {
       final res = await http.post(
-        Uri.parse('$_base/api/deals/dispute-to-pnak'),
+        Uri.parse('$_base/api/deals/dispute-to-pnaf'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'deedId': deedId,
@@ -145,7 +145,7 @@ class DealsService {
       ).timeout(const Duration(seconds: 8));
       return jsonDecode(res.body);
     } catch (e) {
-      return {'error': 'Gagal mendaftarkan gugatan wanprestasi ke PNAK'};
+      return {'error': 'Gagal mendaftarkan gugatan wanprestasi ke PNAF'};
     }
   }
 }

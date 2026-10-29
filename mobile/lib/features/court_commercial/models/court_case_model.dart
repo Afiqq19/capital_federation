@@ -32,7 +32,7 @@ class CourtCaseModel {
   factory CourtCaseModel.fromJson(Map<String, dynamic> json) {
     return CourtCaseModel(
       id: json['id']?.toString() ?? '',
-      caseNumber: json['case_number']?.toString() ?? 'PNAK/000/2026',
+      caseNumber: json['case_number']?.toString() ?? 'PNAF/000/2026',
       caseType: json['case_type']?.toString() ?? 'DISPUTE',
       title: json['title']?.toString() ?? 'Sengketa Bisnis',
       plaintiffName: json['plaintiff_name']?.toString() ?? 'Pihak Penggugat',

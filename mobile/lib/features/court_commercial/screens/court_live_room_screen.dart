@@ -202,7 +202,7 @@ class _CourtLiveRoomScreenState extends State<CourtLiveRoomScreen> {
       return Scaffold(
         backgroundColor: const Color(0xFF0A0F1D),
         appBar: AppBar(
-          title: const Text('Ruang Sidang PNAK', style: TextStyle(color: Colors.white, fontSize: 16)),
+          title: const Text('Ruang Sidang PNAF', style: TextStyle(color: Colors.white, fontSize: 16)),
           backgroundColor: const Color(0xFF0F172A),
         ),
         body: const Center(child: CircularProgressIndicator(color: Color(0xFFF5B942))),
@@ -236,7 +236,7 @@ class _CourtLiveRoomScreenState extends State<CourtLiveRoomScreen> {
               children: [
                 Icon(Icons.gavel_rounded, color: Color(0xFFF5B942), size: 16),
                 SizedBox(width: 6),
-                Text('PENGADILAN NIAGA KONOHA (PNAK)', style: TextStyle(color: Color(0xFFF5B942), fontSize: 11, fontWeight: FontWeight.w900)),
+                Text('PENGADILAN NIAGA FEDERASI (PNAF)', style: TextStyle(color: Color(0xFFF5B942), fontSize: 11, fontWeight: FontWeight.w900)),
               ],
             ),
             Text(
@@ -433,7 +433,7 @@ class _CourtLiveRoomScreenState extends State<CourtLiveRoomScreen> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const Text('MAJELIS HAKIM PNAK', style: TextStyle(color: Color(0xFFF5B942), fontSize: 10, fontWeight: FontWeight.w900)),
+                                    const Text('MAJELIS HAKIM PNAF', style: TextStyle(color: Color(0xFFF5B942), fontSize: 10, fontWeight: FontWeight.w900)),
                                     const SizedBox(height: 2),
                                     Text(text, style: const TextStyle(color: Colors.white, fontSize: 11.5, height: 1.3)),
                                   ],

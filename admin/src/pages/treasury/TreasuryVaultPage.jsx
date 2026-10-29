@@ -309,7 +309,7 @@ export default function TreasuryVaultPage() {
 
                       <td>
                         {row.source_type === 'SEIZURE_FINE' && <Badge tone="amber">DENDA SITAAN</Badge>}
-                        {row.source_type === 'PNAK_FILING_FEE' && <Badge tone="sky">BIAYA SIDANG</Badge>}
+                        {row.source_type === 'PNAF_FILING_FEE' && <Badge tone="sky">BIAYA SIDANG</Badge>}
                         {row.source_type === 'METERAI_FEE' && <Badge tone="emerald">METERAI DIGITAL</Badge>}
                         {row.source_type === 'TRANSACTION_TAX' && <Badge tone="violet">PAJAK BURSA 0.1%</Badge>}
                         {row.source_type === 'BAILOUT_DISBURSEMENT' && <Badge tone="rose">STIMULUS NEGARA</Badge>}

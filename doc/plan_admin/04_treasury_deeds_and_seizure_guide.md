@@ -1,11 +1,11 @@
-# Panduan Eksekutif Otoritas Moneter & Pengawasan Admin Konoha (PNAK & IPMC)
+﻿# Panduan Eksekutif Otoritas Moneter & Pengawasan Admin FEDERASI (PNAF & IPMC)
 
 Dokumen ini mendokumentasikan fungsionalitas dan arsitektur modular Web Admin untuk pengelolaan Kas Negara, Brankas Akta Notariil, serta Penindakan Sita Emiten.
 
 ---
 
-## 1. Brankas Kas Negara Konoha (`/treasury`)
-- **Tujuan**: Memonitor aliran kas negara yang berasal dari denda pengadilan PNAK, bea meterai digital, pajak transaksi bursa (0.1%), dan lelang sita jaminan.
+## 1. Brankas Kas Negara FEDERASI (`/treasury`)
+- **Tujuan**: Memonitor aliran kas negara yang berasal dari denda pengadilan PNAF, bea meterai digital, pajak transaksi bursa (0.1%), dan lelang sita jaminan.
 - **Rincian Sumber Likuiditas**:
   - `PNBP_COURT_FEE`: Biaya registrasi perkara & penalti wanprestasi.
   - `DIGITAL_METERAI`: Bea meterai notaris digital (IB 10.000 per lembar akta).
@@ -21,8 +21,8 @@ Dokumen ini mendokumentasikan fungsionalitas dan arsitektur modular Web Admin un
 - **Tujuan**: Arsip permanen seluruh transaksi pengalihan hak kepemilikan saham privat dan placement institusi.
 - **Validasi Dokumen**:
   - Nomor Register Resmi: `AKTA/IPMC/YYYYMM/XXXX`.
-  - Stempel Meterai Digital Negara: `MTR-KONOHA-XXXX`.
-  - Klausul Wanprestasi Pasal 7: Penalti ingkar janji 15% - 20% dapat digugat langsung ke sidang arbitrase PNAK.
+  - Stempel Meterai Digital Negara: `MTR-FEDERASI-XXXX`.
+  - Klausul Wanprestasi Pasal 7: Penalti ingkar janji 15% - 20% dapat digugat langsung ke sidang arbitrase PNAF.
 
 ---
 
@@ -31,7 +31,7 @@ Dokumen ini mendokumentasikan fungsionalitas dan arsitektur modular Web Admin un
 - **Aksi Cepat**:
   - `[ ⚖️ Sita Perusahaan ]`: Membekukan operasional emiten, mencabut hak dividen pendiri, dan menyita saham ke kas negara.
   - `[ 🏛️ Cabut Sita ]`: Memulihkan status emiten setelah memenuhi kewajiban pemulihan.
-  - `[ 🏛️ Konversi Menjadi BUMN Konoha ]`: Mengalihkan status emiten 100% menjadi milik negara Republik Konoha.
+  - `[ 🏛️ Konversi Menjadi BUMN FEDERASI ]`: Mengalihkan status emiten 100% menjadi milik negara Republik FEDERASI.
 
 ---
 

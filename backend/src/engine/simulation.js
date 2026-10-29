@@ -771,7 +771,7 @@ class MarketSimulationEngine {
       const processedCompanyIds = new Set();
       const ptOwners = await query.all('SELECT * FROM users WHERE has_pt = 1 AND is_banned = 0');
       for (const u of ptOwners) {
-        // Cek apakah PT Utama user sedang disita negara/PNAK atau BANGKRUT (PAILIT)
+        // Cek apakah PT Utama user sedang disita negara/PNAF atau BANGKRUT (PAILIT)
         const primaryComp = await query.get('SELECT id, is_seized, status, name, symbol, sector FROM companies WHERE owner_id = ? AND is_bot = 0', [u.id]);
         if (primaryComp) {
           processedCompanyIds.add(primaryComp.id);
@@ -888,7 +888,7 @@ class MarketSimulationEngine {
                 SET company_balance_ib = ?, 
                     status = 'BANKRUPT', 
                     is_seized = 1, 
-                    seized_by = 'Pengadilan Niaga Konoha (PNAK) & BCF',
+                    seized_by = 'Pengadilan Niaga Federasi (PNAF) & BCF',
                     seize_reason = 'PAILIT: Defisit kas operasional telah menembus batas maksimal ' || ? || '. Perseroan resmi dinyatakan bangkrut dan dibekukan.',
                     seized_at = datetime('now')
                 WHERE id = ?
@@ -1044,7 +1044,7 @@ class MarketSimulationEngine {
               SET company_balance_ib = ?, 
                   status = 'BANKRUPT', 
                   is_seized = 1, 
-                  seized_by = 'Pengadilan Niaga Konoha (PNAK) & BCF',
+                  seized_by = 'Pengadilan Niaga Federasi (PNAF) & BCF',
                   seize_reason = 'PAILIT: Defisit kas operasional telah menembus batas maksimal ' || ? || '. Perusahaan resmi dinyatakan bangkrut dan dibekukan.',
                   seized_at = datetime('now')
               WHERE id = ?

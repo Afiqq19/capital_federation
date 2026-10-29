@@ -1,6 +1,6 @@
-# Panduan Pengawasan Bursa: Radar UMA vs Suspensi Saham
+﻿# Panduan Pengawasan Bursa: Radar UMA vs Suspensi Saham
 
-Dokumen ini menjelaskan secara rinci perbedaan mendasar, regulasi sistem, dan cara kerja teknis antara **Radar Peringatan UMA** dan **Suspensi Saham (Trading Halt)** di dalam ekosistem Monopoly Corp / IPMC Exchange.
+Dokumen ini menjelaskan secara rinci perbedaan mendasar, regulasi sistem, dan cara kerja teknis antara **Radar Peringatan UMA** dan **Suspensi Saham (Trading Halt)** di dalam ekosistem Capital Federation / IPMC Exchange.
 
 ---
 

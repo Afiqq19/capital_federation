@@ -72,7 +72,7 @@ class _CourtCommercialScreenState extends State<CourtCommercialScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.note_add_rounded, color: Color(0xFFF5B942)),
-            tooltip: 'Daftarkan Gugatan PNAK',
+            tooltip: 'Daftarkan Gugatan PNAF',
             onPressed: () => FileLawsuitSheet.show(context, onCaseFiled: _fetchCases),
           ),
           IconButton(
@@ -89,11 +89,11 @@ class _CourtCommercialScreenState extends State<CourtCommercialScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'PENGADILAN NIAGA KONOHA',
+                    'PENGADILAN NIAGA FEDERASI',
                     style: TextStyle(color: Color(0xFFF5B942), fontSize: 13, fontWeight: FontWeight.w900, letterSpacing: 0.6),
                   ),
                   Text(
-                    'Mahkamah Arbitrase & Kepailitan Korporasi PNAK',
+                    'Mahkamah Arbitrase & Kepailitan Korporasi PNAF',
                     style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10),
                   ),
                 ],
@@ -133,12 +133,12 @@ class _CourtCommercialScreenState extends State<CourtCommercialScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'SIDANG PERKARA NIAGA REPUBLIK KONOHA',
+                          'SIDANG PERKARA NIAGA REPUBLIK FEDERASI',
                           style: TextStyle(color: Color(0xFFF5B942), fontSize: 11, fontWeight: FontWeight.w900),
                         ),
                         SizedBox(height: 2),
                         Text(
-                          'Penyelesaian perkara gagal bayar (PKPU), sita eksekusi jaminan BSK, dan sengketa akta kepemilikan saham.',
+                          'Penyelesaian perkara gagal bayar (PKPU), sita eksekusi jaminan BCF, dan sengketa akta kepemilikan saham.',
                           style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 10, height: 1.3),
                         ),
                       ],
@@ -367,7 +367,7 @@ class _CourtCommercialScreenState extends State<CourtCommercialScreen> {
                     const SizedBox(width: 8),
                     const Expanded(
                       child: Text(
-                        'BERITA ACARA & VONIS MAHKAMAH PNAK',
+                        'BERITA ACARA & VONIS MAHKAMAH PNAF',
                         style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w900),
                       ),
                     ),

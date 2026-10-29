@@ -2,15 +2,15 @@ import 'package:flutter/material.dart';
 import '../../../services/api_service.dart';
 import '../../corporate_deals/screens/corporate_deals_screen.dart';
 
-class KonohaMacroBanner extends StatefulWidget {
+class FederationMacroBanner extends StatefulWidget {
   final VoidCallback? onCourtTap;
-  const KonohaMacroBanner({super.key, this.onCourtTap});
+  const FederationMacroBanner({super.key, this.onCourtTap});
 
   @override
-  State<KonohaMacroBanner> createState() => _KonohaMacroBannerState();
+  State<FederationMacroBanner> createState() => _FederationMacroBannerState();
 }
 
-class _KonohaMacroBannerState extends State<KonohaMacroBanner> {
+class _FederationMacroBannerState extends State<FederationMacroBanner> {
   Map<String, dynamic>? _macroData;
   bool _isLoading = true;
 
@@ -21,7 +21,7 @@ class _KonohaMacroBannerState extends State<KonohaMacroBanner> {
   }
 
   Future<void> _loadMacro() async {
-    final data = await ApiService.getKonohaMacro();
+    final data = await ApiService.getFederationMacro();
     if (mounted) {
       setState(() {
         _macroData = data;
@@ -94,7 +94,7 @@ class _KonohaMacroBannerState extends State<KonohaMacroBanner> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         const Text(
-                          'REPUBLIK KONOHA',
+                          'REPUBLIK FEDERASI',
                           style: TextStyle(
                             color: Color(0xFFF5B942),
                             fontSize: 9.5,
@@ -189,7 +189,7 @@ class _KonohaMacroBannerState extends State<KonohaMacroBanner> {
                             Icon(Icons.gavel_rounded, color: Color(0xFFF5B942), size: 13),
                             SizedBox(width: 4),
                             Text(
-                              'PNAK',
+                              'PNAF',
                               style: TextStyle(
                                 color: Color(0xFFF5B942),
                                 fontSize: 10,
@@ -215,8 +215,8 @@ class _KonohaMacroBannerState extends State<KonohaMacroBanner> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _buildIndicator('Bunga BSK', '${interestRate.toStringAsFixed(1)}%', const Color(0xFF38BDF8)),
-                _buildIndicator('Inflasi Konoha', '${inflationRate.toStringAsFixed(1)}%', const Color(0xFFF59E0B)),
+                _buildIndicator('Bunga BCF', '${interestRate.toStringAsFixed(1)}%', const Color(0xFF38BDF8)),
+                _buildIndicator('Inflasi Federasi', '${inflationRate.toStringAsFixed(1)}%', const Color(0xFFF59E0B)),
                 _buildIndicator('Mata Uang', 'IB (Indigo Billion)', const Color(0xFF34D399)),
               ],
             ),

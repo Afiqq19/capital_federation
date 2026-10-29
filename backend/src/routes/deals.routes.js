@@ -69,7 +69,7 @@ module.exports = function(io) {
         });
       }
 
-      let buyerName = 'Pasar Terbuka Konoha';
+      let buyerName = 'Pasar Terbuka Federasi';
       if (dealType === 'P2P' && buyerUserId) {
         const buyer = await query.get('SELECT * FROM users WHERE id = ?', [buyerUserId]);
         if (!buyer) return res.status(404).json({ error: 'Pihak pembeli tidak ditemukan' });
@@ -115,7 +115,7 @@ module.exports = function(io) {
         const newsItem = {
           id: uuidv4(),
           title: `📜 PENAWARAN BLOK SAHAM: ${seller.username} Melepas ${pct}% ${comp.symbol}!`,
-          content: `Paket divestasi saham ${pct}% emiten ${comp.name} senilai IB ${grossAmount.toLocaleString('id-ID')} resmi didaftarkan ke Pasar Negosiasi Konoha.`,
+          content: `Paket divestasi saham ${pct}% emiten ${comp.name} senilai IB ${grossAmount.toLocaleString('id-ID')} resmi didaftarkan ke Pasar Negosiasi Federasi.`,
           affected_sector: comp.sector,
           sentiment: 'NEUTRAL',
           published_at: new Date().toISOString()
@@ -255,7 +255,7 @@ module.exports = function(io) {
 
         // 6. Terbitkan Akta Resmi Perjanjian Jual Beli Saham (Deed)
         const deedId = uuidv4();
-        const deedNumber = `AKTA/PNAK/${new Date().getFullYear()}/${Math.floor(10000 + Math.random() * 90000)}`;
+        const deedNumber = `AKTA/PNAF/${new Date().getFullYear()}/${Math.floor(10000 + Math.random() * 90000)}`;
         await query.run(
           `INSERT INTO deal_deeds (
             id, deed_number, deal_id, seller_user_id, seller_name, buyer_user_id, buyer_name,
@@ -291,7 +291,7 @@ module.exports = function(io) {
         const newsItem = {
           id: uuidv4(),
           title: `📜 AKTA JUAL-BELI SAHAM SAH: ${buyer.username} Mengakuisisi ${pctToBuy.toFixed(1)}% ${comp.symbol}!`,
-          content: `Peralihan ${pctToBuy.toFixed(1)}% saham ${comp.name} dari ${seller.username} ke ${buyer.username} resmi disahkan Notariat PNAK senilai IB ${totalPrice.toLocaleString('id-ID')} (Akta No: ${deedNumber}).`,
+          content: `Peralihan ${pctToBuy.toFixed(1)}% saham ${comp.name} dari ${seller.username} ke ${buyer.username} resmi disahkan Notariat PNAF senilai IB ${totalPrice.toLocaleString('id-ID')} (Akta No: ${deedNumber}).`,
           affected_sector: comp.sector,
           sentiment: 'BULLISH',
           published_at: new Date().toISOString()
@@ -358,8 +358,8 @@ module.exports = function(io) {
     }
   });
 
-  // 8. Gugat Wanprestasi ke PNAK dari Akta
-  router.post('/dispute-to-pnak', async (req, res) => {
+  // 8. Gugat Wanprestasi ke PNAF dari Akta
+  router.post('/dispute-to-pnaf', async (req, res) => {
     try {
       const { deedId, plaintiffUserId, disputeReason } = req.body;
       const deed = await query.get('SELECT * FROM deal_deeds WHERE id = ?', [deedId]);
@@ -378,7 +378,7 @@ module.exports = function(io) {
       // Catat ke kas negara
       await query.run(
         'INSERT INTO state_treasury_ledger (id, source_type, title, amount_ib, direction, reference_id, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [uuidv4(), 'PNAK_FILING_FEE', `Biaya Pendaftaran Gugatan Wanprestasi Akta #${deed.deed_number}`, 250000, 'INCOME', deed.deed_number, `Diajukan oleh ${plaintiff.username}`]
+        [uuidv4(), 'PNAF_FILING_FEE', `Biaya Pendaftaran Gugatan Wanprestasi Akta #${deed.deed_number}`, 250000, 'INCOME', deed.deed_number, `Diajukan oleh ${plaintiff.username}`]
       );
 
       // Hitung tuntutan ganti rugi penalti 20% nilai akta
@@ -388,7 +388,7 @@ module.exports = function(io) {
       const defendantUserId = isPlaintiffSeller ? deed.buyer_user_id : deed.seller_user_id;
 
       const caseId = uuidv4();
-      const caseNumber = `0${Math.floor(10 + Math.random() * 90)}/Pdt.Sus-Wanprestasi/${new Date().getFullYear()}/PNAK`;
+      const caseNumber = `0${Math.floor(10 + Math.random() * 90)}/Pdt.Sus-Wanprestasi/${new Date().getFullYear()}/PNAF`;
 
       await query.run(
         `INSERT INTO court_cases (
@@ -411,7 +411,7 @@ module.exports = function(io) {
       // Berita Breaking News
       const newsItem = {
         id: uuidv4(),
-        title: `🚨 GUGATAN WANPRESTASI PNAK: ${plaintiff.username} Menggugat ${defendantName}!`,
+        title: `🚨 GUGATAN WANPRESTASI PNAF: ${plaintiff.username} Menggugat ${defendantName}!`,
         content: `Perkara No. ${caseNumber} resmi terdaftar. Penggugat menuntut sita ganti rugi penalti wanprestasi IB ${penaltyAmount.toLocaleString('id-ID')} atas Akta #${deed.deed_number}.`,
         affected_sector: 'Semua Sektor',
         sentiment: 'BEARISH',
@@ -428,7 +428,7 @@ module.exports = function(io) {
         caseId,
         caseNumber,
         penaltyAmount,
-        message: `⚖️ Gugatan Wanprestasi #${caseNumber} Resmi Didaftarkan ke PNAK Konoha! Tuntutan Penalti: IB ${penaltyAmount.toLocaleString('id-ID')}`
+        message: `⚖️ Gugatan Wanprestasi #${caseNumber} Resmi Didaftarkan ke PNAF Federasi! Tuntutan Penalti: IB ${penaltyAmount.toLocaleString('id-ID')}`
       });
     } catch (err) {
       res.status(500).json({ error: err.message });

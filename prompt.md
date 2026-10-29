@@ -1,20 +1,20 @@
-# 📜 MASTER BLUEPRINT & PROMPT PENGEMBANGAN: MONOPOLY CORP (REPUBLIK KONOHA EDITION)
+﻿# 📜 MASTER BLUEPRINT & PROMPT PENGEMBANGAN: Capital Federation (REPUBLIK FEDERASI EDITION)
 
-Dokumen ini adalah acuan arsitektur sistem, aturan game (*game logic*), *world-building*, dan roadmap teknis pemecahan struktur file untuk platform **Monopoly Corp** (Klien Mobile Flutter, Backend Express, dan Web Admin).
+Dokumen ini adalah acuan arsitektur sistem, aturan game (*game logic*), *world-building*, dan roadmap teknis pemecahan struktur file untuk platform **Capital Federation** (Klien Mobile Flutter, Backend Express, dan Web Admin).
 
 ---
 
 ## 📌 BAGIAN 1: STANDAR PENGEMBANGAN & ATURAN POKOK SISTEM
 
 1. **Tech Stack & Lingkungan Kerja**:
-   - **Backend:** Node.js (Express, SQLite `backend/data/monopoly.db`, Socket.io) ➔ Port `4000`.
+   - **Backend:** Node.js (Express, SQLite `backend/data/capital_federation.db`, Socket.io) ➔ Port `4000`.
    - **Web Admin:** React.js 19 + Vite + Tailwind CSS v4 ➔ Port `5173`.
    - **Aplikasi Mobile:** Flutter (Android) ➔ Target: Perangkat Fisik Vivo V2157 (`3466240990000FX`, Android 14 API 34).
    - **Koneksi USB / Reverse:** Wajib `adb reverse tcp:4000 tcp:4000` saat menggunakan koneksi kabel USB ke laptop.
 
 2. **Aturan Struktur Modular (Anti-Monolith)**:
    - **Admin:** Satu menu/fitur = Satu folder dan file tersendiri di `admin/src/pages/<menu>/`. Tidak diperkenankan lagi menulis ribuan baris di satu file `App.jsx`.
-   - **Mobile Flutter:** Satu fitur baru = Satu modul folder di `mobile/lib/features/<nama_fitur>/` (`ipo/`, `corporate_deals/`, `court_commercial/`, `macro_konoha/`). Tidak diperkenankan lagi menambah ribuan baris di `home_tab.dart`.
+   - **Mobile Flutter:** Satu fitur baru = Satu modul folder di `mobile/lib/features/<nama_fitur>/` (`ipo/`, `corporate_deals/`, `court_commercial/`, `macro_FEDERASI/`). Tidak diperkenankan lagi menambah ribuan baris di `home_tab.dart`.
 
 3. **Aturan Sidebar Web Admin (Stationary)**:
    - Sidebar wajib **DIAM/PERMANEN** di sisi kiri saat halaman konten di-scroll (`h-screen overflow-hidden flex` dengan container `<main>` yang `overflow-y-auto`).
@@ -24,47 +24,47 @@ Dokumen ini adalah acuan arsitektur sistem, aturan game (*game logic*), *world-b
    - **Suspensi Saham:** Perdagangan saham **DIBEKUKAN TOTAL** sampai tanggal yang ditentukan (countdown) atau dicabut manual oleh admin/pelunasan denda.
 
 5. **Indeks Rencana & Dokumentasi Resmi (Folder `doc/`)**:
-   - [01_admin_architecture_hosting.md](file:///e:/projeck_web/monopoly_corp/doc/plan_admin/01_admin_architecture_hosting.md): Arsitektur folder & panduan hosting domain publik.
-   - [02_market_oversight_guide.md](file:///e:/projeck_web/monopoly_corp/doc/plan_admin/02_market_oversight_guide.md): Panduan teknis Radar UMA vs Suspensi Bursa.
-   - [03_konoha_macro_and_court_oversight.md](file:///e:/projeck_web/monopoly_corp/doc/plan_admin/03_konoha_macro_and_court_oversight.md): Kontrol makroekonomi Konoha & pengawasan Pengadilan Niaga.
-   - [01_mobile_roadmap.md](file:///e:/projeck_web/monopoly_corp/doc/plan_mobile/01_mobile_roadmap.md): Roadmap pengujian Flutter ke HP fisik Vivo.
-   - [02_konoha_ipo_court_architecture.md](file:///e:/projeck_web/monopoly_corp/doc/plan_mobile/02_konoha_ipo_court_architecture.md): Blueprint E-IPO Bookbuilding berjadwal & Pengadilan Niaga (PNAK).
+   - [01_admin_architecture_hosting.md](file:///e:/projeck_web/capital_federation/doc/plan_admin/01_admin_architecture_hosting.md): Arsitektur folder & panduan hosting domain publik.
+   - [02_market_oversight_guide.md](file:///e:/projeck_web/capital_federation/doc/plan_admin/02_market_oversight_guide.md): Panduan teknis Radar UMA vs Suspensi Bursa.
+   - [03_FEDERASI_macro_and_court_oversight.md](file:///e:/projeck_web/capital_federation/doc/plan_admin/03_FEDERASI_macro_and_court_oversight.md): Kontrol makroekonomi FEDERASI & pengawasan Pengadilan Niaga.
+   - [01_mobile_roadmap.md](file:///e:/projeck_web/capital_federation/doc/plan_mobile/01_mobile_roadmap.md): Roadmap pengujian Flutter ke HP fisik Vivo.
+   - [02_FEDERASI_ipo_court_architecture.md](file:///e:/projeck_web/capital_federation/doc/plan_mobile/02_FEDERASI_ipo_court_architecture.md): Blueprint E-IPO Bookbuilding berjadwal & Pengadilan Niaga (PNAF).
 
 ---
 
-## 🏛️ BAGIAN 2: WORLD-BUILDING & NOMENKLATUR RESMI (REPUBLIK KONOHA)
+## 🏛️ BAGIAN 2: WORLD-BUILDING & NOMENKLATUR RESMI (REPUBLIK FEDERASI)
 
-Untuk menjaga orisinalitas, kepatuhan hukum (*disclaimer game simulasi fiktif*), serta menambah keseruan bermain (*gamification*), seluruh instrumen ekonomi tidak menggunakan nama persis dunia nyata, melainkan bertempat di **Negara Republik Konoha**.
+Untuk menjaga orisinalitas, kepatuhan hukum (*disclaimer game simulasi fiktif*), serta menambah keseruan bermain (*gamification*), seluruh instrumen ekonomi tidak menggunakan nama persis dunia nyata, melainkan bertempat di **Negara Republik FEDERASI**.
 
-### 2.1 Kamus Istilah Resmi Konoha:
-| Istilah Dunia Nyata | Nomenklatur Game (Republik Konoha) | Keterangan & Peran |
+### 2.1 Kamus Istilah Resmi FEDERASI:
+| Istilah Dunia Nyata | Nomenklatur Game (Republik FEDERASI) | Keterangan & Peran |
 | :--- | :--- | :--- |
-| **IHSG** (Indeks Harga Saham Gabungan) | **IPMC** (*Indeks Pasar Modal Konoha*) | Indeks agregat pergerakan seluruh saham emiten di Konoha. |
-| **Bank Indonesia (BI)** | **BSK** (*Bank Sentral Konoha*) | Otoritas moneter: mengatur suku bunga acuan, cetak uang, & fasilitas pinjaman likuiditas. |
-| **OJK / Bursa Efek Indonesia (BEI)** | **OPFK / Komite Pengawas Bursa IPMC** | Pengawas pasar modal: berhak menerbitkan status **UMA** dan ketuk palu **Suspensi**. |
-| **Mata Uang Rupiah (IDR)** | **IB** (*Indigo Billion / Ichi-Ban Konoha*) | Satuan mata uang resmi negara Konoha dalam game (Murni fiktif, no withdrawal). |
-| **Pengadilan Niaga** | **PNAK** (*Pengadilan Niaga & Arbitrase Korporasi Konoha*) | Pengadilan resmi untuk perkara kepailitan (PKPU), sita jaminan, dan sengketa saham. |
-| **Kemenkumham / Notaris** | **Balai Notariat & Registrasi Korporasi Konoha** | Menerbitkan nomor registrasi sah untuk Akta Pendirian PT dan Akta Jual Beli Saham. |
+| **IHSG** (Indeks Harga Saham Gabungan) | **IPMC** (*Indeks Pasar Modal FEDERASI*) | Indeks agregat pergerakan seluruh saham emiten di FEDERASI. |
+| **Bank Indonesia (BI)** | **BCF** (*Bank Sentral FEDERASI*) | Otoritas moneter: mengatur suku bunga acuan, cetak uang, & fasilitas pinjaman likuiditas. |
+| **OJK / Bursa Efek Indonesia (BEI)** | **OPFF / Komite Pengawas Bursa IPMC** | Pengawas pasar modal: berhak menerbitkan status **UMA** dan ketuk palu **Suspensi**. |
+| **Mata Uang Rupiah (IDR)** | **IB** (*Indigo Billion / Ichi-Ban FEDERASI*) | Satuan mata uang resmi negara FEDERASI dalam game (Murni fiktif, no withdrawal). |
+| **Pengadilan Niaga** | **PNAF** (*Pengadilan Niaga & Arbitrase Korporasi FEDERASI*) | Pengadilan resmi untuk perkara kepailitan (PKPU), sita jaminan, dan sengketa saham. |
+| **Kemenkumham / Notaris** | **Balai Notariat & Registrasi Korporasi FEDERASI** | Menerbitkan nomor registrasi sah untuk Akta Pendirian PT dan Akta Jual Beli Saham. |
 
-### 2.2 Dampak Siklus Perekonomian Negara Konoha (*Macro Engine*):
-Portal Web Admin memiliki kendali makro untuk mengatur iklim ekonomi Konoha:
+### 2.2 Dampak Siklus Perekonomian Negara FEDERASI (*Macro Engine*):
+Portal Web Admin memiliki kendali makro untuk mengatur iklim ekonomi FEDERASI:
 1. **Zaman Kemakmuran (Economic Boom):**
    - Penjualan semua PT naik +30%, omzet melimpah, deviden tinggi, pasar IPMC serentak hijau (*Bullish*).
 2. **Kondisi Normal / Stabil:**
-   - Pertumbuhan ekonomi standar, inflasi terkendali di 3.0%, suku bunga BSK 6.5%.
-3. **Resesi Ekonomi Konoha:**
+   - Pertumbuhan ekonomi standar, inflasi terkendali di 3.0%, suku bunga BCF 6.5%.
+3. **Resesi Ekonomi FEDERASI:**
    - Daya beli pasar menurun, beban operasional PT meningkat +20%, risiko kredit macet naik.
-4. **Krisis Moneter & Finansial Konoha:**
-   - Suku bunga BSK dinaikkan ke 15%–20%, emiten dengan fundamental di bawah 50 terancam status **KRITIS**, pasar saham IPMC anjlok (*Crash / Bearish*).
+4. **Krisis Moneter & Finansial FEDERASI:**
+   - Suku bunga BCF dinaikkan ke 15%–20%, emiten dengan fundamental di bawah 50 terancam status **KRITIS**, pasar saham IPMC anjlok (*Crash / Bearish*).
 
 ---
 
 ## 🎮 BAGIAN 3: GAME DESIGN DOCUMENT (GDD) KLIEN PENGGUNA
 
 ### 3.1 Informasi Dasar & Kepatuhan Hukum
-- **Mata Uang Virtual:** IndoBucks / Indigo Billion (IB) Republik Konoha.
+- **Mata Uang Virtual:** IndoBucks / Indigo Billion (IB) Republik FEDERASI.
 - **Satuan Saham:** 1 Lot = 100 Lembar.
-- **Disclaimer Wajib:** Halaman awal aplikasi menampilkan *pop-up* disclaimer: "Monopoly Corp adalah simulasi pasar modal dan konglomerasi fiktif di Republik Konoha. Mata uang IB tidak bernilai riil dan tidak dapat dicairkan (no withdrawal) dalam bentuk apa pun."
+- **Disclaimer Wajib:** Halaman awal aplikasi menampilkan *pop-up* disclaimer: "Capital Federation adalah simulasi pasar modal dan konglomerasi fiktif di Republik FEDERASI. Mata uang IB tidak bernilai riil dan tidak dapat dicairkan (no withdrawal) dalam bentuk apa pun."
 
 ### 3.2 Fase Onboarding (Pengguna Baru)
 - **Pembuatan Entitas:** Pemain baru mendaftarkan nama PT dan sektor industri (Teknologi, Properti, Keuangan, F&B, dll.).
@@ -75,23 +75,23 @@ Portal Web Admin memiliki kendali makro untuk mengatur iklim ekonomi Konoha:
 1. **A. Beranda (Dasbor PT):**
    - Status PT, level operasional, nilai fundamental, dan manajemen upgrade bisnis (Marketing, R&D, SDM, Kapasitas).
    - Kas Pribadi vs Kas PT.
-   - News Ticker siaran berita ekonomi makro Konoha realtime.
+   - News Ticker siaran berita ekonomi makro FEDERASI realtime.
 2. **B. Pasar (Bursa Saham IPMC):**
    - Daftar emiten terdaftar (Bot dan PT Pemain yang sudah IPO).
    - Trading interface grafik candlestick & orderbook 5-level realtime.
    - Tombol Beli & Jual (1 Lot = 100 Lembar).
-3. **C. Bursa Aset (Lelang Bank BSK & Akuisisi):**
+3. **C. Bursa Aset (Lelang Bank BCF & Akuisisi):**
    - Pasar Negosiasi P2P / B2B untuk akuisisi atau divestasi saham.
-   - Lelang Bank BSK untuk aset sitaan dari pemain pailit.
-4. **D. Portofolio (Aset & Fasilitas BSK):**
+   - Lelang Bank BCF untuk aset sitaan dari pemain pailit.
+4. **D. Portofolio (Aset & Fasilitas BCF):**
    - Saldo tunai, nilai portofolio saham, laba/rugi (P/L), dan riwayat dividen.
-   - Pengajuan pinjaman tunai BSK dengan agunan aset PT/saham dan Credit Score.
+   - Pengajuan pinjaman tunai BCF dengan agunan aset PT/saham dan Credit Score.
 5. **E. Peringkat (Leaderboard & Komunitas):**
-   - Top 100 Konglomerat Republik Konoha berdasarkan net worth aset.
+   - Top 100 Konglomerat Republik FEDERASI berdasarkan net worth aset.
    - Chat global & status taipan "9 Naga".
 
 ### 3.4 Mekanik Hukuman, Pailit & Status Blue Chip
-- **Gagal Bayar (Default):** Jika cicilan pinjaman BSK tidak dibayar saat jatuh tempo, debitur diseret ke Pengadilan Niaga Konoha (PNAK) untuk sita eksekusi jaminan.
+- **Gagal Bayar (Default):** Jika cicilan pinjaman BCF tidak dibayar saat jatuh tempo, debitur diseret ke Pengadilan Niaga FEDERASI (PNAF) untuk sita eksekusi jaminan.
 - **Bailout (Dana Talangan):** Pemain bangkrut mendapat talangan IB 50.000 dan gelar "Survivor Krisis" (Maksimal 3 kali).
 - **Status Blue Chip:** Pemain dengan performa finansial unggul dan tanpa gagal bayar mendapat badge eksklusif, bunga pinjaman terendah, dan diskon biaya bursa.
 
@@ -125,17 +125,17 @@ Portal Web Admin memiliki kendali makro untuk mengatur iklim ekonomi Konoha:
 
 ---
 
-## ⚖️ BAGIAN 5: PENGADILAN NIAGA & ARBITRASE KORPORASI KONOHA (PNAK)
+## ⚖️ BAGIAN 5: PENGADILAN NIAGA & ARBITRASE KORPORASI FEDERASI (PNAF)
 
 ### 5.1 Fungsi Utama Pengadilan Niaga:
-1. **Perkara Kepailitan & PKPU:** Gagal bayar pinjaman Bank Sentral Konoha (BSK). Putusan: Restrukturisasi atau lelang paksa sita jaminan.
+1. **Perkara Kepailitan & PKPU:** Gagal bayar pinjaman Bank Sentral FEDERASI (BCF). Putusan: Restrukturisasi atau lelang paksa sita jaminan.
 2. **Sengketa Saham & Pembatalan Akuisisi:** Gugatan pembatalan akuisisi ilegal atau manipulasi pasar modal.
 3. **Gugatan Wanprestasi Perjanjian Jual Beli Saham:** Pelanggaran klausul Akta Perjanjian Jual Beli Saham.
-4. **Sidang Pelanggaran Regulasi Bursa (Insider Trading / Goreng Saham):** Vonis denda ganti rugi yang disita ke kas negara Konoha.
+4. **Sidang Pelanggaran Regulasi Bursa (Insider Trading / Goreng Saham):** Vonis denda ganti rugi yang disita ke kas negara FEDERASI.
 
 ### 5.2 Nuansa UI Ruang Sidang Virtual di Mobile:
 - Ruang Sidang Virtual bertema kayu mahoni gelap dengan simbol timbangan keadilan emas ⚖️.
-- Berita Acara Perkara & Putusan Hakim Konoha (lengkap dengan ketukan palu 3x & stempel pengadilan).
+- Berita Acara Perkara & Putusan Hakim FEDERASI (lengkap dengan ketukan palu 3x & stempel pengadilan).
 - Riwayat Perkara Aktif & Riwayat Vonis Pengadilan.
 
 ---
@@ -148,7 +148,7 @@ mobile/lib/
 ├── features/
 │   ├── ipo/                              # [BARU] Modul E-IPO & Bookbuilding
 │   │   ├── screens/
-│   │   │   ├── ipo_catalog_screen.dart   # Katalog penawaran IPO aktif di Konoha
+│   │   │   ├── ipo_catalog_screen.dart   # Katalog penawaran IPO aktif di FEDERASI
 │   │   │   └── ipo_manage_screen.dart    # Dashboard seleksi calon investor oleh pendiri
 │   │   ├── widgets/
 │   │   │   ├── ipo_registration_form.dart# Formulir pendaftaran jadwal & porsi IPO
@@ -165,7 +165,7 @@ mobile/lib/
 │   │   └── services/
 │   │       └── deed_generator.dart       # Generator nomor akta & klausul hukum
 │   │
-│   ├── court_commercial/                 # [BARU] Modul Pengadilan Niaga Konoha (PNAK)
+│   ├── court_commercial/                 # [BARU] Modul Pengadilan Niaga FEDERASI (PNAF)
 │   │   ├── screens/
 │   │   │   └── court_room_screen.dart    # Layar utama ruang sidang pengadilan
 │   │   ├── widgets/
@@ -174,9 +174,9 @@ mobile/lib/
 │   │   └── models/
 │   │       └── court_case_model.dart
 │   │
-│   └── macro_konoha/                     # [BARU] Modul Indikator Negara Konoha
+│   └── macro_FEDERASI/                     # [BARU] Modul Indikator Negara FEDERASI
 │       └── widgets/
-│           └── konoha_status_header.dart # Banner indikator kesehatan ekonomi Konoha
+│           └── FEDERASI_status_header.dart # Banner indikator kesehatan ekonomi FEDERASI
 │
 ├── screens/                              # 5 Layar Tab Utama
 ├── services/                             # ApiService & SocketService
@@ -184,10 +184,10 @@ mobile/lib/
 ```
 
 ### 6.2 Struktur Backend Express & Database:
-1. **Tabel Baru Database SQLite (`backend/data/monopoly.db`):**
+1. **Tabel Baru Database SQLite (`backend/data/capital_federation.db`):**
    - `ipo_bids`: Mencatat penawaran saham dari PT lain selama masa bookbuilding (`id`, `ipo_id`, `bidder_company_id`, `bidder_user_id`, `pct_requested`, `bid_price`, `status`).
    - `court_cases`: Mencatat perkara pengadilan niaga (`id`, `plaintiff_name`, `defendant_name`, `case_type`, `claim_amount`, `verdict_status`, `verdict_notes`).
-   - `macro_konoha_indicators`: Status ekonomi (`economic_state`, `inflation_rate`, `bsk_rate`, `gdp_growth`).
+   - `macro_FEDERASI_indicators`: Status ekonomi (`economic_state`, `inflation_rate`, `BCF_rate`, `gdp_growth`).
 2. **Pemisahan File Routes Backend:**
    - `backend/src/routes/ipo.routes.js`
    - `backend/src/routes/court.routes.js`
@@ -201,29 +201,29 @@ mobile/lib/
 2. **Langkah 2:** Pindahkan modal Akta Perjanjian dari `home_tab.dart` ke file widget independen `formal_deed_modal.dart`.
 3. **Langkah 3:** Tambahkan tabel `ipo_bids` dan `court_cases` di backend dan buat route modularnya.
 4. **Langkah 4:** Bangun antarmuka E-IPO Bookbuilding dengan penentuan tanggal listing dan seleksi investor mitra.
-5. **Langkah 5:** Bangun layar Pengadilan Niaga Konoha (PNAK) untuk mengadili kasus kepailitan dan sengketa korporasi.
+5. **Langkah 5:** Bangun layar Pengadilan Niaga FEDERASI (PNAF) untuk mengadili kasus kepailitan dan sengketa korporasi.
 
 ---
 
-## 📢 BAGIAN 8: SISTEM PENGADUAN PNAK & SIARAN BERITA OTOMATIS (TERBARU & LIVE)
+## 📢 BAGIAN 8: SISTEM PENGADUAN PNAF & SIARAN BERITA OTOMATIS (TERBARU & LIVE)
 
-### 8.1 Alur Pengaduan Interaktif PNAK di Aplikasi Mobile:
-1. Pemain membuka tab **Bursa Aset** lalu menekan tombol emas **⚖️ PNAK Konoha**.
+### 8.1 Alur Pengaduan Interaktif PNAF di Aplikasi Mobile:
+1. Pemain membuka tab **Bursa Aset** lalu menekan tombol emas **⚖️ PNAF FEDERASI**.
 2. Di pojok bawah layar tersedia Floating Action Button emas: **`+ AJUKAN PENGADUAN / GUGATAN`**.
 3. Membuka formulir resmi `FileLawsuitSheet`:
-   - **Kategori Perkara**: Sengketa Akta Saham / Wanprestasi, Permohonan PKPU BSK, atau Laporan Manipulasi Pasar & Goreng Saham.
+   - **Kategori Perkara**: Sengketa Akta Saham / Wanprestasi, Permohonan PKPU BCF, atau Laporan Manipulasi Pasar & Goreng Saham.
    - **Pihak Tergugat**: Nama pemain atau PT lawan yang dituntut.
    - **Pokok Perkara / Judul**: Alasan sengketa (misal pembatalan akta sepihak).
    - **Nilai Kerugian**: Pilihan cepat chip nominal mulai dari ratusan juta hingga **20 Triliun IB**.
    - **Biaya Registrasi Panitera**: IB 250.000 ditarik dari Kas Pribadi penggugat.
-4. Setelah menekan **`TANDATANGANI & DAFTARKAN KE PNAK`**:
-   - Gugatan tercatat resmi dengan nomor perkara register unik (contoh: `097/Pdt.Sus-Sengketa/2026/PNAK`).
-   - Berita Acara Registrasi PNAK langsung muncul.
+4. Setelah menekan **`TANDATANGANI & DAFTARKAN KE PNAF`**:
+   - Gugatan tercatat resmi dengan nomor perkara register unik (contoh: `097/Pdt.Sus-Sengketa/2026/PNAF`).
+   - Berita Acara Registrasi PNAF langsung muncul.
 
 ### 8.2 Siaran Berita Otomatis & Breaking News Broadcast:
 Semua peristiwa penting korporasi otomatis masuk ke tabel database `news` dan dipancarkan serentak via WebSocket (`market:breaking_news` & `market:news_broadcast`):
-1. **Sanksi Bursa**: Pengumuman UMA (Unusual Market Activity) & Suspensi Perdagangan dari Otoritas Pengawas Finansial Konoha (OPFK).
-2. **Pendaftaran Gugatan PNAK**: Siaran breaking news instan saat pemain menggugat lawan (misal tuntutan 20 Triliun IB).
+1. **Sanksi Bursa**: Pengumuman UMA (Unusual Market Activity) & Suspensi Perdagangan dari Otoritas Pengawas Finansial FEDERASI (OPFF).
+2. **Pendaftaran Gugatan PNAF**: Siaran breaking news instan saat pemain menggugat lawan (misal tuntutan 20 Triliun IB).
 3. **Vonis Hakim Niaga**: Pengumuman ketukan palu hakim (Pailit, Sita Aset, atau Mediasi Restrukturisasi).
 4. **Transaksi Blok Saham Jumbo**: Penjualan saham negosiasi porsi besar (misal 30% senilai 20 Triliun IB) langsung mengudara ke ticker berjalan di beranda seluruh pemain.
 
@@ -252,16 +252,16 @@ Transaksi tidak boleh langsung cair secara sepihak tanpa persetujuan pihak pembe
      - Akta terbit sah dengan 2 Meterai Digital dan otomatis tersimpan di **Brankas Akta** kedua pemain.
    - Jika Pembeli menolak: Menekan tombol **`❌ TOLAK TAWARAN`**, saham di escrow dikembalikan ke penjual.
 
-### 9.3 Klausul Wanprestasi, Pembatalan Sepihak, & Room Sidang Live PNAK:
+### 9.3 Klausul Wanprestasi, Pembatalan Sepihak, & Room Sidang Live PNAF:
 - **Klausul Pasal 7 Akta:** *"Pembatalan sepihak setelah penandatanganan kesepakatan atau wanprestasi pembayaran dikenakan sanksi ganti rugi penalti 10% - 20% dari total nilai transaksi."*
-- **Aksi Cepat Gugat PNAK:**
-  - Jika terjadi pembatalan sepihak atau ingkar janji, pihak yang dirugikan memiliki tombol **`⚖️ GUGAT WANPRESTASI KE PNAK`** langsung dari riwayat akta.
-  - Sidang arbitrase PNAK akan memproses klaim penalti tersebut secara live interaktif.
+- **Aksi Cepat Gugat PNAF:**
+  - Jika terjadi pembatalan sepihak atau ingkar janji, pihak yang dirugikan memiliki tombol **`⚖️ GUGAT WANPRESTASI KE PNAF`** langsung dari riwayat akta.
+  - Sidang arbitrase PNAF akan memproses klaim penalti tersebut secara live interaktif.
 
-#### Alur Room Sidang Live PNAK (Interactive Courtroom):
+#### Alur Room Sidang Live PNAF (Interactive Courtroom):
 1. **Panggilan Sidang & Penjadwalan:**
    - Perkara dijadwalkan secara resmi (misal: *Hari Sidang Jam 10:00 WIB*).
-   - Penggugat & Tergugat mendapatkan banner notifikasi: *"Panggilan Sidang PNAK: Hadir tepat waktu di Ruang Sidang Digital"*.
+   - Penggugat & Tergugat mendapatkan banner notifikasi: *"Panggilan Sidang PNAF: Hadir tepat waktu di Ruang Sidang Digital"*.
 2. **Presensi Kehadiran di Room Sidang:**
    - Di dalam Room Sidang, terdapat status presensi visual kedua belah pihak:
      - Penggugat: `[ 🟢 HADIR ]` / `[ 🔴 BELUM MASUK ]`
@@ -302,7 +302,7 @@ Untuk penjualan ke pasar bebas / global (siapapun boleh beli tanpa harus P2P spe
 
 ---
 
-## 📑 BAGIAN 10: ARSITEKTUR 4 TAB TERPADU PASAR NEGOSIASI & PNAK
+## 📑 BAGIAN 10: ARSITEKTUR 4 TAB TERPADU PASAR NEGOSIASI & PNAF
 
 Untuk menjaga navigasi tetap rapi, bersih, dan mudah digunakan di layar mobile, menu **Bursa Aset / Deals** dibagi menjadi 4 Sub-Tab utama:
 
@@ -314,8 +314,8 @@ Untuk menjaga navigasi tetap rapi, bersih, dan mudah digunakan di layar mobile, 
    - Tempat membaca draf Akta Notaris dan menekan tombol **`✍️ TANDATANGANI & BAYAR`** atau **`❌ TOLAK TAWARAN`**.
 3. **TAB 3: 🗄️ BRANKAS AKTA TERSIMPAN (Corporate Legal Vault)**
    - Arsip resmi seluruh Akta Jual-Beli Saham yang sudah sah ditandatangani kedua belah pihak.
-   - Dilengkapi Nomor Akta, stempel meterai digital, serta tombol darurat **`⚖️ GUGAT WANPRESTASI KE PNAK`** jika salah satu pihak mangkir.
-4. **TAB 4: 🏛️ RUANG SIDANG PNAK & ROOM SIDANG LIVE**
+   - Dilengkapi Nomor Akta, stempel meterai digital, serta tombol darurat **`⚖️ GUGAT WANPRESTASI KE PNAF`** jika salah satu pihak mangkir.
+4. **TAB 4: 🏛️ RUANG SIDANG PNAF & ROOM SIDANG LIVE**
    - Menampilkan daftar register perkara niaga aktif.
    - Tombol masuk ke **`ROOM SIDANG LIVE`** (Presensi Hadir, Putusan Verstek, Ketuk Palu Vonis, dan Eksekusi Sita Dana Ganti Rugi).
 
@@ -323,38 +323,38 @@ Untuk menjaga navigasi tetap rapi, bersih, dan mudah digunakan di layar mobile, 
 
 ## 🏛️ BAGIAN 11: PENGEMBANGAN PORTAL ADMIN WEB (OTORITAS NEGARA & REGULATOR)
 
-### 11.1 Tombol Sita Perusahaan (Sita Eksekusi PNAK & Bank Sentral BSK):
+### 11.1 Tombol Sita Perusahaan (Sita Eksekusi PNAF & Bank Sentral BCF):
 - **Lokasi:** Di halaman **Direktori Emiten** (`CompaniesPage.jsx`) dan **Pengadilan Niaga** (`CourtOversightPage.jsx`).
 - **Aksi Admin:** Tombol **`[ ⚖️ SITA PERUSAHAAN ]`** pada setiap baris perusahaan.
 - **Dampak Sitaan:**
   - Status emiten berubah menjadi `SEIZED` (Disita Negara).
-  - Kepemilikan pengendali dibekukan dan dialihkan ke Balai Harta Peninggalan / Kas Negara Konoha.
+  - Kepemilikan pengendali dibekukan dan dialihkan ke Balai Harta Peninggalan / Kas Negara FEDERASI.
   - Siaran Breaking News bursa otomatis mengumumkan sita eksekusi negara.
 
 ### 11.2 Menu Baru: Brankas Akta Notaris & Kontrak P2P (`DeedRegistryPage.jsx`):
-- Menampilkan seluruh dokumen hukum korporasi yang terdaftar di Republik Konoha:
-  - Nomor Register Akta Notaris PNAK.
+- Menampilkan seluruh dokumen hukum korporasi yang terdaftar di Republik FEDERASI:
+  - Nomor Register Akta Notaris PNAF.
   - Para Pihak (Penjual vs Pembeli / P2P).
   - Porsi Saham & Valuasi Kesepakatan.
   - Status: *Draft Menunggu Tanda Tangan*, *Sah & Aktif*, *Sengketa Wanprestasi*, atau *Batal Demi Hukum*.
   - Riwayat stempel meterai digital resmi.
 
 ### 11.3 Menu Baru: Brankas Kas Negara & Keuangan Otoritas (`TreasuryVaultPage.jsx`):
-Dashboard transparan penerimaan keuangan Otoritas Konoha (PNAK, OPFK, BSK):
+Dashboard transparan penerimaan keuangan Otoritas FEDERASI (PNAF, OPFF, BCF):
 1. **Sumber Penerimaan Kas Negara:**
-   - **Biaya Pendaftaran Sidang PNAK:** IB 250.000 per perkara gugatan.
+   - **Biaya Pendaftaran Sidang PNAF:** IB 250.000 per perkara gugatan.
    - **Bea Meterai Digital Korporasi:** IB 10.000 per akta perjanjian.
    - **Pajak & Bea Transaksi Saham:** 0.1% dari transaksi bursa & pelepasan saham pendiri.
-   - **Uang Denda & Sitaan PNAK:** Uang denda spekulan goreng saham dan sitaan wanprestasi.
+   - **Uang Denda & Sitaan PNAF:** Uang denda spekulan goreng saham dan sitaan wanprestasi.
 2. **Total Saldo Kas Negara (Sovereign Wealth Fund):**
    - Menampilkan total kas likuid negara yang terkumpul secara real-time.
 
 ### 11.4 Saran Kegunaan Uang Sitaan & Perusahaan yang Disita (Game Mechanics):
 1. **Dana Talangan Krisis Ekonomi (Stimulus Bailout Fund):**
-   - Saat ekonomi Konoha mengalami resesi atau krisis likuiditas, Admin dapat menyuntikkan dana kas negara untuk *bailout* emiten sekarat agar bursa IPMC tidak anjlok.
+   - Saat ekonomi FEDERASI mengalami resesi atau krisis likuiditas, Admin dapat menyuntikkan dana kas negara untuk *bailout* emiten sekarat agar bursa IPMC tidak anjlok.
 2. **Balai Lelang Negara (State Public Auction):**
    - Perusahaan yang disita negara dilelang murah di tab **"Lelang Bank Sitaan"** di aplikasi mobile. Pemain berlomba menawar (bidding). Uang hasil lelang kembali masuk memperbesar Kas Negara.
-3. **Konversi Menjadi BUMN Konoha (State-Owned Enterprise):**
+3. **Konversi Menjadi BUMN FEDERASI (State-Owned Enterprise):**
    - Perusahaan sitaan dijadikan BUMN yang menghasilkan setoran laba dividen rutin setiap siklus 5 menit ke Kas Negara.
 4. **Dividen Kemakmuran Rakyat / BLT Stimulus Ekonomi:**
    - Admin dapat membagikan surplus kas negara sebagai dividen nasional ke seluruh pemain, meningkatkan daya beli masyarakat untuk memborong produk emiten pemain.
@@ -373,7 +373,7 @@ Dashboard transparan penerimaan keuangan Otoritas Konoha (PNAK, OPFK, BSK):
 ## 12. SINKRONISASI STATUS UMA (UNUSUAL MARKET ACTIVITY) PADA MOBILE APK & WEB ADMIN
 
 ### 12.1 Latar Belakang Masalah
-Pada Web Admin Otoritas Bursa Konoha (IPMC), terdapat 44 emiten yang masuk radar **UMA (Unusual Market Activity)** karena fluktuasi harga tidak wajar. Namun di aplikasi mobile, emiten tersebut masih berstatus **SEHAT**. Hal ini membingungkan pemain karena tidak mendapat peringatan risiko pergerakan liar.
+Pada Web Admin Otoritas Bursa FEDERASI (IPMC), terdapat 44 emiten yang masuk radar **UMA (Unusual Market Activity)** karena fluktuasi harga tidak wajar. Namun di aplikasi mobile, emiten tersebut masih berstatus **SEHAT**. Hal ini membingungkan pemain karena tidak mendapat peringatan risiko pergerakan liar.
 
 ### 12.2 Spesifikasi Status UMA di Mobile APK:
 1. **Badge Status Visual:**
@@ -390,34 +390,34 @@ Pada Web Admin Otoritas Bursa Konoha (IPMC), terdapat 44 emiten yang masuk radar
 ## 13. REGULASI PERUSAHAAN SITAAN (CONFISCATED ASSET LOCK) & PENEBUSAN HAK MILIK
 
 ### 13.1 Larangan Pembagian Dividen & Omzet untuk PT yang Disita:
-- **Aturan Tegas Otoritas Finansial:** PT yang telah dieksekusi sita oleh Pengadilan Niaga (PNAK) atau Kas Negara **TIDAK BOLEH** menghasilkan pendapatan, omzet bisnis harian, maupun dividen bagi mantan pemiliknya.
+- **Aturan Tegas Otoritas Finansial:** PT yang telah dieksekusi sita oleh Pengadilan Niaga (PNAF) atau Kas Negara **TIDAK BOLEH** menghasilkan pendapatan, omzet bisnis harian, maupun dividen bagi mantan pemiliknya.
 - **Implementasi Mesin Simulasi (`simulation.js`):**
   - Loop `generateCompanyRevenue()` secara otomatis memeriksa `is_seized == 1`. Jika disita, aliran omzet harian dibekukan menjadi 0.
   - Distribusi dividen perseroan mengecualikan saham/perusahaan yang berstatus `is_seized == 1` atau `status == 'SEIZED'`.
 - **Pemblokiran Penarikan Kas (HTTP 403):**
-  - Tombol tarik kas perseroan ke rekening pribadi dikunci dengan status `🔒 Rekening Dibekukan Negara`. Percobaan penarikan via API ditolak dengan pesan: *"Perseroan sedang dalam status SITAAN NEGARA / PNAK. Seluruh aset finansial dibekukan!"*.
+  - Tombol tarik kas perseroan ke rekening pribadi dikunci dengan status `🔒 Rekening Dibekukan Negara`. Percobaan penarikan via API ditolak dengan pesan: *"Perseroan sedang dalam status SITAAN NEGARA / PNAF. Seluruh aset finansial dibekukan!"*.
 
 ### 13.2 Visual Kunci Merah (Confiscated Red Lock) di Aplikasi Mobile:
 1. **Layar Detail Saham & Bursa:**
-   - Badge status merah terang berkedip: **`🔴 DISITA PNAK`**.
+   - Badge status merah terang berkedip: **`🔴 DISITA PNAF`**.
    - Banner Peringatan Sitaan:
-     - *"ASET PERSEROAN DISITA NEGARA - Perseroan disita akibat wanprestasi/gugatan hukum PNAK. Operasional dan dividen dibekukan total."*
+     - *"ASET PERSEROAN DISITA NEGARA - Perseroan disita akibat wanprestasi/gugatan hukum PNAF. Operasional dan dividen dibekukan total."*
 2. **Layar Beranda Konglomerasi Pemilik (`home_tab.dart`):**
    - Header entitas menampilkan kartu peringatan merah tua dengan border crimson menyala.
    - Tombol Aksi Utama: **`[ 🔓 TEBUS PERUSAHAAN (BAYAR SANKSI & BANK) ]`**.
 
 ### 13.3 Mekanisme Penebusan Aset Sitaan (Redemption System):
 Agar pemilik dapat memulihkan kepemilikan dan membuka kembali rekening perseroan, pemilik wajib melunasi **3 Komponen Kewajiban**:
-$$\text{Total Biaya Penebusan} = \text{Denda Sanksi PNAK} + \text{Pokok Utang Bank Sentral} + \text{Bunga Pinjaman Bank}$$
+$$\text{Total Biaya Penebusan} = \text{Denda Sanksi PNAF} + \text{Pokok Utang Bank Sentral} + \text{Bunga Pinjaman Bank}$$
 
 - **Rincian Komponen:**
-  1. **Denda Sanksi PNAK:** Nilai ganti rugi/denda eksekusi perkara wanprestasi (minimal IB 100.000.000). Uang ini disetorkan langsung memperbesar Kas Likuid Negara Konoha (`state_treasury_ledger`).
+  1. **Denda Sanksi PNAF:** Nilai ganti rugi/denda eksekusi perkara wanprestasi (minimal IB 100.000.000). Uang ini disetorkan langsung memperbesar Kas Likuid Negara FEDERASI (`state_treasury_ledger`).
   2. **Pokok Pinjaman Bank Sentral:** Seluruh utang modal aktif yang belum lunas.
   3. **Bunga Pinjaman Bank Sentral:** Akumulasi bunga utang pinjaman.
 - **Eksekusi Penebusan (`POST /api/seizure/:id/redeem`):**
   - Sistem memeriksa kecukupan Saldo Kas Pribadi pemilik.
   - Jika cukup, saldo dipotong secara atomik:
-    - Sanksi PNAK dialirkan ke Brankas Kas Negara.
+    - Sanksi PNAF dialirkan ke Brankas Kas Negara.
     - Pokok dan bunga pinjaman bank dinyatakan **LUNAS** (`status = 'PAID'`).
     - Flag sitaan dicabut (`is_seized = 0, status = 'HEALTHY'`).
     - Mesin bursa memancarkan sentimen pemulihan (rally bullish).
@@ -482,9 +482,9 @@ Terdapat 3 pemicu fundamental yang dapat membalikkan tren (*bullish turnaround*)
 
 ### 16.2 Formulir Pembelian / Pengambilalihan Saham Resmi (Formulir M&A):
 - Saat pemain menekan tombol **`[ 🤝 AKUISISI KONTROL ]`** di tab **Bursa Aset & Akuisisi**, antarmuka tidak lagi hanya menampilkan slider sederhana, melainkan menampilkan **Formulir Resmi Pengambilalihan & Restrukturisasi M&A**:
-  1. **Kop & Nomor Registrasi Notariat:** Diterbitkan oleh Notariat Niaga & Balai Restrukturisasi Konoha.
+  1. **Kop & Nomor Registrasi Notariat:** Diterbitkan oleh Notariat Niaga & Balai Restrukturisasi FEDERASI.
   2. **Identitas Para Pihak:**
-     - **Pihak Penjual (Pemilik Lama):** Nama pemain pemilik sebelumnya atau *Konsorsium Kurator Niaga Konoha*.
+     - **Pihak Penjual (Pemilik Lama):** Nama pemain pemilik sebelumnya atau *Konsorsium Kurator Niaga FEDERASI*.
      - **Pihak Pembeli (Pengakuisisi):** Nama pengguna konglomerat pembeli.
   3. **Target Emiten:** Nama PT, Simbol, Sektor, Status KRITIS, dan kupon diskon penyelamatan krisis 30%.
   4. **Porsi Hak Suara:** Slider fleksibel 51% s/d 100% lengkap dengan konversi volume lembar dan lot.
@@ -513,15 +513,15 @@ Terdapat 3 pemicu fundamental yang dapat membalikkan tren (*bullish turnaround*)
 
 ---
 
-## 17. REKOMENDASI KEDAULATAN BEBAS PELANGGARAN HAK CIPTA & UU ITE (PENGGANTIAN MONOPOLY, REPUBLIK KONOHA, BUMN)
+## 17. REKOMENDASI KEDAULATAN BEBAS PELANGGARAN HAK CIPTA & UU ITE (PENGGANTIAN NAMA LAMA, REPUBLIK FEDERASI, BUMN)
 
 ### 17.1 Analisis Risiko Hukum & Regulasi Digital Internasional:
-1. **Risiko Merek "Monopoly":**
-   - Merek dagang *Monopoly* terdaftar secara internasional dan dimiliki oleh **Hasbro, Inc.** di bawah Kelas Niza 9 (video game, software) dan 28 (board game).
-   - Menggunakan nama "Monopoly" untuk game komersial atau di app store publik (Google Play / App Store) menimbulkan risiko gugatan pelanggaran merek dagang, surat somasi (*Cease and Desist*), dan pemblokiran/penghapusan aplikasi (DMCA takedown).
-2. **Risiko Nama "Republik Konoha":**
-   - "Konoha" (*Konohagakure*) adalah hak cipta dan merek dagang milik Masashi Kishimoto / Shueisha Inc. (serial Naruto).
-   - Di Indonesia, "Konoha" berkonotasi sindiran politik (*satirical slang*). Bila digunakan dalam platform digital komersial yang melibatkan simulasi lembaga negara, sengketa kredit macet, dan penyitaan pengadilan, dapat memicu risiko di bawah **UU ITE (Pasal 27 & 28)** terkait disinformasi, pencemaran nama baik, atau pelecehan simbol lembaga.
+1. **Risiko Merek "Nama Merek Pihak Ketiga":**
+   - Merek dagang *Merek Pihak Ketiga* terdaftar secara internasional dan dimiliki oleh **Hasbro, Inc.** di bawah Kelas Niza 9 (video game, software) dan 28 (board game).
+   - Menggunakan nama "Nama Merek Pihak Ketiga" untuk game komersial atau di app store publik (Google Play / App Store) menimbulkan risiko gugatan pelanggaran merek dagang, surat somasi (*Cease and Desist*), dan pemblokiran/penghapusan aplikasi (DMCA takedown).
+2. **Risiko Nama "Republik FEDERASI":**
+   - "FEDERASI" (*FEDERASIgakure*) adalah hak cipta dan merek dagang milik Masashi Kishimoto / Shueisha Inc. (serial Naruto).
+   - Di Indonesia, "FEDERASI" berkonotasi sindiran politik (*satirical slang*). Bila digunakan dalam platform digital komersial yang melibatkan simulasi lembaga negara, sengketa kredit macet, dan penyitaan pengadilan, dapat memicu risiko di bawah **UU ITE (Pasal 27 & 28)** terkait disinformasi, pencemaran nama baik, atau pelecehan simbol lembaga.
 3. **Risiko Nama Lembaga Riil "BUMN", "BEI", "Kementerian ESDM":**
    - BUMN (Badan Usaha Milik Negara) diatur ketat dalam UU No. 19/2003. BEI (Bursa Efek Indonesia) dan OJK adalah entitas regulator resmi Indonesia.
    - Penggunaan nama riil instansi pemerintah dapat menimbulkan kebingungan konsumen (*regulatory confusion*) atau dianggap sebagai penipuan investasi/sekuritas tanpa izin OJK.
@@ -530,12 +530,12 @@ Terdapat 3 pemicu fundamental yang dapat membalikkan tren (*bullish turnaround*)
 
 | Komponen Sistem | Nama Lama (Beresiko) | Rekomendasi Nama Orisinal (Bebas Hak Cipta & UU ITE) | Keterangan & Makna Worldbuilding |
 | :--- | :--- | :--- | :--- |
-| **Judul Game Global** | Monopoly Corp / Monopoly | **`Indigo Tycoon: Sovereign Market`** (Alt: *Apex Conglomerate: Corporate War*) | Selaras dengan mata uang `IB` (*Indigo Billion*). Terkesan futuristik, prestisius, dan bebas dari hak cipta Hasbro. |
-| **Negara / Federasi** | Republik Konoha | **`Republik Federasi Indigo`** (Singkatan: **`RFI`** / *Indigopolis*) | Negara fiksi berdaulat yang mandiri dan tidak menyinggung entitas politik nyata mana pun. |
-| **Badan Usaha Negara** | BUMN Konoha | **`BUMF`** (*Badan Usaha Milik Federasi*) / **`PEN`** (*Perseroan Ekuitas Negara*) | Istilah orisinal yang berwibawa dan tidak melanggar UU No. 19/2003 tentang BUMN Indonesia. |
-| **Bank Sentral** | BSK (Bank Sentral Konoha) | **`BIF`** (*Bank Sentral Indigo Federasi*) | Otoritas moneter pengendali suku bunga acuan dan pengawas likuiditas perbankan fiktif. |
+| **Judul Game Global** | Capital Federation  | **`Indigo Tycoon: Sovereign Market`** (Alt: *Apex Conglomerate: Corporate War*) | Selaras dengan mata uang `IB` (*Indigo Billion*). Terkesan futuristik, prestisius, dan bebas dari hak cipta Hasbro. |
+| **Negara / Federasi** | Republik FEDERASI | **`Republik Federasi Indigo`** (Singkatan: **`RFI`** / *Indigopolis*) | Negara fiksi berdaulat yang mandiri dan tidak menyinggung entitas politik nyata mana pun. |
+| **Badan Usaha Negara** | BUMN FEDERASI | **`BUMF`** (*Badan Usaha Milik Federasi*) / **`PEN`** (*Perseroan Ekuitas Negara*) | Istilah orisinal yang berwibawa dan tidak melanggar UU No. 19/2003 tentang BUMN Indonesia. |
+| **Bank Sentral** | BCF (Bank Sentral FEDERASI) | **`BIF`** (*Bank Sentral Indigo Federasi*) | Otoritas moneter pengendali suku bunga acuan dan pengawas likuiditas perbankan fiktif. |
 | **Bursa Efek** | BEI Simulator / IPMC | **`IPMC`** (*Indigo Prime Monetary & Capital Exchange*) | Bursa efek fiksi berteknologi tinggi dengan matching order modern. |
-| **Pengadilan Niaga** | PNAK (Pengadilan Niaga Konoha) | **`PNAF`** (*Pengadilan Niaga & Arbitrase Federasi*) | Lembaga yudisial arbitrase persidangan kepailitan, sita jaminan, dan wanprestasi. |
+| **Pengadilan Niaga** | PNAF (Pengadilan Niaga FEDERASI) | **`PNAF`** (*Pengadilan Niaga & Arbitrase Federasi*) | Lembaga yudisial arbitrase persidangan kepailitan, sita jaminan, dan wanprestasi. |
 | **Mata Uang Virtual** | IndoBucks / IB | **`Indigo Billion (IB)`** & **`Indigo Credits (IDG)`** | Poin virtual edukasi pasar modal tanpa nilai tukar riil (Bebas UU Perjudian). |
 
 ---
@@ -648,7 +648,7 @@ Kas Negara membuka lelang proyek bernilai tinggi (*Mega-Projects*) untuk dikerja
 ---
 
 ### 19.5 Pilar 4: Pemutihan Utang & Restrukturisasi Kredit Debitur Macet
-Mekanisme penyelamatan (*financial safety net*) bagi pemain yang terlilit pinjaman macet di Bank Sentral BCF dan terancam penyitaan aset oleh Pengadilan Niaga PNAK.
+Mekanisme penyelamatan (*financial safety net*) bagi pemain yang terlilit pinjaman macet di Bank Sentral BCF dan terancam penyitaan aset oleh Pengadilan Niaga PNAF.
 - **Fungsi Utama:** Mencegah pemain putus asa dan meninggalkan game (*anti-churn mechanism*), sekaligus memberikan pengalaman realistis restrukturisasi perbankan modern.
 - **Dua Bentuk Kebijakan Restrukturisasi:**
   1. **Program Pemutihan Denda Bunga Massal (Mass Debt Penalty Waiver):**

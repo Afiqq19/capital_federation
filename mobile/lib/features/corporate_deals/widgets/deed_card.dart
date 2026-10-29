@@ -29,7 +29,7 @@ class _DeedCardState extends State<DeedCard> {
     final deed = widget.deed;
     final bool isSeller = deed.sellerUserId == widget.currentUserId;
     final bool isBuyer = deed.buyerUserId == widget.currentUserId;
-    final bool isDisputed = deed.status == 'DISPUTED_PNAK';
+    final bool isDisputed = deed.status == 'DISPUTED_PNAF';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
@@ -202,7 +202,7 @@ class _DeedCardState extends State<DeedCard> {
                 Expanded(
                   child: Text(
                     'Klausul Wanprestasi Pasal 7: Penalti ingkar janji/pembatalan sebesar ${deed.clauseBreachPenaltyPct.toStringAsFixed(0)}% '
-                    '(${CurrencyFormatter.formatFull(deed.totalAmountIb * (deed.clauseBreachPenaltyPct / 100.0))}) disita langsung melalui Pengadilan PNAK.',
+                    '(${CurrencyFormatter.formatFull(deed.totalAmountIb * (deed.clauseBreachPenaltyPct / 100.0))}) disita langsung melalui Pengadilan PNAF.',
                     style: const TextStyle(color: Color(0xFFFDE68A), fontSize: 9.5, height: 1.3),
                   ),
                 ),
@@ -211,7 +211,7 @@ class _DeedCardState extends State<DeedCard> {
           ),
           const SizedBox(height: 12),
 
-          // Tombol Gugat ke PNAK jika terjadi wanprestasi / pembatalan sepihak
+          // Tombol Gugat ke PNAF jika terjadi wanprestasi / pembatalan sepihak
           if (isDisputed) ...[
             Container(
               width: double.infinity,
@@ -223,7 +223,7 @@ class _DeedCardState extends State<DeedCard> {
               ),
               child: const Center(
                 child: Text(
-                  '⚖️ SEDANG DALAM PROSES SIDANG GUGATAN DI PNAK',
+                  '⚖️ SEDANG DALAM PROSES SIDANG GUGATAN DI PNAF',
                   style: TextStyle(color: Color(0xFFEF4444), fontSize: 10, fontWeight: FontWeight.bold),
                 ),
               ),
@@ -235,7 +235,7 @@ class _DeedCardState extends State<DeedCard> {
               child: OutlinedButton.icon(
                 icon: const Icon(Icons.gavel_rounded, size: 14),
                 label: const Text(
-                  '⚖️ GUGAT WANPRESTASI KE PNAK',
+                  '⚖️ GUGAT WANPRESTASI KE PNAF',
                   style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
                 ),
                 style: OutlinedButton.styleFrom(
@@ -250,11 +250,11 @@ class _DeedCardState extends State<DeedCard> {
                           context: context,
                           builder: (ctx) => AlertDialog(
                             backgroundColor: const Color(0xFF0F172A),
-                            title: const Text('Gugat Wanprestasi ke PNAK?', style: TextStyle(color: Colors.white, fontSize: 15)),
+                            title: const Text('Gugat Wanprestasi ke PNAF?', style: TextStyle(color: Colors.white, fontSize: 15)),
                             content: Text(
-                              'Gugatan arbitrase niaga akan didaftarkan ke Pengadilan Niaga Konoha (PNAK).\n\n'
+                              'Gugatan arbitrase niaga akan didaftarkan ke Pengadilan Niaga Federasi (PNAF).\n\n'
                               'Klaim ganti rugi penalti: ${CurrencyFormatter.formatFull(deed.totalAmountIb * (deed.clauseBreachPenaltyPct / 100.0))}.\n'
-                              'Jadwal sidang otomatis ditetapkan pada pukul 10:00 WIB di Ruang Sidang Arbitrase PNAK.',
+                              'Jadwal sidang otomatis ditetapkan pada pukul 10:00 WIB di Ruang Sidang Arbitrase PNAF.',
                               style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11.5),
                             ),
                             actions: [
@@ -272,7 +272,7 @@ class _DeedCardState extends State<DeedCard> {
                           if (!context.mounted) return;
                           final messenger = ScaffoldMessenger.of(context);
                           setState(() => _isDisputing = true);
-                          final res = await DealsService.disputeToPnak(
+                          final res = await DealsService.disputeToPnaf(
                             deedId: deed.id,
                             plaintiffUserId: widget.currentUserId,
                             grievanceReason: 'Wanprestasi pelaksanaan kewajiban transaksi saham pada Akta ${deed.deedNumber}',
@@ -288,7 +288,7 @@ class _DeedCardState extends State<DeedCard> {
                             widget.onRefresh();
                             messenger.showSnackBar(
                               SnackBar(
-                                content: Text('⚖️ ${res['message'] ?? 'Gugatan Berhasil Didaftarkan ke PNAK!'}'),
+                                content: Text('⚖️ ${res['message'] ?? 'Gugatan Berhasil Didaftarkan ke PNAF!'}'),
                                 backgroundColor: const Color(0xFF10B981),
                               ),
                             );

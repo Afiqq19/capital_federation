@@ -120,7 +120,7 @@ const COMPANY_NAMES = [
 ];
 
 async function main() {
-  console.log('--- Seeding Monopoly Corp Database ---');
+  console.log('--- Seeding Capital Federation Database ---');
 
   // 1. Central Bank Settings
   const defaultSettings = [
@@ -149,7 +149,7 @@ async function main() {
     create: {
       username: 'admin',
       passwordHash: adminPassword,
-      ptName: 'Bank Sentral Monopoly Corp',
+      ptName: 'Bank Sentral Capital Federation',
       sector: 'Keuangan',
       balanceIb: 99999999999.0,
       ptLevel: 99,
@@ -193,7 +193,7 @@ async function main() {
     data: [
       {
         title: 'Bank Sentral Menjaga Suku Bunga Acuan Stabil di 6.5%',
-        content: 'Dewan Gubernur Bank Sentral Monopoly Corp menegaskan likuiditas pasar modal dalam kondisi prima.',
+        content: 'Dewan Gubernur Bank Sentral Capital Federation menegaskan likuiditas pasar modal dalam kondisi prima.',
         affectedSector: 'Keuangan',
         sentiment: 'BULLISH',
         impactMultiplier: 1.05,
@@ -242,7 +242,7 @@ async function main() {
           dividendRate: c.status === 'HEALTHY' ? 0.05 : 0.0,
           fundamentalScore: c.status === 'HEALTHY' ? 85.0 : 35.0,
           operationalLevel: c.status === 'HEALTHY' ? 7 : 2,
-          description: `Emiten ${c.sector} terkemuka di bursa Monopoly Corp. Status: ${c.status}.`,
+          description: `Emiten ${c.sector} terkemuka di bursa Capital Federation. Status: ${c.status}.`,
         },
       });
 
@@ -279,7 +279,7 @@ async function main() {
     data: [
       {
         userId: adminUser.id,
-        text: 'Selamat datang di bursa Monopoly Corp! Pasar saham resmi dibuka. Patuhi aturan lot (1 Lot = 100 Lembar).',
+        text: 'Selamat datang di bursa Capital Federation! Pasar saham resmi dibuka. Patuhi aturan lot (1 Lot = 100 Lembar).',
         badge: 'BANK SENTRAL',
       },
       {

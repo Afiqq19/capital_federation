@@ -171,7 +171,7 @@ class _CorporateDealsScreenState extends State<CorporateDealsScreen> with Single
               ],
             ),
             const Text(
-              'Bursa Saham Konoha (BSK)',
+              'Bursa Efek Federasi (IPMC)',
               style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
             ),
           ],

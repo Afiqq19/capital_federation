@@ -68,13 +68,13 @@ const PRESETS = [
 export default function MacroEventsPage() {
   const { actions, overview, notify } = useAdmin();
 
-  // Konoha Macro State
+  // Federation Macro State
   const [macroData, setMacroData] = useState(null);
   const [isSwitchingMacro, setIsSwitchingMacro] = useState(false);
 
   const fetchMacro = async () => {
     try {
-      const data = await adminApi.konohaMacro();
+      const data = await adminApi.federationMacro();
       setMacroData(data);
     } catch (err) {
       console.warn('Gagal memuat status makro:', err);
@@ -88,7 +88,7 @@ export default function MacroEventsPage() {
   const handleSetMacroState = async (state) => {
     try {
       setIsSwitchingMacro(true);
-      const res = await adminApi.setKonohaMacroState(state);
+      const res = await adminApi.setFederationMacroState(state);
       await fetchMacro();
       if (notify) {
         notify(res?.message || `Iklim ekonomi resmi diubah menjadi ${state}`, 'success');
@@ -198,7 +198,7 @@ export default function MacroEventsPage() {
                 <Sparkles size={14} className="text-emerald-400" />
               </div>
               <div className="font-extrabold text-sm text-slate-100">BOOM</div>
-              <p className="text-[11px] text-slate-400 mt-1">Omzet PT +30%, bursa bullish, bunga BSK 4.5%</p>
+              <p className="text-[11px] text-slate-400 mt-1">Omzet PT +30%, bursa bullish, bunga BCF 4.5%</p>
             </button>
 
             {/* NORMAL */}
@@ -217,7 +217,7 @@ export default function MacroEventsPage() {
                 <Landmark size={14} className="text-sky-400" />
               </div>
               <div className="font-extrabold text-sm text-slate-100">NORMAL</div>
-              <p className="text-[11px] text-slate-400 mt-1">Pertumbuhan terkendali, inflasi 3%, bunga BSK 6.5%</p>
+              <p className="text-[11px] text-slate-400 mt-1">Pertumbuhan terkendali, inflasi 3%, bunga BCF 6.5%</p>
             </button>
 
             {/* RECESSION */}
@@ -255,7 +255,7 @@ export default function MacroEventsPage() {
                 <ShieldAlert size={14} className="text-rose-400" />
               </div>
               <div className="font-extrabold text-sm text-slate-100">CRISIS</div>
-              <p className="text-[11px] text-slate-400 mt-1">Bunga BSK 18%, bursa crash, emiten krisis PNAK</p>
+              <p className="text-[11px] text-slate-400 mt-1">Bunga BCF 18%, bursa crash, emiten krisis PNAF</p>
             </button>
           </div>
         </div>

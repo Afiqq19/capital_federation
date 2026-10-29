@@ -1,4 +1,4 @@
-package com.monopolycorp.mobile
+package com.capitalfederation.mobile
 
 import io.flutter.embedding.android.FlutterActivity
 
