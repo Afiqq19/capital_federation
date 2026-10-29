@@ -1,0 +1,180 @@
+// Monopoly Corp - Prisma Schema
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                 String         @id @default(uuid())
+  username           String         @unique
+  passwordHash       String
+  ptName             String
+  sector             String         // "Teknologi", "Properti", "Keuangan", "F&B", "Energi", "Manufaktur"
+  balanceIb          Float          @default(100000.0) // 100,000 IB modal awal investor malaikat
+  ptLevel            Int            @default(1)
+  fundamentalScore   Float          @default(100.0)
+  marketingLevel     Int            @default(1)
+  hrLevel            Int            @default(1)
+  capacityLevel      Int            @default(1)
+  creditScore        Int            @default(750)
+  isBanned           Boolean        @default(false)
+  isBlueChip         Boolean        @default(false)
+  bailoutCount       Int            @default(0) // Maksimal 3 kali bailout
+  survivorBuffUntil  DateTime?      // Buff +5% revenue sementara jika baru bailout
+  role               String         @default("PLAYER") // "ADMIN" or "PLAYER"
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  portfolios         Portfolio[]
+  transactions       Transaction[]
+  loans              Loan[]
+  chatMessages       ChatMessage[]
+  ownedCompanies     Company[]      @relation("CompanyOwner")
+  bids               AuctionBid[]
+}
+
+model Company {
+  id                 String         @id @default(uuid())
+  symbol             String         @unique // e.g. "TLKM", "BBCA", "ARTO", "BOT01"
+  name               String
+  sector             String         // "Teknologi", "Properti", "Keuangan", "F&B", "Energi", "Manufaktur"
+  isBot              Boolean        @default(true)
+  status             String         @default("HEALTHY") // "HEALTHY" (pemberi dividen), "CRITICAL" (target akuisisi), "NORMAL"
+  currentPrice       Float
+  basePrice          Float
+  totalShares        Int            @default(10000000) // 10 juta lembar = 100,000 Lot
+  circulatingShares  Int            @default(3000000)
+  dividendRate       Float          @default(0.05) // 5% dividen berkala jika HEALTHY
+  fundamentalScore   Float          @default(100.0)
+  operationalLevel   Int            @default(5)
+  description        String?
+  ownerId            String?
+  owner              User?          @relation("CompanyOwner", fields: [ownerId], references: [id])
+  isIpo              Boolean        @default(true)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  priceHistories     PriceHistory[]
+  portfolios         Portfolio[]
+  transactions       Transaction[]
+  auctionItems       AuctionItem[]
+}
+
+model PriceHistory {
+  id         String   @id @default(uuid())
+  companyId  String
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  price      Float
+  high       Float
+  low        Float
+  open       Float
+  close      Float
+  volume     Int      @default(0)
+  timestamp  DateTime @default(now())
+}
+
+model Portfolio {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyId    String
+  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  lotsOwned    Int      @default(0) // 1 Lot = 100 Lembar
+  avgBuyPrice  Float    @default(0.0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([userId, companyId])
+}
+
+model Transaction {
+  id            String   @id @default(uuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyId     String
+  company       Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  type          String   // "BUY", "SELL", "TAKEOVER", "DIVIDEND"
+  lots          Int      // 1 Lot = 100 Lembar
+  pricePerShare Float
+  totalAmount   Float
+  fee           Float    @default(0.0)
+  status        String   @default("COMPLETED") // "COMPLETED", "FAILED"
+  createdAt     DateTime @default(now())
+}
+
+model MacroEvent {
+  id              String   @id @default(uuid())
+  title           String   // e.g. "Resesi Global", "Ledakan Sektor Properti", "Booming AI"
+  description     String
+  affectedSector  String   // "ALL", "Teknologi", "Properti", "Keuangan", etc.
+  priceImpactPct  Float    // e.g. -15.0 or +25.0
+  active          Boolean  @default(true)
+  durationSeconds Int      @default(600)
+  startedAt       DateTime @default(now())
+}
+
+model News {
+  id               String   @id @default(uuid())
+  title            String
+  content          String
+  affectedSector   String   // "Teknologi", "Properti", "Keuangan", "F&B", "Energi", "Manufaktur", "ALL"
+  sentiment        String   // "BULLISH", "BEARISH", "NEUTRAL"
+  impactMultiplier Float    @default(1.0)
+  publishedAt      DateTime @default(now())
+}
+
+model CentralBankSetting {
+  id    String @id @default(uuid())
+  key   String @unique // e.g. "interest_rate", "ipo_min_asset", "ipo_min_level", "inflation_rate", "bot_intervention_threshold"
+  value String
+}
+
+model Loan {
+  id               String   @id @default(uuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  principalAmount  Float
+  remainingAmount  Float
+  interestRate     Float    // e.g. 7.5%
+  collateralType   String   // "PT_ASSET" or "PORTFOLIO"
+  status           String   @default("ACTIVE") // "ACTIVE", "PAID", "DEFAULTED"
+  dueDate          DateTime
+  createdAt        DateTime @default(now())
+}
+
+model AuctionItem {
+  id               String       @id @default(uuid())
+  companyId        String
+  company          Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sharesOffered    Int          // In shares
+  startingBidIb    Float
+  currentBidIb     Float
+  highestBidderId  String?
+  status           String       @default("ACTIVE") // "ACTIVE", "SOLD", "EXPIRED"
+  expiresAt        DateTime
+  createdAt        DateTime     @default(now())
+  bids             AuctionBid[]
+}
+
+model AuctionBid {
+  id            String      @id @default(uuid())
+  auctionItemId String
+  auctionItem   AuctionItem @relation(fields: [auctionItemId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bidAmountIb   Float
+  createdAt     DateTime    @default(now())
+}
+
+model ChatMessage {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  text      String
+  badge     String?  // "9 NAGA", "BLUE CHIP", "TAIPAN", "REGULER"
+  createdAt DateTime @default(now())
+}

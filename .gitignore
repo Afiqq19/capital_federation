@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build outputs
+admin/dist/
+backend/public/
+mobile/build/
+mobile/.dart_tool/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+mobile/windows/flutter/ephemeral/
+mobile/linux/flutter/ephemeral/
+mobile/macos/Flutter/ephemeral/
+mobile/ios/Flutter/ephemeral/
+mobile/ios/Pods/
+
+# SQLite runtime database files (prevent overwriting production DB on git pull/reset & >100MB limit)
+backend/data/*.db
+backend/data/*.db-shm
+backend/data/*.db-wal
+backend/*.sqlite
+backend/*.sqlite3
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Environment & Logs
+.env
+.env.*
+!.env.example
+*.log
+npm-debug.log*
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
