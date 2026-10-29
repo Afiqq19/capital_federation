@@ -4877,9 +4877,37 @@ app.use('/api/bonds', bondsRouter);
 app.use('/api/subsidies', subsidiesRouter);
 app.use('/api/tenders', tendersRouter);
 
-// Deployment & Server Utility Routes (Auto-Deploy Git Pull)
-const deployRoute = require('./routes/deployRoute');
+// Endpoint Info Versi Sistem (Mobile APK, Web Admin, & Backend Server)
+app.get('/api/version', (req, res) => {
+  res.json({
+    version: '1.4.0',
+    apkVersion: 'v1.4.0-CFX Production (Build 2026.10)',
+    adminVersion: 'v1.4.0 Sovereign Launch',
+    backendVersion: 'v1.4.0-CFX Production',
+    databaseProtection: 'SQLite Persistent Volume (Zero Reset on Update)'
+  });
+});
+
+// Deployment & Server Utility Routes (Auto-Deploy Git Pull - sejajar dengan db.js, seed.js, server.js)
+const deployRoute = require('./deployRoute');
 app.use('/', deployRoute);
+
+// Sajikan Web Admin Statis dari folder backend/public (Langkah 6 Panduan Hosting)
+const path = require('path');
+const fs = require('fs');
+const publicDir = path.join(__dirname, '../public');
+if (fs.existsSync(publicDir)) {
+  app.use(express.static(publicDir));
+  app.use((req, res, next) => {
+    if (req.method === 'GET' && !req.path.startsWith('/api') && !req.path.startsWith('/socket.io')) {
+      const indexFile = path.join(publicDir, 'index.html');
+      if (fs.existsSync(indexFile)) {
+        return res.sendFile(indexFile);
+      }
+    }
+    next();
+  });
+}
 
 // Socket connection
 io.on('connection', (socket) => {
@@ -4893,10 +4921,18 @@ io.on('connection', (socket) => {
 
 async function start() {
   await initDb();
+  // Auto-seed 100 emiten bursa HANYA saat pertama kali server baru di-launching (database masih 0 emiten)
+  // Saat ada update kodingan berikutnya, database TIDAK AKAN PERNAH di-seed ulang atau di-reset!
+  const compCount = await query.get('SELECT COUNT(*) as count FROM companies');
+  if (!compCount || compCount.count === 0) {
+    console.log('🌱 Server baru terdeteksi (0 emiten). Menjalankan inisialisasi pasar perdana...');
+    const { seed } = require('./seed');
+    await seed();
+  }
   simulationEngine.start();
   surveillance.start();
   server.listen(PORT, '0.0.0.0', () => {
-    console.log(`🏦 Capital Federation Backend running on http://0.0.0.0:${PORT}`);
+    console.log(`🏦 Capital Federation Backend v1.4.0-CFX running on http://0.0.0.0:${PORT}`);
   });
 }
 

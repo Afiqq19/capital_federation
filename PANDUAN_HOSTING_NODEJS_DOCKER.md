@@ -1,97 +1,58 @@
-# PANDUAN HOSTING CAPITAL FEDERATION (NODE.JS + DOCKER + FLUTTER) DI MSS SERVER
+# PANDUAN HOSTING CAPITAL FEDERATION v1.4.0-CFX (NODE.JS + DOCKER + FLUTTER) DI MSS SERVER
 
-Panduan ini disesuaikan khusus untuk server Linux Toshiba MSS Panel agar proyek **capital_federation** berjalan otomatis di dalam Docker, tersambung ke database MariaDB panel, dan bisa diakses oleh Web Admin serta aplikasi Flutter di HP secara legal, aman, dan berkinerja tinggi.
+Panduan ini disesuaikan khusus untuk server Linux Toshiba MSS Panel agar proyek **capital_federation (v1.4.0-CFX)** berjalan otomatis di dalam Docker, menyajikan Web Admin & API sekaligus, serta **menjamin 100% akun pemain, saldo, PT, dan portofolio saham TIDAK AKAN PERNAH HILANG atau ter-reset** saat ada update website, APK, maupun backend.
 
 ---
 
-## 0. Route Auto-Deploy (`backend/src/routes/deployRoute.js`)
+## 0. Route Auto-Deploy (`backend/src/deployRoute.js`)
 
-File `backend/src/routes/deployRoute.js` telah dipasang dan diaktifkan di `backend/src/server.js`:
+File `backend/src/deployRoute.js` telah dipasang **sejajar dengan `db.js`, `seed.js`, dan `server.js`** (serta tetap kompatibel melalui `backend/src/routes/deployRoute.js`) dan diaktifkan di `backend/src/server.js`:
 
 ```javascript
-const deployRoute = require('./routes/deployRoute');
+const deployRoute = require('./deployRoute');
 app.use('/', deployRoute);
 ```
 
-Bapak cukup buka browser dan akses URL:
+Setiap kali Bapak selesai melakukan `git push origin main` dari laptop/PC, Bapak cukup buka browser dan akses URL:
 👉 `https://capitalfederation.xie.my.id/updatecapital?key=19122004`
+
+**Jaminan Keamanan Data Pemain Saat Update:**
+1. File database `backend/data/capital_federation.db` dikecualikan di `.gitignore` dan dipasang pada **Docker Persistent Volume (`./backend/data:/app/data`)**.
+2. Saat `/updatecapital?key=19122004` atau `docker compose up -d --build` dijalankan, hanya kode program & tampilan Web Admin yang diperbarui—**seluruh akun pemain, kas pribadi, kas PT, saham, akta P2P, dan histori transaksi tetap utuh 100% tanpa mengulang dari awal**.
+3. `seed.js` hanya berjalan otomatis **1 kali saja** saat server pertama kali diinstal (ketika tabel `companies` masih 0). Setelah ada data, `seed.js` tidak akan pernah menimpa data lagi.
 
 ---
 
 ## 1. Spesifikasi Lingkungan Server
+* **Versi Rilis:** `v1.4.0-CFX Production (Build 4)`
 * **Direktori Penampung Host:** `/var/www/capital_federation`
 * **Docker Network Panel:** `mss-server-panel_mss-network`
-* **Database Container:** `mss-db` (MariaDB/MySQL)
-* **Kredensial Database Internal:**
-  * Host: `mss-db`
-  * Port: `3306`
-  * Username: `root`
-  * Password: `root_secret_pass`
-  * Database Name: `db_capitalfederation` (dibuat di MSS Panel)
-* **Port Layanan Backend Node.js:** `5000` (atau port pilihan lainnya)
+* **Database Container:** `mss-db` (MariaDB/MySQL) & Persistent Volume `./backend/data` (`capital_federation.db`)
+* **Port Layanan Backend & Web Admin:** `5000` (di-mapping ke `https://capitalfederation.xie.my.id`)
 
 ---
 
-## 2. LANGKAH-LANGKAH DEPLOYMENT
+## 2. LANGKAH-LANGKAH DEPLOYMENT DI SERVER LINUX
 
-### LANGKAH 1: Buat Database di MSS Panel
-1. Buka browser: [https://panel.xie.my.id](https://panel.xie.my.id)
-2. Masuk ke menu **Database Manager** di sebelah kiri.
-3. Di tab *Visual Explorer*, klik tombol **(+)**.
-4. Masukkan nama database: `db_capitalfederation`.
-5. Pilih mesin database: `mss-db`. Klik Simpan.
-
----
-
-### LANGKAH 2: Masuk ke Server & Clone Proyek
-Buka Command Prompt di Windows, lalu login SSH ke server:
+### LANGKAH 1: Masuk ke Server Linux & Clone Proyek
+Buka Command Prompt / Terminal, lalu login SSH ke server:
 ```bash
 ssh mss@192.168.1.100
 ```
-Masuk ke direktori web `/var/www/` dan clone repositori:
+Masuk ke direktori `/var/www/` dan clone repositori GitHub Bapak:
 ```bash
 cd /var/www
 git clone https://github.com/Afiqq19/capital_federation.git
 cd capital_federation
 ```
-*(Atau sesuaikan URL repo git Anda).*
+*(Catatan: Jika folder `/var/www/capital_federation` sudah pernah di-clone sebelumnya, cukup jalankan `cd /var/www/capital_federation && git pull origin main`).*
 
 ---
 
-### LANGKAH 3: Siapkan Dockerfile untuk Backend Node.js
-Di dalam folder backend (`/var/www/capital_federation/backend/`), buat file `Dockerfile`:
-```bash
-nano backend/Dockerfile
-```
-Isi dengan konfigurasi berikut:
-```dockerfile
-FROM node:20-alpine
+### LANGKAH 2: Cek File `backend/Dockerfile` & `docker-compose.yml` (Sudah Siap di Repo!)
+File `backend/Dockerfile`, `docker-compose.yml`, serta hasil build Web Admin (`backend/public/`) **sudah kami buatkan dan sertakan langsung di dalam repositori GitHub Bapak**, sehingga Bapak **tidak perlu** mengetik manual dengan `nano` lagi!
 
-WORKDIR /app
-
-# Install dependencies terlebih dahulu (optimasi cache layer Docker)
-COPY package*.json ./
-RUN npm install --production
-
-# Salin source code backend
-COPY . .
-
-# Expose port backend
-EXPOSE 5000
-
-# Jalankan server
-CMD ["node", "src/server.js"]
-```
-*(Simpan: Tekan `CTRL+O`, `ENTER`, lalu `CTRL+X`)*
-
----
-
-### LANGKAH 4: Siapkan docker-compose.yml
-Di root proyek (`/var/www/capital_federation/`), buat file `docker-compose.yml`:
-```bash
-nano docker-compose.yml
-```
-Isi dengan konfigurasi berikut:
+Berikut isi `docker-compose.yml` yang sudah aktif di repo Bapak (dilengkapi pelindung database `volumes:`):
 ```yaml
 version: '3.8'
 
@@ -107,11 +68,17 @@ services:
     environment:
       - PORT=5000
       - NODE_ENV=production
+      - DEPLOY_SECRET=19122004
       - DB_HOST=mss-db
       - DB_PORT=3306
       - DB_DATABASE=db_capitalfederation
       - DB_USERNAME=root
       - DB_PASSWORD=root_secret_pass
+    volumes:
+      - ./backend/data:/app/data
+      - ./backend/src:/app/src
+      - ./backend/public:/app/public
+      - ./:/var/www/capital_federation
     networks:
       - mss-network
 
@@ -120,93 +87,44 @@ networks:
     external: true
     name: mss-server-panel_mss-network
 ```
-*(Simpan: Tekan `CTRL+O`, `ENTER`, lalu `CTRL+X`)*
-
-> **PENTING:** Dengan menyetel `name: mss-server-panel_mss-network`, container Node.js otomatis berada di jaringan yang sama dengan `mss-db`, sehingga dapat memanggil hostname `mss-db:3306` langsung tanpa setting manual.
 
 ---
 
-### LANGKAH 5: Konfigurasi File .env Backend
-Di folder `/var/www/capital_federation/backend/`, sesuaikan file `.env`:
-```env
-PORT=5000
-NODE_ENV=production
-
-# Database Connection ke MariaDB MSS Panel
-DB_HOST=mss-db
-DB_PORT=3306
-DB_DATABASE=db_capitalfederation
-DB_USERNAME=root
-DB_PASSWORD=root_secret_pass
-```
-
----
-
-### LANGKAH 6: Sajikan Web Admin (NPM/React/Vite)
-Agar Web Admin dapat diakses bersamaan dengan backend tanpa menambah port/container baru:
-1. Di komputer lokal, jalankan build pada folder admin:
-   ```bash
-   cd admin
-   npm run build
-   ```
-2. Salin isi folder hasil build (`dist/` atau `build/`) ke dalam folder `backend/public/` di server.
-3. Di file `backend/src/server.js`, pastikan middleware static files Express aktif:
-   ```javascript
-   const express = require('express');
-   const path = require('path');
-   const app = express();
-
-   // Sajikan web admin statis
-   app.use(express.static(path.join(__dirname, '../public')));
-
-   // Rute API Anda
-   // app.use('/api', apiRoutes);
-
-   // Fallback untuk SPA React (Vite)
-   app.get('*', (req, res) => {
-       res.sendFile(path.join(__dirname, '../public/index.html'));
-   });
-   ```
-
----
-
-### LANGKAH 7: Jalankan Container Docker
-Jalankan perintah ini di direktori `/var/www/capital_federation/`:
+### LANGKAH 3: Jalankan Container Docker
+Di dalam direktori `/var/www/capital_federation/` di server Linux, langsung jalankan:
 ```bash
 sudo docker compose up -d --build
 ```
 Periksa status container:
 ```bash
-docker ps
+sudo docker ps
 ```
 Container `capitalfederation_backend` akan berstatus `Up` di port `0.0.0.0:5000->5000/tcp`.
 
 ---
 
-### LANGKAH 8: Hubungkan ke Domain Publik (Cloudflare Tunnel)
-Agar backend dan web admin bisa diakses dari HP atau luar jaringan:
-1. Buka dashboard **Cloudflare Zero Trust** -> **Access** -> **Tunnels**.
-2. Pilih Tunnel server Anda, klik **Configure** -> tab **Public Hostnames**.
+### LANGKAH 4: Hubungkan ke Domain Publik (Cloudflare Tunnel)
+Agar Backend dan Web Admin bisa diakses dari HP atau luar jaringan melalui `https://capitalfederation.xie.my.id`:
+1. Buka dashboard **Cloudflare Zero Trust** -> **Networks / Access** -> **Tunnels**.
+2. Pilih Tunnel server Bapak, klik **Configure** -> tab **Public Hostnames**.
 3. Klik **Add a public hostname**:
-   * **Subdomain:** `capitalfederation` (atau `api-capitalfederation`)
+   * **Subdomain:** `capitalfederation`
    * **Domain:** `xie.my.id`
    * **Type:** `HTTP`
-   * **URL:** `192.168.1.100:5000`
+   * **URL:** `192.168.1.100:5000` (atau `localhost:5000`)
 4. Klik **Save hostname**.
-5. Sekarang web dan API Anda aktif secara publik di: `https://capitalfederation.xie.my.id`.
+5. Sekarang:
+   * **Web Admin Console** langsung dapat dibuka di: `https://capitalfederation.xie.my.id` (Login: `admin` / `admin123`)
+   * **Cek Versi Server Live:** `https://capitalfederation.xie.my.id/api/version`
+   * **Link Auto-Update Server:** `https://capitalfederation.xie.my.id/updatecapital?key=19122004`
 
 ---
 
-### LANGKAH 9: Integrasi ke Aplikasi Mobile (Flutter APK)
-Di proyek Flutter Anda (file konfigurasi endpoint / service API):
-```dart
-class ApiConfig {
-  // Gunakan domain Cloudflare Tunnel publik agar bisa diakses via kuota seluler / WiFi luar
-  static const String baseUrl = 'https://capitalfederation.xie.my.id';
-}
-```
-Lakukan kompilasi rilis APK:
+### LANGKAH 5: Kompilasi Rilis APK Mobile (`v1.4.0-CFX`)
+File `mobile/lib/services/api_service.dart` sudah diarahkan ke `https://capitalfederation.xie.my.id` dengan versi `1.4.0+4` (`v1.4.0-CFX Production`).
+Untuk mem-build file APK rilis siap sebar ke pemain:
 ```bash
+cd mobile
 flutter build apk --release
 ```
-File APK siap didistribusikan ke perangkat Android dan langsung terhubung secara live ke server Linux Toshiba.
+File APK hasil build berada di `mobile/build/app/outputs/flutter-apk/app-release.apk`.

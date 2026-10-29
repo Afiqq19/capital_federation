@@ -686,9 +686,9 @@ class _UserProfileSheetState extends State<_UserProfileSheet> with SingleTickerP
             ),
             child: Column(
               children: [
-                _buildInfoRow('Versi Aplikasi Mobile (APK):', 'v1.3.0-CFX (Build 2026.10)', const Color(0xFF34D399)),
+                _buildInfoRow('Versi Aplikasi Mobile (APK):', 'v1.4.0-CFX Production (Build 4)', const Color(0xFF34D399)),
                 const Divider(color: Color(0xFF1E293B), height: 14),
-                _buildInfoRow('Versi Web Admin Console:', 'v1.3.0 Strategic Treasury', const Color(0xFF38BDF8)),
+                _buildInfoRow('Versi Web Admin Console:', 'v1.4.0 Sovereign Launch', const Color(0xFF38BDF8)),
                 const Divider(color: Color(0xFF1E293B), height: 14),
                 _buildInfoRow('Simulasi Pasar Modal:', 'Realistic Engine (CFX-107 Emiten)', const Color(0xFFFBBF24)),
                 const Divider(color: Color(0xFF1E293B), height: 14),

@@ -50,8 +50,8 @@ export default function Sidebar({ currentPage, onNavigate, adminUser, onLogout }
       {/* Brand Header */}
       <div className="px-5 py-4 border-b border-slate-800/80 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400 via-amber-500 to-amber-600 flex items-center justify-center shadow-lg shadow-amber-500/20 text-slate-950 font-black text-lg tracking-wider">
-            M
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400 via-amber-500 to-amber-600 flex items-center justify-center shadow-lg shadow-amber-500/20 text-slate-950 font-black text-sm tracking-wider">
+            CF
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
@@ -177,7 +177,7 @@ export default function Sidebar({ currentPage, onNavigate, adminUser, onLogout }
         </div>
 
         <div className="text-[10px] text-slate-500 font-mono truncate">
-          v2.5.0 • Bank Sentral BIF & IPMC Exchange
+          v1.4.0-CFX • Bank Sentral BCF & IPMC Exchange
         </div>
       </div>
     </aside>

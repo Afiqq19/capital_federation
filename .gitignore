@@ -2,9 +2,8 @@
 node_modules/
 **/node_modules/
 
-# Build outputs
+# Build outputs (note: backend/public/ is tracked for Docker 1-container production hosting)
 admin/dist/
-backend/public/
 mobile/build/
 mobile/.dart_tool/
 mobile/.flutter-plugins

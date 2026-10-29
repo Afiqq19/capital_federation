@@ -239,3 +239,4 @@ class _FederationMacroBannerState extends State<FederationMacroBanner> {
     );
   }
 }
+

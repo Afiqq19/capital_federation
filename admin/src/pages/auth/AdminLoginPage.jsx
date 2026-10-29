@@ -193,7 +193,7 @@ export function AdminLoginPage({ onLoginSuccess }) {
           <div className="mt-6 pt-4 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
             <span className="inline-flex items-center gap-1.5">
               <Activity className="w-3.5 h-3.5 text-emerald-400" />
-              Node Server Bursa:
+              Server v1.4.0-CFX:
             </span>
             <code className="px-2 py-0.5 rounded bg-slate-900 text-sky-300 border border-slate-800 font-mono">
               {API_URL}

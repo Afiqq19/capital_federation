@@ -184,8 +184,15 @@ class MarketSimulationEngine {
         return pct >= 75.0;
       }).length;
 
-      if (count80 > 8 || this.stockTrends.size === 0) {
-        console.log(`⚡ Recalibrating ${companies.length} stocks to authentic, diverse market distribution...`);
+      const needsPriceInit = companies.some(c => !c.prev_close || c.prev_close <= 0 || !c.current_price || c.current_price <= 0);
+
+      if (count80 > 8 || needsPriceInit || this.stockTrends.size === 0) {
+        const shouldResetDbPrices = count80 > 8 || needsPriceInit;
+        if (shouldResetDbPrices) {
+          console.log(`⚡ Recalibrating ${companies.length} stocks to authentic, diverse market distribution...`);
+        } else {
+          console.log(`📈 Restoring live market trends for ${companies.length} stocks without resetting prices...`);
+        }
         
         // Sort stably by symbol
         const sorted = [...companies].sort((a, b) => a.symbol.localeCompare(b.symbol));
@@ -222,19 +229,21 @@ class MarketSimulationEngine {
           targetPct = parseFloat(targetPct.toFixed(2));
           this.stockTrends.set(comp.id, targetPct);
 
-          const prevClose = base;
-          const newPrice = Math.max(50, Math.round(prevClose * (1 + targetPct / 100)));
-          const highSpread = Math.max(20, Math.round(newPrice * 0.015));
-          const lowSpread = Math.max(20, Math.round(newPrice * 0.015));
-          const dHigh = comp.status === 'ARA' ? newPrice : newPrice + highSpread;
-          const dLow = comp.status === 'ARA' ? prevClose : Math.max(50, newPrice - lowSpread);
+          if (shouldResetDbPrices || !comp.prev_close || comp.prev_close <= 0) {
+            const prevClose = base;
+            const newPrice = Math.max(50, Math.round(prevClose * (1 + targetPct / 100)));
+            const highSpread = Math.max(20, Math.round(newPrice * 0.015));
+            const lowSpread = Math.max(20, Math.round(newPrice * 0.015));
+            const dHigh = comp.status === 'ARA' ? newPrice : newPrice + highSpread;
+            const dLow = comp.status === 'ARA' ? prevClose : Math.max(50, newPrice - lowSpread);
 
-          await query.run(
-            'UPDATE companies SET prev_close = ?, current_price = ?, daily_high = ?, daily_low = ? WHERE id = ?',
-            [prevClose, newPrice, dHigh, dLow, comp.id]
-          );
+            await query.run(
+              'UPDATE companies SET prev_close = ?, current_price = ?, daily_high = ?, daily_low = ? WHERE id = ?',
+              [prevClose, newPrice, dHigh, dLow, comp.id]
+            );
+          }
         }
-        console.log('✅ Market recalibration complete: Authentic, diverse stock percentages initialized.');
+        console.log('✅ Market state ready: Live stock prices and trends preserved.');
       }
     } catch (err) {
       console.error('Market recalibration error:', err);

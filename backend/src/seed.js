@@ -131,29 +131,26 @@ async function seed() {
     ['trading_fee_pct', '0.15']
   ];
   for (const [k, v] of settings) {
-    await query.run('INSERT OR REPLACE INTO central_bank_settings (key, value) VALUES (?, ?)', [k, v]);
+    await query.run('INSERT OR IGNORE INTO central_bank_settings (key, value) VALUES (?, ?)', [k, v]);
   }
 
-  // 2. Users (Admin + Demo Player dimulai sebagai Investor Pemula)
+  // 2. Users (Admin Utama Bank Sentral - menggunakan INSERT OR IGNORE agar akun tidak pernah ke-reset saat update)
   const adminPass = await bcrypt.hash('admin123', 10);
-  const playerPass = await bcrypt.hash('player123', 10);
 
   const adminId = 'admin-001';
   await query.run(
-    `INSERT OR REPLACE INTO users (id, username, password_hash, balance_ib, company_balance_ib, has_pt, pt_name, sector, pt_level, credit_score, role, is_blue_chip)
+    `INSERT OR IGNORE INTO users (id, username, password_hash, balance_ib, company_balance_ib, has_pt, pt_name, sector, pt_level, credit_score, role, is_blue_chip)
      VALUES (?, ?, ?, 50000000000.0, 0.0, 0, 'Bank Sentral Capital Federation', 'Keuangan', 99, 999, 'ADMIN', 1)`,
     [adminId, 'admin', adminPass]
   );
 
-  // sultan_budi: Dimulai sebagai INVESTOR PEMULA (belum punya PT, saldo kas pribadi Rp 10.000.000)
-  const playerId = 'player-001';
-  await query.run(
-    `INSERT OR REPLACE INTO users (id, username, password_hash, balance_ib, company_balance_ib, has_pt, pt_name, sector, pt_level, credit_score, role, is_blue_chip)
-     VALUES (?, ?, ?, 10000000.0, 0.0, 0, '', '', 1, 750, 'PLAYER', 0)`,
-    [playerId, 'sultan_budi', playerPass]
-  );
-
   // 3. News & Macro Events
+  const existingCompanies = await query.get('SELECT COUNT(*) as count FROM companies');
+  if (existingCompanies && existingCompanies.count > 0) {
+    console.log(`ℹ️ Database sudah memiliki ${existingCompanies.count} emiten. Melewati seed ulang agar data pemain & pasar tetap aman.`);
+    return;
+  }
+
   const eventId = uuidv4();
   await query.run(
     `INSERT OR IGNORE INTO macro_events (id, title, description, affected_sector, price_impact_pct, active, duration_seconds)

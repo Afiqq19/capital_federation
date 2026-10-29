@@ -1,6 +1,6 @@
 {
-  "name": "backend",
-  "version": "1.0.0",
+  "name": "capital-federation-backend",
+  "version": "1.4.0",
   "description": "",
   "main": "index.js",
   "scripts": {
