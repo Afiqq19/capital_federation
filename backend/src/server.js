@@ -1778,7 +1778,7 @@ app.get('/api/ipo/bids/:ipoId', async (req, res) => {
   }
 });
 
-// Perusahaan Lain Mengajukan Tawaran Saham Pre-IPO (Bidding)
+// Perusahaan Lain atau Investor Mitra Mengajukan Tawaran Saham Pre-IPO (Bidding)
 app.post('/api/ipo/bid', async (req, res) => {
   try {
     const { ipoId, bidderUserId, requestedPercentage, strategicPitch } = req.body;
@@ -1786,8 +1786,8 @@ app.post('/api/ipo/bid', async (req, res) => {
     if (!ipo) return res.status(404).json({ error: 'Data penawaran IPO tidak ditemukan' });
 
     const bidder = await query.get('SELECT * FROM users WHERE id = ?', [bidderUserId]);
-    if (!bidder || !bidder.has_pt) {
-      return res.status(400).json({ error: 'Hanya pemain yang telah mendirikan PT yang dapat mengajukan kemitraan strategis' });
+    if (!bidder) {
+      return res.status(404).json({ error: 'Akun investor/mitra tidak ditemukan' });
     }
     if (ipo.user_id && ipo.user_id === bidderUserId) {
       return res.status(400).json({ error: 'Tidak dapat menawar saham IPO perusahaan sendiri' });
@@ -1803,9 +1803,14 @@ app.post('/api/ipo/bid', async (req, res) => {
     const sharesCount = Math.round(ipo.total_offering_shares * (pct / 100.0));
     const totalCost = sharesCount * pricePerShare;
 
-    if (bidder.company_balance_ib < totalCost) {
+    const totalAvailableFunds = (bidder.company_balance_ib || 0) + (bidder.balance_ib || 0);
+    const bidderEntityName = bidder.has_pt && bidder.pt_name
+      ? formatCleanPtName(bidder.pt_name, true)
+      : `Investor Mitra ${bidder.username}`;
+
+    if (totalAvailableFunds < totalCost) {
       return res.status(400).json({
-        error: `Saldo Kas PT Anda (${bidder.pt_name}) tidak cukup. Butuh IB ${totalCost.toLocaleString('id-ID')} untuk komitmen ${pct}% saham.`
+        error: `Saldo Kas (${bidderEntityName}) tidak cukup. Butuh IB ${totalCost.toLocaleString('id-ID')} untuk komitmen ${pct}% saham.`
       });
     }
 
@@ -1820,16 +1825,16 @@ app.post('/api/ipo/bid', async (req, res) => {
       bidId = existingBid.id;
       await query.run(
         `UPDATE ipo_bids 
-         SET requested_percentage = ?, offered_price_per_share = ?, total_investment_ib = ?, strategic_pitch = ?, created_at = datetime('now')
+         SET bidder_company_name = ?, requested_percentage = ?, offered_price_per_share = ?, total_investment_ib = ?, strategic_pitch = ?, created_at = datetime('now')
          WHERE id = ?`,
-        [pct, pricePerShare, totalCost, strategicPitch || 'Kemitraan strategis ekspansi rantai pasok.', bidId]
+        [bidderEntityName, pct, pricePerShare, totalCost, strategicPitch || 'Kemitraan strategis ekspansi rantai pasok.', bidId]
       );
     } else {
       bidId = uuidv4();
       await query.run(
         `INSERT INTO ipo_bids (id, ipo_id, bidder_user_id, bidder_company_name, requested_percentage, offered_price_per_share, total_investment_ib, strategic_pitch, status)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')`,
-        [bidId, ipoId, bidderUserId, bidder.pt_name, pct, pricePerShare, totalCost, strategicPitch || 'Kemitraan strategis ekspansi rantai pasok.']
+        [bidId, ipoId, bidderUserId, bidderEntityName, pct, pricePerShare, totalCost, strategicPitch || 'Kemitraan strategis ekspansi rantai pasok.']
       );
     }
 
@@ -1865,9 +1870,15 @@ app.post('/api/ipo/allotment', async (req, res) => {
         const bid = await query.get('SELECT * FROM ipo_bids WHERE id = ? AND ipo_id = ?', [bidId, ipoId]);
         if (bid && bid.status === 'PENDING') {
           const bidder = await query.get('SELECT * FROM users WHERE id = ?', [bid.bidder_user_id]);
-          if (bidder && bidder.company_balance_ib >= bid.total_investment_ib) {
-            // Debet Kas PT Pembeli
-            await query.run('UPDATE users SET company_balance_ib = company_balance_ib - ? WHERE id = ?', [bid.total_investment_ib, bidder.id]);
+          const bidderAvailable = bidder ? ((bidder.company_balance_ib || 0) + (bidder.balance_ib || 0)) : 0;
+          if (bidder && bidderAvailable >= bid.total_investment_ib) {
+            // Debet Kas PT Pembeli terlebih dahulu, sisanya dari Kas Pribadi Pembeli
+            const deductCompany = Math.min(bidder.company_balance_ib || 0, bid.total_investment_ib);
+            const deductPersonal = bid.total_investment_ib - deductCompany;
+            await query.run(
+              'UPDATE users SET company_balance_ib = company_balance_ib - ?, balance_ib = balance_ib - ? WHERE id = ?',
+              [deductCompany, deductPersonal, bidder.id]
+            );
             // Kredit Kas PT Emiten
             await query.run('UPDATE users SET company_balance_ib = company_balance_ib + ? WHERE id = ?', [bid.total_investment_ib, issuerUserId]);
             if (ipo.company_id) {
@@ -1878,12 +1889,18 @@ app.post('/api/ipo/allotment', async (req, res) => {
 
             const sharesCount = Math.round(ipo.total_offering_shares * (bid.requested_percentage / 100.0));
             const lotsCount = Math.round(sharesCount / 100);
+            await query.run('UPDATE ipo_offerings SET ordered_lots = COALESCE(ordered_lots, 0) + ? WHERE id = ?', [lotsCount, ipoId]);
 
             // Tambahkan / Update Saham ke Portofolio Mitra Pembeli
-            if (ipo.company_id) {
+            const targetComp = ipo.company_id
+              ? await query.get('SELECT id FROM companies WHERE id = ? OR symbol = ?', [ipo.company_id, ipo.symbol])
+              : await query.get('SELECT id FROM companies WHERE symbol = ?', [ipo.symbol]);
+            const targetCompId = targetComp ? targetComp.id : ipo.company_id;
+
+            if (targetCompId) {
               const existingPortfolio = await query.get(
                 'SELECT * FROM portfolios WHERE user_id = ? AND company_id = ?',
-                [bidder.id, ipo.company_id]
+                [bidder.id, targetCompId]
               );
               if (existingPortfolio) {
                 const totalLots = existingPortfolio.lots_owned + lotsCount;
@@ -1897,31 +1914,33 @@ app.post('/api/ipo/allotment', async (req, res) => {
               } else {
                 await query.run(
                   'INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price) VALUES (?, ?, ?, ?, ?)',
-                  [uuidv4(), bidder.id, ipo.company_id, lotsCount, bid.offered_price_per_share]
+                  [uuidv4(), bidder.id, targetCompId, lotsCount, bid.offered_price_per_share]
                 );
               }
 
+              const holderLabel = bid.bidder_company_name || formatCleanPtName(bidder.pt_name, bidder.has_pt);
               // Update Struktur Pemegang Saham (Cap Table)
               await query.run(
                 `INSERT INTO company_shareholders (id, company_id, holder_name, holder_type, shares_count, percentage, user_id)
                  VALUES (?, ?, ?, 'STRATEGIC', ?, ?, ?)`,
-                [uuidv4(), ipo.company_id, `${bidder.pt_name} (Mitra Strategis Pre-IPO)`, sharesCount, bid.requested_percentage, bidder.id]
+                [uuidv4(), targetCompId, `${holderLabel} (Mitra Strategis Pre-IPO)`, sharesCount, bid.requested_percentage, bidder.id]
               );
             }
 
-            // Catat Arus Kas Transparan untuk kedua PT
-            const bidderUserAfter = await query.get('SELECT company_balance_ib FROM users WHERE id = ?', [bidder.id]);
+            // Catat Arus Kas Transparan untuk kedua pihak
+            const bidderUserAfter = await query.get('SELECT company_balance_ib, balance_ib FROM users WHERE id = ?', [bidder.id]);
             const issuerUserAfter = await query.get('SELECT company_balance_ib FROM users WHERE id = ?', [issuerUserId]);
+            const holderLabel = bid.bidder_company_name || formatCleanPtName(bidder.pt_name, bidder.has_pt);
 
             await recordCashFlow({
               userId: bidder.id,
               companyId: null,
-              accountType: 'COMPANY',
+              accountType: deductCompany > 0 ? 'COMPANY' : 'PERSONAL',
               category: 'STRATEGIC_INVESTMENT',
               title: `Penyertaan Modal Pre-IPO ${ipo.symbol}`,
               amountIb: bid.total_investment_ib,
               direction: 'EXPENSE',
-              balanceAfter: bidderUserAfter ? bidderUserAfter.company_balance_ib : 0,
+              balanceAfter: bidderUserAfter ? (deductCompany > 0 ? bidderUserAfter.company_balance_ib : bidderUserAfter.balance_ib) : 0,
               notes: `Pembelian kemitraan strategis ${bid.requested_percentage}% saham (${lotsCount.toLocaleString('id-ID')} Lot) ${ipo.company_name}`
             });
 
@@ -1930,11 +1949,11 @@ app.post('/api/ipo/allotment', async (req, res) => {
               companyId: ipo.company_id,
               accountType: 'COMPANY',
               category: 'CAPITAL_INJECTION',
-              title: `Injeksi Modal Mitra Pre-IPO (${bidder.pt_name})`,
+              title: `Injeksi Modal Mitra Pre-IPO (${holderLabel})`,
               amountIb: bid.total_investment_ib,
               direction: 'INCOME',
               balanceAfter: issuerUserAfter ? issuerUserAfter.company_balance_ib : 0,
-              notes: `Penerimaan dana segar kemitraan strategis ${bid.requested_percentage}% saham dari ${bidder.pt_name}`
+              notes: `Penerimaan dana segar kemitraan strategis ${bid.requested_percentage}% saham dari ${holderLabel}`
             });
 
             totalFundInjected += bid.total_investment_ib;
@@ -2609,7 +2628,7 @@ app.get('/api/ipo/offerings', async (req, res) => {
 
 app.post('/api/ipo/order', async (req, res) => {
   try {
-    const { userId, ipoId, lots } = req.body;
+    const { userId, ipoId, lots, paymentSource } = req.body;
     const numLots = parseInt(lots);
     if (!numLots || numLots <= 0) return res.status(400).json({ error: 'Jumlah lot pemesanan tidak valid' });
 
@@ -2621,36 +2640,74 @@ app.post('/api/ipo/order', async (req, res) => {
     if (!user) return res.status(404).json({ error: 'User tidak ditemukan' });
 
     const totalCost = numLots * 100 * ipo.offering_price;
-    if (user.balance_ib < totalCost) {
-      return res.status(400).json({ error: `Saldo Kas Pribadi tidak cukup. Butuh IB ${totalCost.toLocaleString('id-ID')}` });
+    const totalAvailable = (user.balance_ib || 0) + (user.company_balance_ib || 0);
+    if (totalAvailable < totalCost) {
+      return res.status(400).json({
+        error: `Saldo Kas tidak cukup. Butuh IB ${totalCost.toLocaleString('id-ID')} (Kas Pribadi + Kas PT Anda: IB ${totalAvailable.toLocaleString('id-ID')})`
+      });
     }
 
-    // Deduct user balance
-    await query.run('UPDATE users SET balance_ib = balance_ib - ? WHERE id = ?', [totalCost, userId]);
+    // Deduct user balance (prioritize chosen paymentSource, fallback to combined balance)
+    let deductPersonal = 0;
+    let deductCompany = 0;
+    if (paymentSource === 'COMPANY') {
+      deductCompany = Math.min(user.company_balance_ib || 0, totalCost);
+      deductPersonal = totalCost - deductCompany;
+    } else {
+      deductPersonal = Math.min(user.balance_ib || 0, totalCost);
+      deductCompany = totalCost - deductPersonal;
+    }
+    await query.run(
+      'UPDATE users SET balance_ib = balance_ib - ?, company_balance_ib = company_balance_ib - ? WHERE id = ?',
+      [deductPersonal, deductCompany, userId]
+    );
+
+    const compRecord = await query.get('SELECT id, owner_id FROM companies WHERE symbol = ? OR id = ?', [ipo.symbol, ipo.company_id]);
+    const orderStatus = compRecord ? 'CREDITED' : 'ALLOTED';
 
     // Record IPO order
     const orderId = uuidv4();
     await query.run(
       `INSERT INTO ipo_orders (id, ipo_id, user_id, lots, price_per_share, total_amount, status)
-       VALUES (?, ?, ?, ?, ?, ?, 'ALLOTED')`,
-      [orderId, ipoId, userId, numLots, ipo.offering_price, totalCost]
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [orderId, ipoId, userId, numLots, ipo.offering_price, totalCost, orderStatus]
     );
 
     // Increment ordered lots in ipo_offerings
     await query.run(
-      'UPDATE ipo_offerings SET ordered_lots = ordered_lots + ? WHERE id = ?',
+      'UPDATE ipo_offerings SET ordered_lots = COALESCE(ordered_lots, 0) + ? WHERE id = ?',
       [numLots, ipoId]
     );
 
-    // Record in transactions if company already listed/exists
+    // Record in transactions & credit portfolio immediately if company exists
     const transId = uuidv4();
-    const compRecord = await query.get('SELECT id FROM companies WHERE symbol = ? OR id = ?', [ipo.symbol, ipo.company_id]);
     if (compRecord) {
       await query.run(
         `INSERT INTO transactions (id, user_id, company_id, type, lots, price_per_share, total_amount, fee, status)
          VALUES (?, ?, ?, 'IPO', ?, ?, ?, 0, 'COMPLETED')`,
         [transId, userId, compRecord.id, numLots, ipo.offering_price, totalCost]
       );
+
+      // Langsung tambahkan lot ke portofolio pembeli (Bookbuilding / Offering)
+      const existingPort = await query.get('SELECT * FROM portfolios WHERE user_id = ? AND company_id = ?', [userId, compRecord.id]);
+      if (existingPort) {
+        const totalOldShares = existingPort.lots_owned * 100;
+        const totalNewShares = totalOldShares + (numLots * 100);
+        const newAvg = Math.round(((totalOldShares * existingPort.avg_buy_price) + totalCost) / totalNewShares);
+        await query.run('UPDATE portfolios SET lots_owned = lots_owned + ?, avg_buy_price = ? WHERE id = ?', [numLots, newAvg, existingPort.id]);
+      } else {
+        await query.run(
+          'INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price) VALUES (?, ?, ?, ?, ?)',
+          [uuidv4(), userId, compRecord.id, numLots, ipo.offering_price]
+        );
+      }
+
+      // Kreditkan dana segar penyerapan Bookbuilding/IPO ke Kas PT Emiten
+      await query.run('UPDATE companies SET company_balance_ib = COALESCE(company_balance_ib, 0) + ? WHERE id = ?', [totalCost, compRecord.id]);
+      const ownerId = ipo.user_id || compRecord.owner_id;
+      if (ownerId) {
+        await query.run('UPDATE users SET company_balance_ib = COALESCE(company_balance_ib, 0) + ? WHERE id = ?', [totalCost, ownerId]);
+      }
     }
 
     // Add to running trades
@@ -2670,27 +2727,28 @@ app.post('/api/ipo/order', async (req, res) => {
       timestamp: nowD.toISOString()
     });
 
-    const updatedUser = await query.get('SELECT balance_ib FROM users WHERE id = ?', [userId]);
+    const updatedUser = await query.get('SELECT balance_ib, company_balance_ib FROM users WHERE id = ?', [userId]);
     const updatedIpo = await query.get('SELECT * FROM ipo_offerings WHERE id = ?', [ipoId]);
 
     await recordCashFlow({
       userId,
       companyId: compRecord ? compRecord.id : (ipo.company_id || null),
-      accountType: 'PERSONAL',
+      accountType: deductCompany > 0 && deductPersonal === 0 ? 'COMPANY' : 'PERSONAL',
       category: 'IPO_SUBSCRIBE',
-      title: `Pemesanan Saham E-IPO ${ipo.symbol} (${numLots} Lot)`,
+      title: `Pembelian Saham E-IPO ${ipo.symbol} (${numLots} Lot)`,
       amountIb: totalCost,
       direction: 'EXPENSE',
-      balanceAfter: updatedUser.balance_ib,
-      notes: `Pemesanan penjatahan E-IPO ${ipo.company_name} @ IB ${ipo.offering_price.toLocaleString('id-ID')}`
+      balanceAfter: deductCompany > 0 && deductPersonal === 0 ? updatedUser.company_balance_ib : updatedUser.balance_ib,
+      notes: `Pembelian ${ipo.status === 'BOOKBUILDING' ? 'Bookbuilding' : 'Penawaran Umum'} E-IPO ${ipo.company_name} @ IB ${ipo.offering_price.toLocaleString('id-ID')}`
     });
 
     io.emit('ipo:ordered', { ipoId, symbol: ipo.symbol, orderedLots: updatedIpo.ordered_lots });
 
     res.json({
       success: true,
-      message: `🎉 Berhasil memesan ${numLots} Lot saham IPO ${ipo.company_name} (${ipo.symbol})! Alokasi dijamin 100% dan akan masuk portofolio saat listing perdana.`,
+      message: `🎉 Berhasil membeli ${numLots.toLocaleString('id-ID')} Lot saham E-IPO ${ipo.company_name} (${ipo.symbol}) pada tahap ${ipo.status === 'BOOKBUILDING' ? 'Bookbuilding' : 'Penawaran Umum'}! Saham telah tercatat di portofolio Anda.`,
       newBalance: updatedUser.balance_ib,
+      newCompanyBalance: updatedUser.company_balance_ib,
       orderedLots: updatedIpo.ordered_lots
     });
   } catch (err) {
@@ -2745,7 +2803,7 @@ app.post('/api/ipo/list-now', async (req, res) => {
     }
 
     // Distribute alloted IPO shares to users' portfolios!
-    const orders = await query.all('SELECT * FROM ipo_orders WHERE ipo_id = ?', [ipoId]);
+    const orders = await query.all("SELECT * FROM ipo_orders WHERE ipo_id = ? AND status = 'ALLOTED'", [ipoId]);
     for (const ord of orders) {
       const existingPort = await query.get('SELECT * FROM portfolios WHERE user_id = ? AND company_id = ?', [ord.user_id, compId]);
       if (existingPort) {
@@ -2759,6 +2817,7 @@ app.post('/api/ipo/list-now', async (req, res) => {
           [uuidv4(), ord.user_id, compId, ord.lots, ipo.offering_price]
         );
       }
+      await query.run("UPDATE ipo_orders SET status = 'CREDITED' WHERE id = ?", [ord.id]);
     }
 
     // Dana segar hasil penyerapan IPO publik masuk ke Kas Brankas Perusahaan (Emiten)
@@ -2846,8 +2905,8 @@ app.post('/api/ipo/advance-status', async (req, res) => {
         );
       }
 
-      // Distribusikan saham pesanan IPO ke portofolio
-      const orders = await query.all('SELECT * FROM ipo_orders WHERE ipo_id = ?', [ipoId]);
+      // Distribusikan saham pesanan IPO yang belum dikreditkan ke portofolio
+      const orders = await query.all("SELECT * FROM ipo_orders WHERE ipo_id = ? AND status = 'ALLOTED'", [ipoId]);
       for (const ord of orders) {
         const existingPort = await query.get('SELECT * FROM portfolios WHERE user_id = ? AND company_id = ?', [ord.user_id, compId]);
         if (existingPort) {
@@ -2861,6 +2920,7 @@ app.post('/api/ipo/advance-status', async (req, res) => {
             [uuidv4(), ord.user_id, compId, ord.lots, ipo.offering_price]
           );
         }
+        await query.run("UPDATE ipo_orders SET status = 'CREDITED' WHERE id = ?", [ord.id]);
       }
 
       io.emit('ipo:listed', { ipoId, symbol: ipo.symbol, araPrice, araPct });

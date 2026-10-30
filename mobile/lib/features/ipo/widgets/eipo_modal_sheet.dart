@@ -562,50 +562,65 @@ void showEipoMarketSheet(BuildContext context, {VoidCallback? onOpenRegister}) {
                                                           ),
                                                         ),
                                                       ),
-                                                    ] else if (provider.user?.hasPt == true && status == 'BOOKBUILDING') ...[
-                                                      // Tombol Tawar Mitra Pre-IPO (Bagi PT Lain)
-                                                      Builder(
-                                                        builder: (context) {
-                                                          final myBid = ipo['my_bid'];
-                                                          final hasBid = myBid != null;
-                                                          final bidStatus = myBid != null ? myBid['status']?.toString() : null;
-                                                          final isAccepted = bidStatus == 'ACCEPTED';
-                                                          return Expanded(
-                                                            child: ElevatedButton.icon(
-                                                              onPressed: () {
-                                                                showDialog(
-                                                                  context: context,
-                                                                  builder: (_) => IpoBiddingDialog(
-                                                                    ipoOffering: ipo,
-                                                                    userId: provider.user!.id,
-                                                                    ptName: provider.user!.ptName,
-                                                                    companyBalance: provider.user!.companyBalanceIb,
-                                                                  ),
-                                                                );
-                                                              },
-                                                              icon: Icon(
-                                                                isAccepted ? Icons.verified_rounded : (hasBid ? Icons.pending_actions_rounded : Icons.handshake_rounded),
-                                                                size: 13,
-                                                                color: Colors.white,
+                                                    ] else if (!isOwner && status == 'BOOKBUILDING') ...[
+                                                      // Tombol 1: Tawar Mitra Pre-IPO (Bagi PT maupun Investor Mitra)
+                                                      if (provider.user != null)
+                                                        Builder(
+                                                          builder: (context) {
+                                                            final myBid = ipo['my_bid'];
+                                                            final hasBid = myBid != null;
+                                                            final bidStatus = myBid != null ? myBid['status']?.toString() : null;
+                                                            final isAccepted = bidStatus == 'ACCEPTED';
+                                                            return Expanded(
+                                                              child: ElevatedButton.icon(
+                                                                onPressed: () {
+                                                                  showDialog(
+                                                                    context: context,
+                                                                    builder: (_) => IpoBiddingDialog(
+                                                                      ipoOffering: ipo,
+                                                                      userId: provider.user!.id,
+                                                                      ptName: provider.user!.ptName,
+                                                                      companyBalance: provider.user!.companyBalanceIb,
+                                                                      personalBalance: provider.user!.balanceIb,
+                                                                    ),
+                                                                  );
+                                                                },
+                                                                icon: Icon(
+                                                                  isAccepted ? Icons.verified_rounded : (hasBid ? Icons.pending_actions_rounded : Icons.handshake_rounded),
+                                                                  size: 13,
+                                                                  color: Colors.white,
+                                                                ),
+                                                                label: Text(
+                                                                  isAccepted
+                                                                      ? 'MITRA (${myBid['requested_percentage']}%)'
+                                                                      : (hasBid ? 'PROPOSAL ${myBid['requested_percentage']}%' : 'BELI MITRA'),
+                                                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 10),
+                                                                ),
+                                                                style: ElevatedButton.styleFrom(
+                                                                  backgroundColor: isAccepted
+                                                                      ? const Color(0xFF10B981)
+                                                                      : (hasBid ? const Color(0xFF0D9488) : const Color(0xFF0284C7)),
+                                                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                                                ),
                                                               ),
-                                                              label: Text(
-                                                                isAccepted
-                                                                    ? 'MITRA TERPILIH (${myBid['requested_percentage']}%)'
-                                                                    : (hasBid ? 'PROPOSAL: ${myBid['requested_percentage']}% ($bidStatus)' : 'TAWAR PRE-IPO'),
-                                                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 10),
-                                                              ),
-                                                              style: ElevatedButton.styleFrom(
-                                                                backgroundColor: isAccepted
-                                                                    ? const Color(0xFF10B981)
-                                                                    : (hasBid ? const Color(0xFF0D9488) : const Color(0xFF0284C7)),
-                                                                padding: const EdgeInsets.symmetric(vertical: 10),
-                                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                                              ),
-                                                            ),
-                                                          );
-                                                        },
-                                                      ),
+                                                            );
+                                                          },
+                                                        ),
                                                       const SizedBox(width: 6),
+                                                      // Tombol 2: Langsung Beli / Pesan Lot Saham Bookbuilding (Bagi Investor & Mitra)
+                                                      Expanded(
+                                                        child: ElevatedButton.icon(
+                                                          onPressed: () => _showOrderIpoDialog(context, provider, ipo),
+                                                          icon: const Icon(Icons.shopping_bag_rounded, size: 13, color: Color(0xFF0F172A)),
+                                                          label: const Text('BELI SAHAM IPO', style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.w900, fontSize: 10)),
+                                                          style: ElevatedButton.styleFrom(
+                                                            backgroundColor: const Color(0xFF10B981),
+                                                            padding: const EdgeInsets.symmetric(vertical: 10),
+                                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                                          ),
+                                                        ),
+                                                      ),
                                                     ],
 
                                                     // Tombol Pesan Saham Ritel (Bagi Publik pada tahap OFFERING)
@@ -614,7 +629,7 @@ void showEipoMarketSheet(BuildContext context, {VoidCallback? onOpenRegister}) {
                                                         child: ElevatedButton.icon(
                                                           onPressed: () => _showOrderIpoDialog(context, provider, ipo),
                                                           icon: const Icon(Icons.shopping_bag_rounded, size: 13, color: Color(0xFF0F172A)),
-                                                          label: const Text('PESAN IPO', style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.w900, fontSize: 11)),
+                                                          label: const Text('BELI / PESAN SAHAM IPO', style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.w900, fontSize: 11)),
                                                           style: ElevatedButton.styleFrom(
                                                             backgroundColor: const Color(0xFF10B981),
                                                             padding: const EdgeInsets.symmetric(vertical: 10),
@@ -928,12 +943,13 @@ void _showAdjustScheduleDialog(BuildContext context, Map<String, dynamic> ipo) {
   );
 }
 
-// Dialog Pesan IPO (Publik Ritel)
+// Dialog Beli / Pesan IPO (Bookbuilding & Penawaran Umum)
 void _showOrderIpoDialog(BuildContext context, GameProvider provider, Map<String, dynamic> ipo) {
   int lots = 10;
   final price = (ipo['offering_price'] as num?)?.toDouble() ?? 2500.0;
   final user = provider.user;
-  final double userBal = user?.balanceIb ?? 0.0;
+  final double userBal = (user?.balanceIb ?? 0.0) + (user?.companyBalanceIb ?? 0.0);
+  final bool isBookbuilding = (ipo['status'] ?? '') == 'BOOKBUILDING';
 
   showDialog(
     context: context,
@@ -951,7 +967,12 @@ void _showOrderIpoDialog(BuildContext context, GameProvider provider, Map<String
                 const Icon(Icons.shopping_bag_rounded, color: Color(0xFF10B981), size: 22),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text('Pemesanan Saham IPO ${ipo['symbol']}', style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+                  child: Text(
+                    isBookbuilding
+                        ? 'Beli Saham Bookbuilding ${ipo['symbol']}'
+                        : 'Beli Saham E-IPO ${ipo['symbol']}',
+                    style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                  ),
                 ),
               ],
             ),
@@ -959,7 +980,7 @@ void _showOrderIpoDialog(BuildContext context, GameProvider provider, Map<String
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Harga Penawaran: IB ${CurrencyFormatter.formatNumberOnly(price)} / lembar', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11)),
+                Text('Harga Penawaran: IB ${CurrencyFormatter.formatNumberOnly(price)} / lembar (IB ${CurrencyFormatter.formatNumberOnly(price * 100)} / Lot)', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11)),
                 const SizedBox(height: 12),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -971,7 +992,7 @@ void _showOrderIpoDialog(BuildContext context, GameProvider provider, Map<String
                           icon: const Icon(Icons.remove_circle_outline, color: Color(0xFF38BDF8)),
                           onPressed: lots > 1 ? () => setDialogState(() => lots -= (lots <= 10 ? 1 : 10)) : null,
                         ),
-                        Text('$lots Lot', style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+                        Text('${CurrencyFormatter.formatNumberOnly(lots)} Lot', style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
                         IconButton(
                           icon: const Icon(Icons.add_circle_outline, color: Color(0xFF38BDF8)),
                           onPressed: () => setDialogState(() => lots += 10),
@@ -980,11 +1001,34 @@ void _showOrderIpoDialog(BuildContext context, GameProvider provider, Map<String
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [10, 50, 100, 500, 1000].map((preset) {
+                    final isSel = lots == preset;
+                    return InkWell(
+                      onTap: () => setDialogState(() => lots = preset),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: isSel ? const Color(0xFF0284C7) : const Color(0xFF1E293B),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: isSel ? const Color(0xFF38BDF8) : const Color(0xFF334155)),
+                        ),
+                        child: Text(
+                          '$preset Lot',
+                          style: TextStyle(color: isSel ? Colors.white : const Color(0xFF94A3B8), fontSize: 10, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 12),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Total Biaya Pemesanan:', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11)),
+                    const Text('Total Biaya Pembelian:', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11)),
                     Text(CurrencyFormatter.formatFull(totalCost), style: const TextStyle(color: Color(0xFF34D399), fontSize: 13, fontWeight: FontWeight.bold)),
                   ],
                 ),
@@ -992,7 +1036,7 @@ void _showOrderIpoDialog(BuildContext context, GameProvider provider, Map<String
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Saldo Kas Pribadi Anda:', style: TextStyle(color: Color(0xFF64748B), fontSize: 10)),
+                    const Text('Total Kas Tersedia (Pribadi + PT):', style: TextStyle(color: Color(0xFF64748B), fontSize: 10)),
                     Text(CurrencyFormatter.formatFull(userBal), style: TextStyle(color: canAfford ? const Color(0xFF38BDF8) : const Color(0xFFEF4444), fontSize: 10, fontWeight: FontWeight.bold)),
                   ],
                 ),
@@ -1012,7 +1056,7 @@ void _showOrderIpoDialog(BuildContext context, GameProvider provider, Map<String
                           } else {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                content: Text('🎉 Berhasil memesan $lots Lot saham IPO ${ipo['symbol']}! Masuk antrian penjatahan bursa.'),
+                                content: Text('🎉 Berhasil membeli ${CurrencyFormatter.formatNumberOnly(lots)} Lot saham E-IPO ${ipo['symbol']}! Saham telah masuk ke portofolio Anda.'),
                                 backgroundColor: const Color(0xFF10B981),
                               ),
                             );
@@ -1024,7 +1068,7 @@ void _showOrderIpoDialog(BuildContext context, GameProvider provider, Map<String
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
-                child: const Text('KONFIRMASI PESANAN', style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.w900)),
+                child: const Text('BELI SEKARANG', style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.w900)),
               ),
             ],
           );

@@ -697,7 +697,7 @@ class MarketSimulationEngine {
     }
   }
 
-  // Simulasi Penyerapan Lot IPO Bertahap oleh Ritel Bursa
+  // Simulasi Penyerapan Lot IPO Bertahap oleh Ritel Bursa & Bidding Mitra Strategis
   async simulateIpoAbsorption() {
     try {
       const activeIpos = await query.all(
@@ -713,6 +713,40 @@ class MarketSimulationEngine {
           const newOrdered = Math.min(targetTotalLots, currentOrdered + incremental);
           await query.run('UPDATE ipo_offerings SET ordered_lots = ? WHERE id = ?', [newOrdered, ipo.id]);
           this.io.emit('ipo:ordered', { ipoId: ipo.id, symbol: ipo.symbol, orderedLots: newOrdered });
+        }
+
+        // Pada tahap BOOKBUILDING, pastikan Konglomerat Bot juga mengajukan Proposal Kemitraan Strategis (ipo_bids)
+        if (ipo.status === 'BOOKBUILDING') {
+          const existingBids = await query.all('SELECT bidder_user_id FROM ipo_bids WHERE ipo_id = ?', [ipo.id]);
+          if ((existingBids || []).length < 3) {
+            const existingBidderIds = new Set((existingBids || []).map(b => b.bidder_user_id));
+            const botCandidates = await query.all(
+              "SELECT id, username, pt_name, company_balance_ib FROM users WHERE id LIKE 'user-bot-%' AND has_pt = 1 AND company_balance_ib >= 2500000000 LIMIT 8"
+            );
+            const pitches = [
+              'Aliansi strategis integrasi rantai pasok & distribusi regional Capital Federation.',
+              'Komitmen anchor investor jangka panjang untuk memperkuat likuiditas dan ekspansi pabrik baru.',
+              'Sinergi ekosistem teknologi & pembiayaan korporasi antar-holding konglomerat.'
+            ];
+            for (const bot of (botCandidates || [])) {
+              if (existingBidderIds.size >= 3) break;
+              if (existingBidderIds.has(bot.id) || bot.id === ipo.user_id) continue;
+              const pctOptions = [2, 3, 5];
+              const pct = pctOptions[existingBidderIds.size % pctOptions.length];
+              const sharesCount = Math.round(ipo.total_offering_shares * (pct / 100.0));
+              const totalCost = sharesCount * ipo.offering_price;
+              if ((bot.company_balance_ib || 0) >= totalCost) {
+                const bidId = uuidv4();
+                const pitch = pitches[existingBidderIds.size % pitches.length];
+                await query.run(
+                  `INSERT INTO ipo_bids (id, ipo_id, bidder_user_id, bidder_company_name, requested_percentage, offered_price_per_share, total_investment_ib, strategic_pitch, status)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')`,
+                  [bidId, ipo.id, bot.id, bot.pt_name, pct, ipo.offering_price, totalCost, pitch]
+                );
+                existingBidderIds.add(bot.id);
+              }
+            }
+          }
         }
       }
     } catch (err) {
