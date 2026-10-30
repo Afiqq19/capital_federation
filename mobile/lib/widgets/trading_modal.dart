@@ -63,11 +63,16 @@ class _TradingModalState extends State<TradingModal> {
 
     final cash = user?.balanceIb ?? 0.0;
     final bool isSuspended = widget.company.status == 'SUSPENDED';
+    final int maxFloatingLots = (widget.company.circulatingShares > 0
+        ? (widget.company.circulatingShares / 100).floor()
+        : ((widget.company.totalShares * 0.3) / 100).floor()).clamp(1, 100000000);
+    final int availableFloatingLots = max(0, maxFloatingLots - ownedLots);
+    final bool isExceedingFloating = _orderType == 'BUY' && (_lots + ownedLots > maxFloatingLots);
     final bool isInsufficientCash = _orderType == 'BUY' && totalAmount > cash;
     final bool isNoHoldings = _orderType == 'SELL' && ownedLots <= 0;
     final bool isExcessiveLots = _orderType == 'SELL' && _lots > ownedLots;
     final bool isInvalidLots = _lots < 1;
-    final bool canSubmit = !_isSubmitting && !isSuspended && !isInsufficientCash && !isNoHoldings && !isExcessiveLots && !isInvalidLots;
+    final bool canSubmit = !_isSubmitting && !isSuspended && !isInsufficientCash && !isNoHoldings && !isExcessiveLots && !isInvalidLots && !isExceedingFloating;
 
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
@@ -374,15 +379,35 @@ class _TradingModalState extends State<TradingModal> {
                           _buildPresetChip('MAX', () {
                             final lotCost = widget.company.currentPrice * 100 * (user?.isBlueChip == true ? 1.0005 : 1.0015);
                             final maxAffordable = lotCost > 0 ? (cash / lotCost).floor() : 0;
-                            if (maxAffordable > 0) {
-                              _updateLots(maxAffordable);
-                            } else {
+                            final maxBuyable = min(maxAffordable, availableFloatingLots);
+                            if (maxAffordable <= 0) {
+                              ScaffoldMessenger.of(context).clearSnackBars();
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
                                   content: Text('Saldo kas pribadi tidak cukup untuk membeli 1 Lot.'),
                                   backgroundColor: Colors.red,
                                 ),
                               );
+                            } else if (availableFloatingLots <= 0) {
+                              ScaffoldMessenger.of(context).clearSnackBars();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Anda telah memiliki seluruh saham publik beredar (${currencyFormatter.format(maxFloatingLots)} lot) emiten ini.'),
+                                  backgroundColor: const Color(0xFFF59E0B),
+                                ),
+                              );
+                            } else {
+                              _updateLots(max(1, maxBuyable));
+                              if (maxBuyable < maxAffordable) {
+                                ScaffoldMessenger.of(context).clearSnackBars();
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Lot disesuaikan dengan sisa batas saham publik beredar di bursa: ${currencyFormatter.format(maxBuyable)} Lot.'),
+                                    backgroundColor: const Color(0xFF0284C7),
+                                    duration: const Duration(milliseconds: 1400),
+                                  ),
+                                );
+                              }
                             }
                           }, isHighlight: true),
                         ]
@@ -456,7 +481,7 @@ class _TradingModalState extends State<TradingModal> {
                       : null,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _orderType == 'BUY'
-                        ? (isInsufficientCash ? const Color(0xFF7F1D1D) : const Color(0xFF10B981))
+                        ? (isInsufficientCash || isExceedingFloating ? const Color(0xFF7F1D1D) : const Color(0xFF10B981))
                         : (isNoHoldings || isExcessiveLots ? const Color(0xFF334155) : const Color(0xFFEF4444)),
                     disabledBackgroundColor: const Color(0xFF1E293B),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -476,9 +501,11 @@ class _TradingModalState extends State<TradingModal> {
                                       ? 'LOT MELEBIHI KEPEMILIKAN'
                                       : isInsufficientCash
                                           ? 'SALDO KAS TIDAK MENCUKUPI'
-                                          : isInvalidLots
-                                              ? 'MASUKKAN JUMLAH LOT'
-                                              : 'KONFIRMASI ${_orderType == 'BUY' ? 'BELI' : 'JUAL'} ${currencyFormatter.format(_lots)} LOT'),
+                                          : isExceedingFloating
+                                              ? 'MELEBIHI KUOTA PUBLIK (MAX: ${currencyFormatter.format(availableFloatingLots)} LOT)'
+                                              : isInvalidLots
+                                                  ? 'MASUKKAN JUMLAH LOT'
+                                                  : 'KONFIRMASI ${_orderType == 'BUY' ? 'BELI' : 'JUAL'} ${currencyFormatter.format(_lots)} LOT'),
                           style: TextStyle(
                             color: canSubmit ? Colors.white : const Color(0xFF94A3B8),
                             fontWeight: FontWeight.w900,

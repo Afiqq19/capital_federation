@@ -95,6 +95,7 @@ class CompanyModel {
   final double basePrice;
   final double priceChangePct;
   final int totalShares;
+  final int circulatingShares;
   final double dividendRate;
   final double fundamentalScore;
   final bool isBot;
@@ -132,6 +133,7 @@ class CompanyModel {
     required this.basePrice,
     required this.priceChangePct,
     this.totalShares = 10000000,
+    this.circulatingShares = 2000000,
     this.dividendRate = 0.05,
     this.fundamentalScore = 85.0,
     this.isBot = true,
@@ -204,6 +206,7 @@ class CompanyModel {
       basePrice: base,
       priceChangePct: double.parse(changePct.toStringAsFixed(2)),
       totalShares: json['total_shares'] ?? 10000000,
+      circulatingShares: (json['circulating_shares'] ?? json['circulatingShares'] ?? ((json['total_shares'] ?? 10000000) * 0.2).round()).toInt(),
       dividendRate: (json['dividend_rate'] ?? 0.05).toDouble(),
       fundamentalScore: (json['fundamental_score'] ?? 85.0).toDouble(),
       isBot: json['is_bot'] == 1 || json['is_bot'] == true || json['isBot'] == true,

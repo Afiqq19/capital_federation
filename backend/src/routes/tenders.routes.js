@@ -83,8 +83,24 @@ module.exports = function(io) {
       if (companyId && companyId !== 'primary') {
         comp = await query.get('SELECT * FROM companies WHERE id = ?', [companyId]);
       }
-      if (!comp && user.has_pt) {
-        comp = await query.get('SELECT * FROM companies WHERE owner_id = ? OR name = ? LIMIT 1', [userId, user.pt_name]);
+      if (!comp && (user.has_pt || (user.pt_name && user.pt_name.trim().length > 0))) {
+        comp = await query.get('SELECT * FROM companies WHERE owner_id = ? OR name = ? OR symbol = ? LIMIT 1', [userId, user.pt_name, user.pt_symbol || '']);
+        if (!comp && user.has_pt) {
+          const newCompId = uuidv4();
+          const newCompName = user.pt_name || `PT. ${user.username} Niaga`;
+          const newCompSymbol = (user.pt_symbol && user.pt_symbol.length === 4) ? user.pt_symbol : (user.username.substring(0, 4).toUpperCase());
+          await query.run(`
+            INSERT INTO companies (id, owner_id, name, symbol, sector, current_price, circulating_shares, total_shares, is_ipo, fundamental_score, company_balance_ib, founder_shares_sold, is_acquired, dividend_rate, uma_flag, is_seized)
+            VALUES (?, ?, ?, ?, ?, 1000, 0, 10000000, 0, 75.0, ?, 0, 0, 0.05, 0, 0)
+          `, [newCompId, userId, newCompName, newCompSymbol, user.sector || 'Teknologi', user.company_balance_ib || 0]);
+          comp = await query.get('SELECT * FROM companies WHERE id = ?', [newCompId]);
+        }
+      }
+
+      if (!comp) {
+        return res.status(400).json({
+          error: 'Perseroan Terbatas (PT) tidak ditemukan. Anda wajib mendirikan PT terlebih dahulu sebelum dapat mengajukan proposal tender pemerintah.'
+        });
       }
 
       // Validasi Status Sitaan: PT yang disita TIDAK boleh mengikuti tender
@@ -159,8 +175,8 @@ module.exports = function(io) {
       );
 
       const bidId = uuidv4();
-      const compName = comp ? comp.name : (user.pt_name || `PT. ${user.username} Niaga`);
-      const targetCompId = comp ? comp.id : (user.id);
+      const compName = comp.name;
+      const targetCompId = comp.id;
 
       await query.run(
         `INSERT INTO tender_bids (id, tender_id, company_id, user_id, company_name, pt_level, rd_level, capacity_staff, bid_pitch, bid_score, status)
@@ -280,12 +296,15 @@ module.exports = function(io) {
         await query.run('UPDATE tender_bids SET status = "REJECTED" WHERE tender_id = ? AND id != ?', [tenderId, bidId]);
         await query.run('UPDATE tender_bids SET status = "ACCEPTED" WHERE id = ?', [bidId]);
 
-        // 2. Update status tender
+        // 2. Update status tender (validasi FK winner_company_id ke tabel companies)
+        const compExists = await query.get('SELECT id FROM companies WHERE id = ?', [bid.company_id]);
+        const winnerCompanyId = compExists ? compExists.id : null;
+
         await query.run(
           `UPDATE government_tenders 
            SET status = "AWARDED", winner_company_id = ?, winner_user_id = ?, winner_company_name = ?
            WHERE id = ?`,
-          [bid.company_id, bid.user_id, bid.company_name, tenderId]
+          [winnerCompanyId, bid.user_id, bid.company_name, tenderId]
         );
 
         // 3. Masukkan uang kontrak ke Kas Perusahaan (company_balance_ib)

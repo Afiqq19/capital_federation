@@ -4176,7 +4176,16 @@ async function executeApprovedAcquisition({
     WHERE id = ?
   `, [userId, buyerUser.username, companyId]);
 
-  // 4. Update Portofolio Saham Pembeli & Penjual
+  // 4. Sinkronisasi Data Saham Pendiri & Perhitungan Sisa Persentase
+  const prevFounderRow = await query.get(`
+    SELECT * FROM company_shareholders 
+    WHERE company_id = ? ORDER BY percentage DESC LIMIT 1
+  `, [companyId]);
+  const prevFounderPct = prevFounderRow ? prevFounderRow.percentage : 60.0;
+  const remainingFounderPct = Math.max(0, parseFloat((prevFounderPct - pct).toFixed(1)));
+  const remainingPctForOthers = Math.max(0, parseFloat((100.0 - pct - remainingFounderPct).toFixed(1)));
+
+  // 4b. Update Portofolio Saham Pembeli & Penjual
   const acquiredLots = Math.round(((company.total_shares || 10000000) * (pct / 100.0)) / 100);
   const sharesTransferred = acquiredLots * 100;
   const avgPrice = Math.max(50, Math.round(company.current_price * discountFactor));
@@ -4265,14 +4274,6 @@ async function executeApprovedAcquisition({
   }
 
   // 5. Sinkronisasi Struktur Pemegang Saham (Cap Table)
-  const prevFounderRow = await query.get(`
-    SELECT * FROM company_shareholders 
-    WHERE company_id = ? ORDER BY percentage DESC LIMIT 1
-  `, [companyId]);
-  const prevFounderPct = prevFounderRow ? prevFounderRow.percentage : 60.0;
-  const remainingFounderPct = Math.max(0, parseFloat((prevFounderPct - pct).toFixed(1)));
-  const remainingPctForOthers = Math.max(0, parseFloat((100.0 - pct - remainingFounderPct).toFixed(1)));
-
   await query.run('DELETE FROM company_shareholders WHERE company_id = ?', [companyId]);
 
   const totalShares = company.total_shares || 10000000;
@@ -6189,14 +6190,14 @@ const localBuiltApkPath = path.join(__dirname, '../../mobile/build/app/outputs/f
 
 async function getApkSettingsMap() {
   const defaults = {
-    apk_version: '1.6.0',
-    apk_build_number: '14',
+    apk_version: '1.6.1',
+    apk_build_number: '15',
     apk_min_android: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
     apk_file_size_mb: '25.0 MB',
-    apk_release_notes: 'Sistem Rollover Sesi Baru Bursa & Multi-Sesi ARA/ARB, Kontrol Hapus Perusahaan Terkonfirmasi di Terminal Admin, Sinkronisasi PT Utama & Anak Perusahaan, Alokasi Saham Publik Ritel Tbk., dan Pencegahan Dobel Posting Warta.',
+    apk_release_notes: 'Perbaikan Total Engine M&A Akuisisi, Penyesuaian Beli Saham Kuota Publik Beredar, Eliminasi Antrean Notifikasi, Sinkronisasi Integritas Tender Nasional, dan Perbaikan Tema Gelap Sheet.',
     apk_external_url: '',
-    apk_download_count: '248',
-    apk_sha256: '53b6f1498986e965af400d3b2d6a326d42f149ecf7f9a315eac7692dae32276e',
+    apk_download_count: '272',
+    apk_sha256: '830fdfd04a1bb6476ca99c4758f5cd10fbf0424358a91b14a0580cd2a4580110',
     apk_updated_at: new Date().toISOString(),
   };
   try {
@@ -6206,11 +6207,11 @@ async function getApkSettingsMap() {
         defaults[r.key] = String(r.value);
       }
     }
-    if (parseInt(defaults.apk_build_number || '0', 10) < 14) {
-      defaults.apk_version = '1.6.0';
-      defaults.apk_build_number = '14';
+    if (parseInt(defaults.apk_build_number || '0', 10) < 15) {
+      defaults.apk_version = '1.6.1';
+      defaults.apk_build_number = '15';
       defaults.apk_file_size_mb = '25.0 MB';
-      defaults.apk_release_notes = 'Sistem Rollover Sesi Baru Bursa & Multi-Sesi ARA/ARB, Kontrol Hapus Perusahaan Terkonfirmasi di Terminal Admin, Sinkronisasi PT Utama & Anak Perusahaan, Alokasi Saham Publik Ritel Tbk., dan Pencegahan Dobel Posting Warta.';
+      defaults.apk_release_notes = 'Perbaikan Total Engine M&A Akuisisi, Penyesuaian Beli Saham Kuota Publik Beredar, Eliminasi Antrean Notifikasi, Sinkronisasi Integritas Tender Nasional, dan Perbaikan Tema Gelap Sheet.';
     }
   } catch (_) {}
   return defaults;

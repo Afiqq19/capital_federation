@@ -58,10 +58,25 @@ class CapitalFederationApp extends StatelessWidget {
       theme: ThemeData(
         brightness: Brightness.dark,
         scaffoldBackgroundColor: const Color(0xFF070B14),
+        canvasColor: const Color(0xFF070B14),
         colorScheme: const ColorScheme.dark(
           primary: Color(0xFF38BDF8),
           secondary: Color(0xFF10B981),
           surface: Color(0xFF0F172A),
+        ),
+        bottomSheetTheme: const BottomSheetThemeData(
+          backgroundColor: Colors.transparent,
+          modalBackgroundColor: Colors.transparent,
+          surfaceTintColor: Colors.transparent,
+          elevation: 0,
+        ),
+        dialogTheme: const DialogTheme(
+          backgroundColor: Color(0xFF0F172A),
+          surfaceTintColor: Colors.transparent,
+        ),
+        cardTheme: const CardTheme(
+          color: Color(0xFF0F172A),
+          surfaceTintColor: Colors.transparent,
         ),
         textTheme: GoogleFonts.outfitTextTheme(ThemeData.dark().textTheme),
         useMaterial3: true,
