@@ -60,7 +60,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> with SingleTickerProvid
       }
     }
 
-    final bool amI9Naga = myRank != null && myRank <= 9;
+    final bool amI9Naga = myRank != null && myRank <= 12;
     final bool amIVip = currentUser?.isVip == true;
 
     return Scaffold(
@@ -102,7 +102,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> with SingleTickerProvid
                             ],
                           ),
                           child: Text(
-                            amI9Naga ? '🐉 9 NAGA #$myRank' : '💎 VIP SULTAN',
+                            amI9Naga ? '🐉 12 NAGA #$myRank' : '💎 VIP SULTAN',
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 9.5,
@@ -114,7 +114,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> with SingleTickerProvid
                   ),
                   const SizedBox(height: 4),
                   const Text(
-                    'Peringkat Top 100 Taipan, Sultan 9 Naga & Obrolan Pasar Global.',
+                    'Peringkat Top 100 Taipan, Sultan 12 Naga & Obrolan Pasar Global.',
                     style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
                   ),
                   const SizedBox(height: 12),
@@ -165,8 +165,8 @@ class _LeaderboardTabState extends State<LeaderboardTab> with SingleTickerProvid
                             final item = provider.leaderboard[index];
                             final int rank = (item['rank'] is int) ? item['rank'] as int : (index + 1);
                             final String badge = (item['badge'] ?? 'REGULER').toString();
-                            final bool isTop9 = rank <= 9;
-                            final bool isTaipan = rank > 9 && rank <= 25;
+                            final bool isTop9 = rank <= 12;
+                            final bool isTaipan = rank > 12 && rank <= 35;
                             final bool isVipUser = item['isVip'] == true ||
                                 (item['role']?.toString().toUpperCase() == 'VIP') ||
                                 badge.toUpperCase().contains('VIP');
@@ -300,7 +300,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> with SingleTickerProvid
                                                   borderRadius: BorderRadius.circular(4),
                                                 ),
                                                 child: const Text(
-                                                  '🐉 9 NAGA',
+                                                  '🐉 12 NAGA',
                                                   style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w900),
                                                 ),
                                               )
@@ -406,10 +406,10 @@ class _LeaderboardTabState extends State<LeaderboardTab> with SingleTickerProvid
                             Expanded(
                               child: Text(
                                 amI9Naga
-                                    ? '🐉 AURA SULTAN 9 NAGA AKTIF (#$myRank): Pesan Anda tampil dengan Bingkai Emas & Mahkota Naga di seluruh bursa!'
+                                    ? '🐉 AURA SULTAN 12 NAGA AKTIF (#$myRank): Pesan Anda tampil dengan Bingkai Emas & Mahkota Naga di seluruh bursa!'
                                     : amIVip
-                                        ? '💎 AURA VIP SULTAN AKTIF: Pesan Anda memiliki Lencana Berlian VIP! Tembus Top 9 untuk membuka Efek Naga Emas.'
-                                        : '👑 PRIVILEGE SULTAN: Tembus Peringkat Top 9 (9 NAGA) atau VIP agar chat Anda tampil berlapis Emas & disegani investor!',
+                                        ? '💎 AURA VIP SULTAN AKTIF: Pesan Anda memiliki Lencana Berlian VIP! Tembus Top 12 untuk membuka Efek Naga Emas.'
+                                        : '👑 PRIVILEGE SULTAN: Tembus Peringkat Top 12 (12 NAGA) atau VIP agar chat Anda tampil berlapis Emas & disegani investor!',
                                 style: const TextStyle(
                                   color: Color(0xFFFDE68A),
                                   fontSize: 10,
@@ -439,8 +439,8 @@ class _LeaderboardTabState extends State<LeaderboardTab> with SingleTickerProvid
                                   final lbInfo = rankByUser[msg.userId] ?? rankByUsername[msg.username.toLowerCase()];
                                   final int? liveRank = msg.rank ?? (lbInfo?['rank'] as int?);
                                   final bool isBank = msg.isBankSentral;
-                                  final bool is9Naga = !isBank && (msg.is9Naga || (liveRank != null && liveRank <= 9));
-                                  final bool isTaipan = !isBank && !is9Naga && (msg.isTaipan || (liveRank != null && liveRank > 9 && liveRank <= 25));
+                                  final bool is9Naga = !isBank && (msg.is12Naga || (liveRank != null && liveRank <= 12));
+                                  final bool isTaipan = !isBank && !is9Naga && (msg.isTaipan || (liveRank != null && liveRank > 12 && liveRank <= 35));
                                   final bool isVip = msg.hasVipBadge ||
                                       (lbInfo?['isVip'] == true) ||
                                       (lbInfo?['role']?.toString().toUpperCase() == 'VIP') ||
@@ -571,7 +571,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> with SingleTickerProvid
                                               children: [
                                                 Text(
                                                   is9Naga
-                                                      ? '🐉 SULTAN 9 NAGA • PERINGKAT #${liveRank ?? 1} BURSA'
+                                                      ? '🐉 SULTAN 12 NAGA • PERINGKAT #${liveRank ?? 1} BURSA'
                                                       : isVip
                                                           ? '💎 INVESTOR VIP SULTAN EKSEKUTIF'
                                                           : '🏛️ SIARAN RESMI OTORITAS BANK SENTRAL',
@@ -665,7 +665,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> with SingleTickerProvid
                                                             borderRadius: BorderRadius.circular(4),
                                                           ),
                                                           child: Text(
-                                                            '🐉 9 NAGA${liveRank != null ? " #$liveRank" : ""}',
+                                                            '🐉 12 NAGA${liveRank != null ? " #$liveRank" : ""}',
                                                             style: const TextStyle(
                                                               color: Colors.white,
                                                               fontSize: 8,
@@ -810,7 +810,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> with SingleTickerProvid
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Text(
-                                  amI9Naga ? '🐉 9 NAGA' : '💎 VIP',
+                                  amI9Naga ? '🐉 12 NAGA' : '💎 VIP',
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 9,
@@ -825,7 +825,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> with SingleTickerProvid
                                 style: const TextStyle(color: Colors.white, fontSize: 13),
                                 decoration: InputDecoration(
                                   hintText: amI9Naga
-                                      ? 'Kirim titah Sultan 9 Naga ke lantai bursa...'
+                                      ? 'Kirim titah Sultan 12 Naga ke lantai bursa...'
                                       : amIVip
                                           ? 'Kirim pesan eksekutif VIP ke bursa...'
                                           : 'Kirim pesan / rumor pasar bursa...',

@@ -643,7 +643,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
       );
     }
 
-    // Hitung peringkat dan status 9 Naga
+    // Hitung peringkat dan status 12 Naga
     int? myRank;
     for (int i = 0; i < provider.leaderboard.length; i++) {
       final row = provider.leaderboard[i];
@@ -654,8 +654,8 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
         break;
       }
     }
-    final bool is9Naga = myRank != null && myRank <= 9;
-    final bool isTaipan = myRank != null && myRank > 9 && myRank <= 25;
+    final bool is9Naga = myRank != null && myRank <= 12;
+    final bool isTaipan = myRank != null && myRank > 12 && myRank <= 35;
     final bool isVip = user.isVip;
 
     return Scaffold(
@@ -681,7 +681,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: const Text(
-                      '🐉 9 NAGA',
+                      '🐉 12 NAGA',
                       style: TextStyle(color: Colors.white, fontSize: 8.5, fontWeight: FontWeight.w900),
                     ),
                   ),
@@ -836,7 +836,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
-                          'Peringkat #${rank ?? 1} 9 NAGA',
+                          'Peringkat #${rank ?? 1} 12 NAGA',
                           style: const TextStyle(color: Colors.black, fontSize: 8.5, fontWeight: FontWeight.w900),
                         ),
                       )
@@ -1197,7 +1197,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
 
     final bool hasNewer = _compareVersions(serverVer, serverBuild, ApiService.currentAppVersion, ApiService.currentBuildNumber);
     final notes = _serverVersionData?['releaseNotes']?.toString() ??
-        'Ticker Saham 4-Huruf Resmi (Tanpa Angka), Perbaikan Nama PT, Efek Emas Chat Sultan 9 Naga & VIP, dan Deteksi Update Otomatis';
+        'Ekspansi 12 Naga & 1.000+ Konglomerat, Perbaikan Profil Realtime, Validasi Pendirian PT, dan Performa Optimal';
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -1337,13 +1337,13 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
   }
 
   // ===========================================================================
-  // TAB 2: STATUS VIP & PRESTISE 9 NAGA
+  // TAB 2: STATUS VIP & PRESTISE 12 NAGA
   // ===========================================================================
   Widget _buildVipAndPrestigeTab(UserModel user, bool is9Naga, bool isVip) {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
       children: [
-        // Kartu Hak Istimewa 9 Naga
+        // Kartu Hak Istimewa 12 Naga
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
@@ -1363,14 +1363,14 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                   Text('🐉', style: TextStyle(fontSize: 20)),
                   SizedBox(width: 8),
                   Text(
-                    'Hak Istimewa Sultan 9 Naga',
+                    'Hak Istimewa Sultan 12 Naga',
                     style: TextStyle(color: Color(0xFFFDE68A), fontWeight: FontWeight.w900, fontSize: 14),
                   ),
                 ],
               ),
               const SizedBox(height: 6),
               const Text(
-                'Top 9 Konglomerat dengan Nilai Kekayaan Bersih tertinggi di Republik Federasi memiliki pengaruh dominan terhadap pasar modal.',
+                'Top 12 Konglomerat dengan Nilai Kekayaan Bersih tertinggi di Republik Federasi memiliki pengaruh dominan terhadap pasar modal.',
                 style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 11, height: 1.35),
               ),
               const SizedBox(height: 12),

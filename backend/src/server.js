@@ -350,6 +350,13 @@ app.post('/api/company/found', async (req, res) => {
     const user = await query.get('SELECT * FROM users WHERE id = ?', [userId]);
     if (!user) return res.status(404).json({ error: 'User tidak ditemukan' });
 
+    // Dilarang menggunakan akhiran Tbk. saat mendirikan PT baru (Tbk hanya setelah IPO)
+    if (/\bTbk\.?\b/i.test(ptName)) {
+      return res.status(400).json({
+        error: 'Pelanggaran Regulasi Bursa & Notaris IPMC: Nama perseroan baru dilarang menggunakan akhiran "Tbk.". Status Terbuka (Tbk.) hanya diperoleh secara sah setelah perusahaan sukses melantai di bursa efek melalui proses IPO!'
+      });
+    }
+
     // Format nama resmi perseroan dengan titik: PT. [Nama] (Non-Tbk sampai resmi IPO)
     const officialName = formatCorporateName(ptName, false);
 
@@ -2900,8 +2907,8 @@ app.post('/api/ipo/list-now', async (req, res) => {
 
     if (!comp) {
       await query.run(
-        `INSERT INTO companies (id, symbol, name, sector, is_bot, status, current_price, base_price, total_shares, circulating_shares, dividend_rate, fundamental_score, owner_id, is_ipo, description, prev_close, daily_high, daily_low)
-         VALUES (?, ?, ?, ?, ?, 'HEALTHY', ?, ?, ?, ?, 0.04, 88.0, ?, 1, ?, ?, ?, ?)`,
+        `INSERT INTO companies (id, symbol, name, sector, is_bot, status, current_price, base_price, total_shares, circulating_shares, dividend_rate, fundamental_score, owner_id, is_ipo, listing_status, description, prev_close, daily_high, daily_low)
+         VALUES (?, ?, ?, ?, ?, 'HEALTHY', ?, ?, ?, ?, 0.04, 88.0, ?, 1, 'LISTED', ?, ?, ?, ?)`,
         [
           compId,
           ipo.symbol,
@@ -2921,7 +2928,7 @@ app.post('/api/ipo/list-now', async (req, res) => {
       );
     } else {
       await query.run(
-        'UPDATE companies SET current_price = ?, prev_close = ?, daily_high = ?, base_price = ? WHERE id = ?',
+        "UPDATE companies SET is_ipo = 1, listing_status = 'LISTED', current_price = ?, prev_close = ?, daily_high = ?, base_price = ? WHERE id = ?",
         [araPrice, ipo.offering_price, araPrice, ipo.offering_price, compId]
       );
     }
@@ -3106,7 +3113,7 @@ app.get('/api/companies', async (req, res) => {
       SELECT *,
         ROUND(((current_price - CASE WHEN prev_close > 0 THEN prev_close ELSE base_price END) / 
                CASE WHEN prev_close > 0 THEN prev_close ELSE base_price END) * 100, 2) AS price_change_pct
-      FROM companies WHERE (listing_status = 'LISTED' OR listing_status IS NULL)
+      FROM companies WHERE (listing_status = 'LISTED' OR listing_status IS NULL OR is_ipo = 1)
     `;
     const params = [];
 
@@ -4949,7 +4956,7 @@ function formatCleanPtName(rawPtName, hasPt) {
   return stripped ? `PT. ${stripped}` : 'Investor Mandiri';
 }
 
-// Helper menghitung Peringkat Konglomerat Live (Top 9 Naga, Taipan, VIP)
+// Helper menghitung Peringkat Konglomerat Live (Top 12 Naga, Taipan, VIP)
 async function getUserRankMap() {
   const rows = await query.all(`
     SELECT u.id, u.role, u.is_blue_chip,
@@ -4960,11 +4967,17 @@ async function getUserRankMap() {
     WHERE u.role != 'ADMIN'
     GROUP BY u.id
     ORDER BY net_worth DESC
-    LIMIT 100
+    LIMIT 250
   `);
   const map = new Map();
   rows.forEach((r, idx) => {
-    map.set(r.id, { rank: idx + 1, role: r.role, isBlueChip: Boolean(r.is_blue_chip), netWorth: r.net_worth });
+    const rank = idx + 1;
+    const isVipUser = String(r.role || '').toUpperCase() === 'VIP' || Boolean(r.is_blue_chip);
+    let badge = 'REGULER';
+    if (rank <= 12) badge = '12 NAGA';
+    else if (rank <= 35) badge = 'TAIPAN';
+    else if (isVipUser) badge = 'VIP';
+    map.set(r.id, { rank, role: r.role, isBlueChip: Boolean(r.is_blue_chip), isVip: isVipUser || rank <= 12, badge, netWorth: r.net_worth });
   });
   return map;
 }
@@ -4988,8 +5001,8 @@ app.get('/api/leaderboard', async (req, res) => {
       const netWorth = u.balance_ib + u.company_balance_ib + u.stock_valuation;
       const isVipUser = String(u.role || '').toUpperCase() === 'VIP' || Boolean(u.is_blue_chip);
       let badge = 'REGULER';
-      if (index < 9) badge = '9 NAGA';
-      else if (index < 25) badge = 'TAIPAN';
+      if (index < 12) badge = '12 NAGA';
+      else if (index < 35) badge = 'TAIPAN';
       else if (isVipUser) badge = 'VIP';
 
       return {
@@ -5003,7 +5016,7 @@ app.get('/api/leaderboard', async (req, res) => {
         cash: u.balance_ib,
         companyCash: u.company_balance_ib,
         stockValuation: u.stock_valuation,
-        isVip: isVipUser || index < 9,
+        isVip: isVipUser || index < 12,
         badge
       };
     });
@@ -5036,8 +5049,8 @@ app.get('/api/user/public-profile/:userId', async (req, res) => {
     const rank = rankInfo.rank;
     const isVipUser = String(user.role || '').toUpperCase() === 'VIP' || Boolean(user.is_blue_chip);
     let badge = 'REGULER';
-    if (rank <= 9) badge = '9 NAGA';
-    else if (rank <= 25) badge = 'TAIPAN';
+    if (rank <= 12) badge = '12 NAGA';
+    else if (rank <= 35) badge = 'TAIPAN';
     else if (isVipUser) badge = 'VIP';
 
     // Masked Email untuk perlindungan privasi (e.g. "haz***@domain.com")
@@ -5085,21 +5098,49 @@ app.get('/api/user/public-profile/:userId', async (req, res) => {
 
     const netWorth = (user.balance_ib || 0) + (user.company_balance_ib || 0) + totalStockValuation;
 
-    // Anak Perusahaan / Hasil Akuisisi (Subsidiaries)
+    // Ambil PT Utama pemilik
+    const primaryComp = await query.get(
+      `SELECT * FROM companies WHERE owner_id = ? ORDER BY (current_price * total_shares) DESC LIMIT 1`,
+      [user.id]
+    );
+
+    // Hitung level R&D & Tenaga Kerja yang realistis sesuai kasta / kekayaan konglomerat
+    let dynamicRd = Math.max(user.rd_level || 1, primaryComp?.rd_level || 1);
+    let dynamicStaff = Math.max(user.employees_count || 0, primaryComp?.employees_count || 0);
+    let dynamicPtLevel = Math.max(user.pt_level || 1, primaryComp?.pt_level || 1);
+
+    if (rank <= 12) {
+      // 12 NAGA: Sultan elit bursa dengan R&D tingkat tinggi & ratusan staf
+      dynamicRd = Math.max(dynamicRd, 10 + (12 - rank));
+      dynamicStaff = Math.max(dynamicStaff, 220 + ((12 - rank) * 35));
+      dynamicPtLevel = 5;
+    } else if (rank <= 35) {
+      // TAIPAN: Konglomerat mapan
+      dynamicRd = Math.max(dynamicRd, 6 + ((35 - rank) % 4));
+      dynamicStaff = Math.max(dynamicStaff, 55 + ((35 - rank) * 4));
+      dynamicPtLevel = Math.max(dynamicPtLevel, 3);
+    } else if (rank <= 150) {
+      dynamicRd = Math.max(dynamicRd, 3);
+      dynamicStaff = Math.max(dynamicStaff, 25);
+    }
+
+    // Anak Perusahaan / Hasil Akuisisi (Subsidiaries, excluding PT Utama)
     const subsidiaries = await query.all(`
-      SELECT id, name, symbol, sector, current_price, fundamental_score, total_shares
+      SELECT id, name, symbol, sector, current_price, fundamental_score, total_shares, is_ipo, status
       FROM companies
-      WHERE owner_id = ? AND is_seized = 0
-    `, [user.id]);
+      WHERE owner_id = ? AND is_seized = 0 AND id != ?
+      ORDER BY (current_price * total_shares) DESC
+    `, [user.id, primaryComp ? primaryComp.id : '']);
 
     res.json({
       id: user.id,
       username: user.username,
       rank,
       badge,
-      isVip: isVipUser || rank <= 9,
-      is9Naga: rank <= 9,
-      isTaipan: rank > 9 && rank <= 25,
+      isVip: isVipUser || rank <= 12,
+      is12Naga: rank <= 12,
+      is9Naga: rank <= 12,
+      isTaipan: rank > 12 && rank <= 35,
       joinedAt: user.created_at || '2026-10-15T00:00:00.000Z',
       creditScore: user.credit_score || 750,
       creditTier: user.credit_tier || 'STANDARD',
@@ -5116,16 +5157,16 @@ app.get('/api/user/public-profile/:userId', async (req, res) => {
         stockValuation: totalStockValuation
       },
       holding: {
-        hasPt: Boolean(user.has_pt),
-        ptName: formatCleanPtName(user.pt_name, user.has_pt),
-        symbol: user.pt_symbol || (user.is_ipo ? 'TBK' : 'PT'),
-        sector: user.has_pt ? user.sector : 'Ritel Finansial',
-        fundamentalScore: user.fundamental_score || 75,
-        rdLevel: user.rd_level || 1,
-        ptLevel: user.pt_level || 1,
-        employeesCount: user.employees_count || 0,
-        isIpo: Boolean(user.is_ipo),
-        description: user.pt_description || `Holding ${user.pt_name} beroperasi di sektor ${user.sector}.`,
+        hasPt: Boolean(user.has_pt || primaryComp),
+        ptName: formatCleanPtName(primaryComp?.name || user.pt_name, Boolean(user.has_pt || primaryComp)),
+        symbol: primaryComp?.symbol || user.pt_symbol || (user.is_ipo ? 'TBK' : 'PT'),
+        sector: primaryComp?.sector || (user.has_pt ? user.sector : 'Ritel Finansial'),
+        fundamentalScore: primaryComp?.fundamental_score || user.fundamental_score || 85,
+        rdLevel: dynamicRd,
+        ptLevel: dynamicPtLevel,
+        employeesCount: dynamicStaff,
+        isIpo: Boolean(primaryComp?.is_ipo ?? user.is_ipo),
+        description: primaryComp?.description || user.pt_description || `Holding ${user.pt_name} beroperasi di sektor ${user.sector}.`,
         subsidiariesCount: subsidiaries.length,
         subsidiaries: subsidiaries.map((s) => ({
           id: s.id,
@@ -5133,9 +5174,18 @@ app.get('/api/user/public-profile/:userId', async (req, res) => {
           symbol: s.symbol,
           sector: s.sector,
           currentPrice: s.current_price,
-          fundamentalScore: s.fundamental_score
+          fundamentalScore: s.fundamental_score,
+          totalShares: s.total_shares,
+          isIpo: Boolean(s.is_ipo),
+          status: s.status
         }))
       },
+      portfolioShares: publicShares
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
       portfolioShares: publicShares
     });
   } catch (err) {
@@ -5154,9 +5204,9 @@ app.get('/api/chat', async (req, res) => {
       let liveBadge = m.badge || 'REGULER';
       if (liveBadge !== 'BANK SENTRAL' && rankInfo) {
         const isVip = String(rankInfo.role || '').toUpperCase() === 'VIP';
-        if (rankInfo.rank <= 9) {
-          liveBadge = isVip ? `9 NAGA #${rankInfo.rank} • VIP` : `9 NAGA #${rankInfo.rank}`;
-        } else if (rankInfo.rank <= 25) {
+        if (rankInfo.rank <= 12) {
+          liveBadge = isVip ? `12 NAGA #${rankInfo.rank} • VIP` : `12 NAGA #${rankInfo.rank}`;
+        } else if (rankInfo.rank <= 35) {
           liveBadge = isVip ? 'TAIPAN • VIP' : 'TAIPAN';
         } else if (isVip) {
           liveBadge = 'VIP SULTAN';
@@ -5195,9 +5245,9 @@ app.post('/api/chat', async (req, res) => {
     let badge = 'REGULER';
     if (user.role === 'ADMIN') {
       badge = 'BANK SENTRAL';
-    } else if (rankInfo && rankInfo.rank <= 9) {
-      badge = isVip ? `9 NAGA #${rankInfo.rank} • VIP` : `9 NAGA #${rankInfo.rank}`;
-    } else if (rankInfo && rankInfo.rank <= 25) {
+    } else if (rankInfo && rankInfo.rank <= 12) {
+      badge = isVip ? `12 NAGA #${rankInfo.rank} • VIP` : `12 NAGA #${rankInfo.rank}`;
+    } else if (rankInfo && rankInfo.rank <= 35) {
       badge = isVip ? 'TAIPAN • VIP' : 'TAIPAN';
     } else if (isVip) {
       badge = 'VIP SULTAN';
@@ -5266,6 +5316,7 @@ app.get('/api/admin/overview', async (req, res) => {
 // Admin Users: Data Lengkap Konglomerat & Seluruh Aset (Kas, Portofolio Saham, Anak Perusahaan, Hutang Bank)
 app.get('/api/admin/users', async (req, res) => {
   try {
+    const rankMap = await getUserRankMap();
     const rawUsers = await query.all(`
       SELECT u.*, COALESCE(SUM(p.lots_owned * 100 * c.current_price), 0) as stock_valuation
       FROM users u
@@ -5333,8 +5384,31 @@ app.get('/api/admin/users', async (req, res) => {
       const debtAmount = loanDetails ? (loanDetails.remaining_amount || 0) : 0;
       const netWorth = (u.balance_ib || 0) + (u.company_balance_ib || 0) + totalStockVal - debtAmount;
 
+      const rankInfo = rankMap.get(u.id);
+      const userRank = rankInfo ? rankInfo.rank : 999;
+      const isVipUser = String(u.role || '').toUpperCase() === 'VIP' || Boolean(u.is_blue_chip) || userRank <= 12;
+      let badge = 'REGULER';
+      if (userRank <= 12) badge = '12 NAGA';
+      else if (userRank <= 35) badge = 'TAIPAN';
+      else if (isVipUser) badge = 'VIP';
+
+      const creditScore = u.credit_score || 720;
+      let syncedCreditTier = u.credit_tier;
+      if (!syncedCreditTier || syncedCreditTier === 'STANDARD') {
+        if (creditScore >= 850) syncedCreditTier = 'AAA';
+        else if (creditScore >= 800) syncedCreditTier = 'AA';
+        else if (creditScore >= 750) syncedCreditTier = 'A';
+        else if (creditScore >= 700) syncedCreditTier = 'BBB';
+        else if (creditScore >= 650) syncedCreditTier = 'BB';
+        else syncedCreditTier = 'STANDARD';
+      }
+
       users.push({
         ...u,
+        rank: userRank,
+        badge,
+        is_vip: isVipUser,
+        credit_tier: syncedCreditTier,
         stock_valuation: totalStockVal,
         total_cash_holding: totalCashHolding,
         net_worth: netWorth,
@@ -5345,6 +5419,39 @@ app.get('/api/admin/users', async (req, res) => {
     }
 
     res.json(users);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin Delete User: Menghapus akun konglomerat dari database Federasi
+app.delete('/api/admin/users/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = await query.get('SELECT * FROM users WHERE id = ?', [id]);
+    if (!user) return res.status(404).json({ error: 'User tidak ditemukan' });
+    if (user.role === 'ADMIN') return res.status(403).json({ error: 'Akun Otoritas Bank Sentral / Admin tidak dapat dihapus!' });
+
+    // Hapus dependensi user
+    await query.run('DELETE FROM portfolios WHERE user_id = ?', [id]);
+    await query.run('DELETE FROM loans WHERE user_id = ?', [id]);
+    await query.run('DELETE FROM company_shareholders WHERE user_id = ?', [id]);
+    await query.run('DELETE FROM chat_messages WHERE user_id = ?', [id]);
+    await query.run('DELETE FROM transactions WHERE user_id = ?', [id]);
+    await query.run('DELETE FROM tender_bids WHERE user_id = ?', [id]);
+    await query.run('DELETE FROM ipo_orders WHERE user_id = ?', [id]);
+    await query.run('DELETE FROM sovereign_bond_investments WHERE user_id = ?', [id]);
+    
+    // Perusahaan milik user dilepas ownershipnya
+    await query.run('UPDATE companies SET owner_id = NULL WHERE owner_id = ?', [id]);
+    
+    // Hapus user
+    await query.run('DELETE FROM users WHERE id = ?', [id]);
+
+    res.json({
+      success: true,
+      message: `Akun konglomerat @${user.username} (${user.pt_name || 'Personal'}) berhasil dihapus dari sistem.`
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -5911,13 +6018,13 @@ const localBuiltApkPath = path.join(__dirname, '../../mobile/build/app/outputs/f
 
 async function getApkSettingsMap() {
   const defaults = {
-    apk_version: '1.5.8',
-    apk_build_number: '12',
+    apk_version: '1.5.9',
+    apk_build_number: '13',
     apk_min_android: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
     apk_file_size_mb: '25.0 MB',
-    apk_release_notes: 'Sistem Suksesi Kepemilikan & PT Utama Otomatis saat Akuisisi Mayoritas (M&A/RUPS), Bot P2P Kooperatif Cerdas yang Bisa Membeli & Menolak Divestasi Saham Pemain, Hak Dividen Saham Minoritas, dan Perbaikan Duplikasi Kartu Perusahaan.',
+    apk_release_notes: 'Ekspansi Kasta 12 NAGA Federasi, Penskalaan Realistis Riset R&D & Tenaga Kerja Konglomerat, Pemutakhiran 1.000++ Pengguna & Emiten Saham, Pencegahan Input Tbk. Notaris, serta Manajemen Hapus Akun Terkonfirmasi di IPMC Terminal.',
     apk_external_url: '',
-    apk_download_count: '185',
+    apk_download_count: '215',
     apk_sha256: 'a063050909de6876837f05f3dba5aed608e7cc2d5ec47b9a2ed0ab0ea4438d08',
     apk_updated_at: new Date().toISOString(),
   };
@@ -5928,11 +6035,11 @@ async function getApkSettingsMap() {
         defaults[r.key] = String(r.value);
       }
     }
-    if (parseInt(defaults.apk_build_number || '0', 10) < 12) {
-      defaults.apk_version = '1.5.8';
-      defaults.apk_build_number = '12';
+    if (parseInt(defaults.apk_build_number || '0', 10) < 13) {
+      defaults.apk_version = '1.5.9';
+      defaults.apk_build_number = '13';
       defaults.apk_file_size_mb = '25.0 MB';
-      defaults.apk_release_notes = 'Sistem Suksesi Kepemilikan & PT Utama Otomatis saat Akuisisi Mayoritas (M&A/RUPS), Bot P2P Kooperatif Cerdas yang Bisa Membeli & Menolak Divestasi Saham Pemain, Hak Dividen Saham Minoritas, dan Perbaikan Duplikasi Kartu Perusahaan.';
+      defaults.apk_release_notes = 'Ekspansi Kasta 12 NAGA Federasi, Penskalaan Realistis Riset R&D & Tenaga Kerja Konglomerat, Pemutakhiran 1.000++ Pengguna & Emiten Saham, Pencegahan Input Tbk. Notaris, serta Manajemen Hapus Akun Terkonfirmasi di IPMC Terminal.';
     }
   } catch (_) {}
   return defaults;

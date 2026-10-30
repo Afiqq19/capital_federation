@@ -48,8 +48,8 @@ export default function Sidebar({ currentPage, onNavigate, adminUser, onLogout, 
 
   return (
     <aside
-      className={`fixed md:static inset-y-0 left-0 z-50 w-72 max-w-[85vw] md:w-64 lg:w-72 h-screen shrink-0 flex flex-col border-r border-slate-800/80 bg-slate-950/98 backdrop-blur-2xl select-none shadow-2xl md:shadow-none transform transition-transform duration-300 ease-in-out ${
-        isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+      className={`fixed lg:static inset-y-0 left-0 z-50 w-72 max-w-[85vw] lg:w-64 xl:w-72 h-screen shrink-0 flex flex-col border-r border-slate-800/80 bg-slate-950/98 backdrop-blur-2xl select-none shadow-2xl lg:shadow-none transform transition-transform duration-300 ease-in-out ${
+        isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
       }`}
     >
       {/* Brand Header */}
@@ -73,7 +73,7 @@ export default function Sidebar({ currentPage, onNavigate, adminUser, onLogout, 
         <button
           type="button"
           onClick={onClose}
-          className="md:hidden p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/90 border border-slate-800 transition cursor-pointer"
+          className="lg:hidden p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/90 border border-slate-800 transition cursor-pointer"
           title="Tutup Menu Navigasi"
         >
           <X size={18} />

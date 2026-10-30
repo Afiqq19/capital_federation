@@ -2,12 +2,9 @@
 // CAPITAL FEDERATION - EMITEN & BOT POPULATION ENGINE (LEGAL, FIKTIF & REALISTIS)
 // 100% Nama Fiktif Resmi Bebas dari Masalah Merek Dagang & UU ITE
 // Kode Saham (Ticker) 4 Huruf Alfabet Murni (Tanpa Angka, contoh: SYCA, BCNT)
+// Mendukung 1.000++ Pengguna Konglomerat & Ratusan Emiten Tbk.
 // ============================================================================
 
-/**
- * Menghasilkan singkatan kode saham (Ticker) 4 huruf alfabet murni dari nama PT
- * Contoh: "PT. Syafiq Capital Tbk." -> "SYCA", "PT. Bank Central Nusantara Tbk." -> "BCNT"
- */
 function deriveCleanTicker(companyName, usedSymbols = new Set()) {
   const clean = String(companyName || '')
     .replace(/^(PT\.?\s*)+/i, '')
@@ -85,7 +82,7 @@ function deriveCleanTicker(companyName, usedSymbols = new Set()) {
   return 'CFXA';
 }
 
-// Flagship Emiten Konglomerat 9 Naga & Taipan Utama (16 Emiten Blue Chip Utama)
+// Flagship Emiten Konglomerat 12 Naga & Taipan Utama (16 Emiten Blue Chip Utama)
 const FLAGSHIP_CONGLOMERATE_COMPANIES = [
   { symbol: 'KEAP', name: 'PT. Kencana Artha Persada Tbk.', sector: 'Keuangan', basePrice: 15800, status: 'HEALTHY' },
   { symbol: 'SAPN', name: 'PT. Samudera Prima Nusantara Tbk.', sector: 'Transportasi', basePrice: 14600, status: 'HEALTHY' },
@@ -105,9 +102,7 @@ const FLAGSHIP_CONGLOMERATE_COMPANIES = [
   { symbol: 'TRAS', name: 'PT. Trias Artha Sentosa Tbk.', sector: 'Teknologi', basePrice: 8200, status: 'HEALTHY' },
 ];
 
-// 50 Emiten Batch 1 (Kesehatan, Transportasi, Pertambangan, Telekomunikasi, Agrikultur)
 const BATCH_1_COMPANIES = [
-  // Kesehatan & Farmasi (10)
   { symbol: 'MFPR', name: 'PT. Medika Farma Prima Tbk.', sector: 'Kesehatan', basePrice: 3800, status: 'HEALTHY' },
   { symbol: 'BVNS', name: 'PT. Bio Vaksin Nusantara Tbk.', sector: 'Kesehatan', basePrice: 7200, status: 'HEALTHY' },
   { symbol: 'MIHS', name: 'PT. Mitra Husada Sejahtera Tbk.', sector: 'Kesehatan', basePrice: 4900, status: 'HEALTHY' },
@@ -118,8 +113,6 @@ const BATCH_1_COMPANIES = [
   { symbol: 'RIGE', name: 'PT. Riset Genomik Federasi Tbk.', sector: 'Kesehatan', basePrice: 9200, status: 'HEALTHY' },
   { symbol: 'FABS', name: 'PT. Farmasi Berkah Sentosa Tbk.', sector: 'Kesehatan', basePrice: 2100, status: 'HEALTHY' },
   { symbol: 'DIPI', name: 'PT. Diagnostika Prima Inti Tbk.', sector: 'Kesehatan', basePrice: 750, status: 'CRITICAL' },
-
-  // Transportasi & Logistik (10)
   { symbol: 'SAMR', name: 'PT. Samudera Maritim Raya Tbk.', sector: 'Transportasi', basePrice: 4100, status: 'HEALTHY' },
   { symbol: 'KELE', name: 'PT. Kereta Logistik Ekspres Tbk.', sector: 'Transportasi', basePrice: 5300, status: 'HEALTHY' },
   { symbol: 'TRKN', name: 'PT. Trans Kencana Nusantara Tbk.', sector: 'Transportasi', basePrice: 4700, status: 'HEALTHY' },
@@ -130,8 +123,6 @@ const BATCH_1_COMPANIES = [
   { symbol: 'LIAK', name: 'PT. Lintas Angkasa Kargo Tbk.', sector: 'Transportasi', basePrice: 6400, status: 'HEALTHY' },
   { symbol: 'RAPD', name: 'PT. Rantai Pasok Dingin Tbk.', sector: 'Transportasi', basePrice: 3700, status: 'HEALTHY' },
   { symbol: 'JTLT', name: 'PT. Jalur Tol Lingkar Timur Tbk.', sector: 'Transportasi', basePrice: 820, status: 'CRITICAL' },
-
-  // Pertambangan & Mineral (10)
   { symbol: 'MUKM', name: 'PT. Mulia Kencana Mineral Tbk.', sector: 'Energi', basePrice: 14500, status: 'HEALTHY' },
   { symbol: 'NIMN', name: 'PT. Nikel Murni Nusantara Tbk.', sector: 'Energi', basePrice: 9800, status: 'HEALTHY' },
   { symbol: 'BUBP', name: 'PT. Bukit Bara Perkasa Tbk.', sector: 'Energi', basePrice: 7600, status: 'HEALTHY' },
@@ -142,8 +133,6 @@ const BATCH_1_COMPANIES = [
   { symbol: 'SIMK', name: 'PT. Silika Mineral Kaca Tbk.', sector: 'Energi', basePrice: 4400, status: 'HEALTHY' },
   { symbol: 'KIGP', name: 'PT. Kilang Gas Persada Tbk.', sector: 'Energi', basePrice: 5900, status: 'HEALTHY' },
   { symbol: 'ASBP', name: 'PT. Aspal Buton Perkasa Tbk.', sector: 'Energi', basePrice: 650, status: 'CRITICAL' },
-
-  // Telekomunikasi & Media (10)
   { symbol: 'MESP', name: 'PT. Menara Seluler Prima Tbk.', sector: 'Teknologi', basePrice: 5800, status: 'HEALTHY' },
   { symbol: 'SAOF', name: 'PT. Satelit Orbit Federasi Tbk.', sector: 'Teknologi', basePrice: 8300, status: 'HEALTHY' },
   { symbol: 'MEBP', name: 'PT. Media Buana Penyiaran Tbk.', sector: 'Teknologi', basePrice: 2400, status: 'HEALTHY' },
@@ -154,8 +143,6 @@ const BATCH_1_COMPANIES = [
   { symbol: 'CIPK', name: 'PT. Cipta Pariwara Kreatif Tbk.', sector: 'Teknologi', basePrice: 2700, status: 'HEALTHY' },
   { symbol: 'PUDK', name: 'PT. Pusat Data Komputasi Tbk.', sector: 'Teknologi', basePrice: 10400, status: 'HEALTHY' },
   { symbol: 'SISN', name: 'PT. Siaran Suara Nusantara Tbk.', sector: 'Teknologi', basePrice: 580, status: 'CRITICAL' },
-
-  // Agrikultur & Perkebunan (10)
   { symbol: 'SAMP', name: 'PT. Sawit Makmur Persada Tbk.', sector: 'F&B', basePrice: 7900, status: 'HEALTHY' },
   { symbol: 'PASN', name: 'PT. Padi Subur Nusantara Tbk.', sector: 'F&B', basePrice: 3300, status: 'HEALTHY' },
   { symbol: 'TABL', name: 'PT. Tambak Bahari Lestari Tbk.', sector: 'F&B', basePrice: 4500, status: 'HEALTHY' },
@@ -168,9 +155,7 @@ const BATCH_1_COMPANIES = [
   { symbol: 'HOSS', name: 'PT. Hortikultura Sayur Segar Tbk.', sector: 'F&B', basePrice: 910, status: 'CRITICAL' },
 ];
 
-// 50 Emiten Tambahan Batch 2 (Consumer Goods, Semikonduktor, EBT, Infrastruktur, Pariwisata)
 const BATCH_2_COMPANIES = [
-  // Consumer Goods / Barang Konsumsi Ritel (10)
   { symbol: 'SAWN', name: 'PT. Sabun Wangi Nusantara Tbk.', sector: 'F&B', basePrice: 4300, status: 'HEALTHY' },
   { symbol: 'KOCA', name: 'PT. Kosmetika Cantik Alami Tbk.', sector: 'F&B', basePrice: 6800, status: 'HEALTHY' },
   { symbol: 'GUMS', name: 'PT. Gula Manis Sentosa Tbk.', sector: 'F&B', basePrice: 3100, status: 'HEALTHY' },
@@ -181,8 +166,6 @@ const BATCH_2_COMPANIES = [
   { symbol: 'MISR', name: 'PT. Mi Instan Selera Rasa Tbk.', sector: 'F&B', basePrice: 9500, status: 'HEALTHY' },
   { symbol: 'KOCH', name: 'PT. Kopi Celup Harum Tbk.', sector: 'F&B', basePrice: 3700, status: 'HEALTHY' },
   { symbol: 'GADY', name: 'PT. Garam Dapur Yodium Tbk.', sector: 'F&B', basePrice: 680, status: 'CRITICAL' },
-
-  // Otomasi & Semikonduktor (10)
   { symbol: 'MICT', name: 'PT. Mikro Chip Terpadu Tbk.', sector: 'Teknologi', basePrice: 16800, status: 'HEALTHY' },
   { symbol: 'SEOC', name: 'PT. Sensor Otomasi Cerdas Tbk.', sector: 'Teknologi', basePrice: 7500, status: 'HEALTHY' },
   { symbol: 'PASC', name: 'PT. Papan Sirkuit Cetak Tbk.', sector: 'Teknologi', basePrice: 4200, status: 'HEALTHY' },
@@ -193,8 +176,6 @@ const BATCH_2_COMPANIES = [
   { symbol: 'MOKN', name: 'PT. Modul Komunikasi Nirkabel Tbk.', sector: 'Teknologi', basePrice: 4700, status: 'HEALTHY' },
   { symbol: 'KATM', name: 'PT. Kabel Transmisi Mikro Tbk.', sector: 'Teknologi', basePrice: 3100, status: 'HEALTHY' },
   { symbol: 'PEMS', name: 'PT. Perakitan Modul Sirkuit Tbk.', sector: 'Teknologi', basePrice: 920, status: 'CRITICAL' },
-
-  // Energi Baru & Terbarukan (10)
   { symbol: 'SUPP', name: 'PT. Surya Panel Perkasa Tbk.', sector: 'Energi', basePrice: 6700, status: 'HEALTHY' },
   { symbol: 'PEAB', name: 'PT. Pembangkit Angin Bayu Tbk.', sector: 'Energi', basePrice: 5900, status: 'HEALTHY' },
   { symbol: 'GEPB', name: 'PT. Geotermal Panas Bumi Tbk.', sector: 'Energi', basePrice: 8800, status: 'HEALTHY' },
@@ -205,8 +186,6 @@ const BATCH_2_COMPANIES = [
   { symbol: 'KOEH', name: 'PT. Konversi Energi Hijau Tbk.', sector: 'Energi', basePrice: 4600, status: 'HEALTHY' },
   { symbol: 'JATB', name: 'PT. Jaringan Transmisi Bersih Tbk.', sector: 'Energi', basePrice: 3800, status: 'HEALTHY' },
   { symbol: 'PELB', name: 'PT. Pengolahan Limbah Biomassa Tbk.', sector: 'Energi', basePrice: 720, status: 'CRITICAL' },
-
-  // Infrastruktur Sipil & Konstruksi (10)
   { symbol: 'CIBM', name: 'PT. Cipta Beton Megah Tbk.', sector: 'Manufaktur', basePrice: 6400, status: 'HEALTHY' },
   { symbol: 'JEBB', name: 'PT. Jembatan Baja Buana Tbk.', sector: 'Manufaktur', basePrice: 7800, status: 'HEALTHY' },
   { symbol: 'TEBT', name: 'PT. Terowongan Bawah Tanah Tbk.', sector: 'Manufaktur', basePrice: 9100, status: 'HEALTHY' },
@@ -217,8 +196,6 @@ const BATCH_2_COMPANIES = [
   { symbol: 'PEDP', name: 'PT. Pengerukan Dermaga Pelabuhan Tbk.', sector: 'Manufaktur', basePrice: 4300, status: 'HEALTHY' },
   { symbol: 'PEJR', name: 'PT. Pemancangan Jalur Rel Tbk.', sector: 'Manufaktur', basePrice: 6200, status: 'HEALTHY' },
   { symbol: 'SADM', name: 'PT. Saluran Drainase Megah Tbk.', sector: 'Manufaktur', basePrice: 840, status: 'CRITICAL' },
-
-  // Pariwisata, Perhotelan & Hiburan (10)
   { symbol: 'PEHB', name: 'PT. Pesona Hotel Bintang Tbk.', sector: 'Properti', basePrice: 4800, status: 'HEALTHY' },
   { symbol: 'TAWS', name: 'PT. Taman Wisata Samudera Tbk.', sector: 'Properti', basePrice: 3900, status: 'HEALTHY' },
   { symbol: 'SAHB', name: 'PT. Sarana Hiburan Bioskop Tbk.', sector: 'Properti', basePrice: 5700, status: 'HEALTHY' },
@@ -231,47 +208,87 @@ const BATCH_2_COMPANIES = [
   { symbol: 'ARGR', name: 'PT. Arena Gelanggang Remaja Tbk.', sector: 'Properti', basePrice: 620, status: 'CRITICAL' },
 ];
 
+// Generator 500+ Emiten Tambahan untuk melengkapi 600+ Perusahaan Tbk. di Bursa
+const PREFIX_WORDS = [
+  'Mulia', 'Prima', 'Duta', 'Sentra', 'Cakra', 'Surya', 'Kencana', 'Nusa', 'Artha', 'Mega',
+  'Tridaya', 'Bumantara', 'Sinar', 'Graha', 'Mitra', 'Dinamika', 'Berkah', 'Trias', 'Karya', 'Citra',
+  'Samudera', 'Persada', 'Sentosa', 'Utama', 'Abadi', 'Jaya', 'Lestari', 'Gemilang', 'Makmur', 'Harmoni'
+];
+
+const SECTOR_MIDDLE_WORDS = {
+  'Keuangan': ['Finansial', 'Sekuritas', 'Modal', 'Ventura', 'Investama', 'Kapital', 'Dana', 'Aset'],
+  'Teknologi': ['Digital', 'Komputasi', 'Siber', 'Tekno', 'Peranti', 'Jaringan', 'Informatika', 'Sistem'],
+  'Energi': ['Daya', 'Tenaga', 'Minyak', 'Gas', 'Mineral', 'Tambang', 'Elektrisitas', 'Sumberdaya'],
+  'F&B': ['Pangan', 'Boga', 'Nutrisi', 'Konsumsi', 'Agro', 'Kuliner', 'Rasa', 'Panganindo'],
+  'Properti': ['Residensi', 'Graha', 'Kawasan', 'Propertindo', 'Pengembang', 'Urban', 'Lahan', 'Estate'],
+  'Manufaktur': ['Fabrikasi', 'Industri', 'Presisi', 'Rekayasa', 'Material', 'Semen', 'Baja', 'Logam'],
+  'Kesehatan': ['Medika', 'Farma', 'Klinika', 'Diagnostika', 'Husada', 'Laboratoria', 'Bio', 'Riset'],
+  'Transportasi': ['Logistik', 'Ekspres', 'Kargo', 'Maritim', 'Armada', 'Trans', 'Lintas', 'Distribusi']
+};
+
+const SECTOR_LIST = ['Keuangan', 'Teknologi', 'Energi', 'F&B', 'Properti', 'Manufaktur', 'Kesehatan', 'Transportasi'];
+
+const GENERATED_COMPANIES = [];
+const usedGeneratedSymbols = new Set([
+  ...FLAGSHIP_CONGLOMERATE_COMPANIES.map(c => c.symbol),
+  ...BATCH_1_COMPANIES.map(c => c.symbol),
+  ...BATCH_2_COMPANIES.map(c => c.symbol)
+]);
+
+let pIdx = 0;
+while (GENERATED_COMPANIES.length < 520) {
+  const sector = SECTOR_LIST[pIdx % SECTOR_LIST.length];
+  const pWord = PREFIX_WORDS[Math.floor(pIdx / 8) % PREFIX_WORDS.length];
+  const midWords = SECTOR_MIDDLE_WORDS[sector];
+  const mWord = midWords[pIdx % midWords.length];
+  const sWord = PREFIX_WORDS[(pIdx + 7) % PREFIX_WORDS.length];
+  const compName = 'PT. ' + pWord + ' ' + mWord + ' ' + sWord + ' Tbk.';
+
+  const ticker = deriveCleanTicker(compName, usedGeneratedSymbols);
+  const basePrice = Math.round(500 + ((pIdx * 137) % 11500));
+  const status = (pIdx % 15 === 0) ? 'CRITICAL' : 'HEALTHY';
+
+  GENERATED_COMPANIES.push({
+    symbol: ticker,
+    name: compName,
+    sector,
+    basePrice,
+    status
+  });
+  pIdx++;
+}
+
 const ALL_NEW_COMPANIES = [
   ...FLAGSHIP_CONGLOMERATE_COMPANIES,
   ...BATCH_1_COMPANIES,
   ...BATCH_2_COMPANIES,
+  ...GENERATED_COMPANIES
 ];
 
-// ============================================================================
-// DAFTAR 265 BOT PEMAIN DENGAN NAMA SIMPEL & NATURAL (1 KATA GAYA GAMER/INVESTOR)
-// Bot #1 - #250 adalah Pendiri/Pemilik 250 Emiten Tbk. di Bursa Saham
-// Bot #251 - #265 adalah Pemain Non-IPO (PT Tertutup belum Tbk. & Ritel Murni)
-// ============================================================================
-const NATURAL_USERNAMES = [
-  // 1-10: Papan Peringkat Atas (Taipan & 9 Naga)
+// DAFTAR 1.050 BOT PEMAIN (12 NAGA, TAIPAN, MENENGAH & RITEL)
+const baseFirstNames = [
   'haziq', 'reza', 'dimas', 'fajar', 'adit', 'bayu', 'galih', 'rizky', 'alif', 'tiara',
-  // 11-30: Taipan & Konglomerat Besar
   'nadia', 'yusuf', 'andi', 'satria', 'gilang', 'arya', 'donny', 'deni', 'eka', 'rendy',
   'arif', 'wahyu', 'bagas', 'ilham', 'teguh', 'anwar', 'dani', 'ferry', 'lukman', 'dicky',
-  // 31-60: Investor Institusi & Pemilik Emiten Menengah
   'taufik', 'zulfikar', 'naufal', 'hafiz', 'rafli', 'ardian', 'ivan', 'aldo', 'surya', 'fadli',
   'fatur', 'angga', 'pratama', 'maulana', 'ihsan', 'kurnia', 'firman', 'gunawan', 'saputra', 'wijaya',
   'kusuma', 'santoso', 'hermawan', 'setiawan', 'pramono', 'wibowo', 'susanto', 'nugroho', 'subekti', 'purnama',
-  // 61-100: Pemilik Emiten & Trader Aktif
   'suryadi', 'hidayat', 'firmansyah', 'ardiansyah', 'ramadhan', 'syahputra', 'ridho', 'fauzan', 'haikal', 'farhan',
   'hendra', 'kevin', 'putra', 'rio', 'budi', 'siti', 'maya', 'indra', 'citra', 'lisa',
   'rudi', 'eko', 'tono', 'doni', 'tomi', 'sigit', 'wawan', 'anto', 'dedi', 'rully',
   'sony', 'irwan', 'roni', 'ikhsan', 'bima', 'gita', 'mira', 'tari', 'dinda', 'agung',
-  // 101-160: Ekspansi Pengusaha & Bandar Sektor
   'akbar', 'danu', 'faris', 'ghazi', 'hanif', 'iqbal', 'johan', 'kamal', 'lutfi', 'malik',
   'nanda', 'oscar', 'pandu', 'qori', 'rama', 'salman', 'topan', 'umar', 'vicky', 'wildan',
   'yoga', 'zaki', 'abrar', 'bastian', 'cakra', 'daffa', 'erwin', 'fahmi', 'gibran', 'hilman',
   'irfan', 'jefri', 'kemal', 'leo', 'miko', 'novan', 'oki', 'panji', 'rafi', 'sandi',
   'tito', 'ulil', 'vino', 'wisnu', 'yudi', 'zafran', 'adnan', 'benny', 'chandra', 'deri',
   'edwin', 'farid', 'gary', 'hasan', 'imam', 'jaka', 'kiki', 'lian', 'marwan', 'nico',
-  // 161-220: Pemilik Emiten Sektoral & Swing Trader
   'opik', 'pasha', 'qomar', 'rian', 'sultan', 'tegar', 'usman', 'verdy', 'willy', 'yusufm',
   'zainal', 'ammar', 'bobby', 'catur', 'dodi', 'erik', 'faisal', 'gani', 'hadi', 'ibnu',
   'jamal', 'khalid', 'lucky', 'munir', 'nasir', 'onky', 'prima', 'qais', 'rico', 'syahrul',
   'taufan', 'ujang', 'vito', 'wendy', 'yayan', 'zidan', 'azzam', 'barra', 'chairul', 'dzaki',
-  'evan', 'farel', 'gian', 'haris', 'ilhami', 'jundi', 'kenzie', 'laode', 'mahدی', 'nabil',
+  'evan', 'farel', 'gian', 'haris', 'ilhami', 'jundi', 'kenzie', 'laode', 'mahdi', 'nabil',
   'ozan', 'putri', 'intan', 'amelia', 'dewi', 'ratna', 'sari', 'ayu', 'bella', 'clara',
-  // 221-265: Pemilik Emiten Baru, PT Non-IPO (Belum Tbk.) & Ritel Murni
   'diana', 'elsa', 'fira', 'gisela', 'hana', 'indah', 'jelita', 'kirana', 'laras', 'melati',
   'nisa', 'olivia', 'puspa', 'qonita', 'rania', 'salma', 'talita', 'ulfa', 'vania', 'widya',
   'yasmin', 'zahra', 'arman', 'burhan', 'choirul', 'darma', 'endang', 'fuad', 'guntur', 'hamzah',
@@ -279,10 +296,56 @@ const NATURAL_USERNAMES = [
   'untung', 'wahid', 'yamin', 'zamzam', 'alfian'
 ];
 
-// Fix non-ASCII typo in mahdi
-NATURAL_USERNAMES[NATURAL_USERNAMES.indexOf('mahدی')] = 'mahdi';
+const extraIndoNames = [
+  'abimanyu', 'ade', 'aditya', 'agus', 'ajeng', 'akhsan', 'alamsyah', 'ananta', 'anggi', 'annisa',
+  'aprilia', 'arief', 'ariel', 'aris', 'arizal', 'asri', 'astuti', 'athalla', 'aufar', 'ayunda',
+  'bagaswara', 'bahar', 'bambang', 'barata', 'basuki', 'bayhaqi', 'bilal', 'bintang', 'bram', 'cahyo',
+  'calvin', 'cantika', 'daniyal', 'darul', 'david', 'deva', 'dhani', 'dimitri', 'dita', 'dwi',
+  'dzulfiqar', 'eliza', 'elvan', 'erlangga', 'fachri', 'fadilah', 'fakhri', 'fathur', 'fatimah', 'febri',
+  'fian', 'firdaus', 'fitria', 'galang', 'galuh', 'ganendra', 'gemilang', 'gerald', 'gilbert', 'gloria',
+  'habib', 'hafidz', 'hakim', 'halim', 'hamid', 'harits', 'harun', 'hasbi', 'haykal', 'helmi',
+  'hendri', 'herdi', 'hisyam', 'huda', 'husen', 'ichsan', 'ikhwan', 'indraja', 'irham', 'irsyad',
+  'irwansyah', 'isma', 'izzat', 'jabbar', 'jaenudin', 'jamil', 'janitra', 'jasmine', 'jauhar', 'jonathan',
+  'jovian', 'julianto', 'kamil', 'karim', 'keisya', 'khairi', 'kresna', 'kurniawan', 'laksana', 'latifah',
+  'lestari', 'lingga', 'lukas', 'lutfia', 'mahendra', 'mahfud', 'makruf', 'maliki', 'maman', 'mansur',
+  'marcello', 'mario', 'marzuki', 'maulidi', 'megantara', 'melinda', 'miftah', 'mirza', 'muhajir', 'muhammad',
+  'muhyidin', 'mukhlis', 'mustofa', 'mutia', 'nadhim', 'nadjib', 'nafla', 'najwa', 'nashir', 'nathan',
+  'naufalyn', 'nayla', 'nazhif', 'niken', 'nirmala', 'noval', 'novi', 'nugraha', 'nurhadi', 'nurul',
+  'pandega', 'pascal', 'perdana', 'permadi', 'permata', 'prakoso', 'pranoto', 'prasetya', 'prasetyo', 'prayoga',
+  'pribadi', 'primadita', 'qabil', 'qayyim', 'qodir', 'raden', 'radhitya', 'raditya', 'rafayel', 'rafif',
+  'rahadian', 'rahardjo', 'raharja', 'rahmat', 'rais', 'rakha', 'ramdani', 'rasyid', 'rayhan', 'rehan',
+  'reski', 'restu', 'reynaldi', 'reyner', 'rifki', 'rifqy', 'rijal', 'rilwan', 'riski', 'rizaldi',
+  'rohman', 'rois', 'rossi', 'rozi', 'ruslan', 'sabda', 'sadikin', 'saepudin', 'safiq', 'safrudin',
+  'sahrul', 'said', 'saiful', 'salam', 'salim', 'samir', 'samuel', 'sanusi', 'sarwono', 'sasongko',
+  'satriyo', 'septian', 'setyo', 'shafira', 'sholeh', 'sidik', 'silvia', 'sinaga', 'siregar', 'soeharto',
+  'subagyo', 'sudarmono', 'suhendra', 'suherman', 'sukardi', 'sukma', 'sulaiman', 'sulistyo', 'sumantri', 'sunardi',
+  'supardi', 'supriadi', 'suprayitno', 'suranto', 'suroso', 'sutanto', 'sutopo', 'sutrisno', 'syabana', 'syafei',
+  'syahid', 'syahroni', 'syamsul', 'syaoki', 'tahmid', 'tarigan', 'thoriq', 'tiyas', 'tommy', 'tri',
+  'trianto', 'triatmojo', 'triono', 'uswatun', 'vandi', 'variel', 'veronika', 'vidya', 'virgo', 'wahidin',
+  'wardani', 'wibisono', 'wicaksono', 'widagdo', 'widodo', 'widyatama', 'wijanarko', 'wilmar', 'wiranto', 'wirawan',
+  'wulan', 'yahya', 'yanuar', 'yasin', 'yogi', 'yosafat', 'yuda', 'yudha', 'yudhistira', 'yuliana',
+  'yulius', 'yunus', 'yusran', 'yusril', 'yustisi', 'zachary', 'zaenal', 'zahir', 'zahirah', 'zahran',
+  'zain', 'zainuddin', 'zaky', 'zarif', 'zayyan', 'zhafir', 'zharif', 'zulfi', 'zulkarnain'
+];
 
-// Nama PT Privat (Belum IPO / Belum Tbk.) untuk bot #251 - #258
+const NATURAL_USERNAMES = [...baseFirstNames];
+for (const en of extraIndoNames) {
+  if (!NATURAL_USERNAMES.includes(en)) NATURAL_USERNAMES.push(en);
+}
+
+const affixes = ['capital', 'invest', 'artha', 'jaya', 'prima', 'nusa', 'surya', 'kencana', 'makmur', 'sentosa', 'lestari', 'mandiri', 'perkasa', 'holding', 'korp', 'duta'];
+let aIdx = 0;
+while (NATURAL_USERNAMES.length < 1050) {
+  const base = NATURAL_USERNAMES[aIdx % 300];
+  const aff = affixes[Math.floor(aIdx / 300) % affixes.length];
+  const candidate = base + '_' + aff;
+  if (!NATURAL_USERNAMES.includes(candidate)) {
+    NATURAL_USERNAMES.push(candidate);
+  }
+  aIdx++;
+}
+
+// 8 Nama PT Privat Non-Tbk
 const PRIVATE_NON_TBK_PT_NAMES = [
   'PT. Nusantara Karya Mandiri',
   'PT. Kreasi Digital Pratama',
@@ -294,80 +357,97 @@ const PRIVATE_NON_TBK_PT_NAMES = [
   'PT. Bina Properti Harmoni',
 ];
 
-const SECTORS = ['Keuangan', 'Teknologi', 'Energi', 'F&B', 'Properti', 'Manufaktur', 'Kesehatan', 'Transportasi'];
-
-// Buat array 265 BOT secara terstruktur & bervariasi
-const BOT_ROSTER_265 = NATURAL_USERNAMES.map((name, idx) => {
-  const isTop9 = idx < 9;
-  const isTaipan = idx >= 9 && idx < 30;
-  const isMid = idx >= 30 && idx < 120;
-  const isListedOwner = idx < 250; // 250 Bot pertama memiliki PT Tbk. yang ada di Bursa Saham
-  const isPrivatePtOwner = idx >= 250 && idx < 258; // 8 Bot memiliki PT Privat (belum IPO / belum Tbk.)
-  const hasPt = (isListedOwner || isPrivatePtOwner) ? 1 : 0; // 7 Bot terakhir adalah Ritel Murni tanpa PT
+// Buat array 1.050 BOT secara terstruktur & bervariasi
+const BOT_ROSTER_1050 = NATURAL_USERNAMES.map((name, idx) => {
+  const is12Naga = idx < 12;
+  const isTaipan = idx >= 12 && idx < 35;
+  const isMid = idx >= 35 && idx < 150;
+  const isListedOwner = idx < 600; // 600 Bot pertama memiliki PT Tbk. yang ada di Bursa Saham
+  const isPrivatePtOwner = idx >= 600 && idx < 800; // 200 Bot memiliki PT Privat (belum IPO / belum Tbk.)
+  const hasPt = (isListedOwner || isPrivatePtOwner) ? 1 : 0; // Sisanya adalah Ritel Murni tanpa PT
 
   let balance_ib = 0;
   let company_balance_ib = 0;
   let pt_level = 1;
+  let rd_level = 1;
+  let employees_count = 0;
   let is_blue_chip = 0;
+  let role = 'PLAYER';
 
-  if (isTop9) {
-    // Top 9 Naga: Puluhan Miliar IB
-    balance_ib = (18 + (9 - idx) * 3.5) * 1000000000.0;
-    company_balance_ib = (28 + (9 - idx) * 4.5) * 1000000000.0;
+  if (is12Naga) {
+    // 12 NAGA: Sultan Elit Tertinggi Federasi (Puluhan Miliar IB, R&D Level 10-22, Staff 200-600)
+    balance_ib = (25 + (12 - idx) * 4.0) * 1000000000.0;
+    company_balance_ib = (38 + (12 - idx) * 5.0) * 1000000000.0;
     pt_level = 5;
+    rd_level = 10 + (12 - idx);
+    employees_count = 200 + ((12 - idx) * 35);
     is_blue_chip = 1;
+    role = 'VIP';
   } else if (isTaipan) {
-    // Taipan 10-30: Miliaran IB
-    balance_ib = (2.5 + (30 - idx) * 0.45) * 1000000000.0;
-    company_balance_ib = (4.5 + (30 - idx) * 0.7) * 1000000000.0;
-    pt_level = idx < 18 ? 4 : 3;
-    is_blue_chip = idx < 20 ? 1 : 0;
+    // TAIPAN (13-35): Konglomerat Mapan (Miliaran IB, R&D Level 6-9, Staff 60-150)
+    balance_ib = (3.0 + (35 - idx) * 0.45) * 1000000000.0;
+    company_balance_ib = (5.0 + (35 - idx) * 0.65) * 1000000000.0;
+    pt_level = idx < 22 ? 4 : 3;
+    rd_level = 6 + ((35 - idx) % 4);
+    employees_count = 60 + ((35 - idx) * 4);
+    is_blue_chip = idx < 25 ? 1 : 0;
+    role = idx < 25 ? 'VIP' : 'PLAYER';
   } else if (isMid) {
-    // Konglomerat Menengah (31-120): 400 Juta - 2.2 Miliar IB
-    balance_ib = (350 + (120 - idx) * 15) * 1000000.0;
-    company_balance_ib = (550 + (120 - idx) * 20) * 1000000.0;
-    pt_level = 2;
+    // Konglomerat Menengah (36-150): 400 Juta - 2.5 Miliar IB
+    balance_ib = (400 + (150 - idx) * 14) * 1000000.0;
+    company_balance_ib = (600 + (150 - idx) * 18) * 1000000.0;
+    pt_level = 3;
+    rd_level = 3 + (idx % 3);
+    employees_count = 25 + (idx % 30);
   } else if (isListedOwner) {
-    // Pemilik Emiten Kecil/Menengah (121-250): 120 Juta - 450 Juta IB
-    balance_ib = (90 + ((250 - idx) * 2.2)) * 1000000.0;
-    company_balance_ib = (150 + ((250 - idx) * 2.5)) * 1000000.0;
+    // Pemilik Emiten Tbk. Kecil/Menengah (151-600): 100 Juta - 450 Juta IB
+    balance_ib = (90 + ((600 - idx) * 0.75)) * 1000000.0;
+    company_balance_ib = (140 + ((600 - idx) * 0.95)) * 1000000.0;
     pt_level = 2;
+    rd_level = 2 + (idx % 2);
+    employees_count = 15 + (idx % 15);
   } else if (isPrivatePtOwner) {
-    // Pemilik PT Privat Belum IPO (251-258): 45 Juta - 95 Juta IB
-    balance_ib = (45 + ((idx - 250) * 6)) * 1000000.0;
-    company_balance_ib = (65 + ((idx - 250) * 8)) * 1000000.0;
+    // Pemilik PT Privat Belum IPO (601-800): 40 Juta - 95 Juta IB
+    balance_ib = (40 + ((800 - idx) * 0.25)) * 1000000.0;
+    company_balance_ib = (60 + ((800 - idx) * 0.35)) * 1000000.0;
     pt_level = 1;
+    rd_level = 1;
+    employees_count = 5 + (idx % 10);
   } else {
-    // Investor Ritel Murni tanpa PT (259-265): 15 Juta - 45 Juta IB
-    balance_ib = (15 + ((idx - 258) * 4.5)) * 1000000.0;
+    // Investor Ritel Murni tanpa PT (801-1050): 12 Juta - 40 Juta IB
+    balance_ib = (12 + ((1050 - idx) * 0.11)) * 1000000.0;
     company_balance_ib = 0.0;
     pt_level = 1;
+    rd_level = 1;
+    employees_count = 0;
   }
 
-  const sector = SECTORS[idx % SECTORS.length];
+  const sector = SECTOR_LIST[idx % SECTOR_LIST.length];
   let pt_name = '';
   if (idx < FLAGSHIP_CONGLOMERATE_COMPANIES.length) {
     pt_name = FLAGSHIP_CONGLOMERATE_COMPANIES[idx].name;
   } else if (isPrivatePtOwner) {
-    pt_name = PRIVATE_NON_TBK_PT_NAMES[(idx - 250) % PRIVATE_NON_TBK_PT_NAMES.length];
+    pt_name = PRIVATE_NON_TBK_PT_NAMES[(idx - 600) % PRIVATE_NON_TBK_PT_NAMES.length];
   } else if (hasPt) {
-    pt_name = `PT. ${name.charAt(0).toUpperCase() + name.slice(1)} Korpora Tbk.`;
+    pt_name = 'PT. ' + name.charAt(0).toUpperCase() + name.slice(1) + ' Korpora Tbk.';
   }
 
   const credit_score = Math.min(950, 720 + ((idx * 13) % 210));
 
   return {
-    id: `bot-user-${String(idx + 1).padStart(3, '0')}`,
+    id: 'bot-user-' + String(idx + 1).padStart(4, '0'),
     username: name,
     pt_name,
     has_pt: hasPt,
     sector: hasPt ? sector : 'Ritel Finansial',
     pt_level,
+    rd_level,
+    employees_count,
     balance_ib: Math.round(balance_ib),
     company_balance_ib: Math.round(company_balance_ib),
     credit_score,
     is_blue_chip,
-    role: 'PLAYER',
+    role,
     is_listed_owner: isListedOwner ? 1 : 0,
   };
 });
@@ -376,5 +456,6 @@ module.exports = {
   deriveCleanTicker,
   FLAGSHIP_CONGLOMERATE_COMPANIES,
   ADDITIONAL_COMPANIES: ALL_NEW_COMPANIES,
-  BOT_ROSTER: BOT_ROSTER_265
+  BOT_ROSTER: BOT_ROSTER_1050,
+  NATURAL_USERNAMES
 };

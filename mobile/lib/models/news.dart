@@ -38,8 +38,9 @@ class ChatMessageModel {
   final bool isVip;
   final DateTime createdAt;
 
-  bool get is9Naga => badge.toUpperCase().contains('9 NAGA') || (rank != null && rank! >= 1 && rank! <= 9);
-  bool get isTaipan => badge.toUpperCase().contains('TAIPAN') || (rank != null && rank! > 9 && rank! <= 25);
+  bool get is12Naga => badge.toUpperCase().contains('12 NAGA') || badge.toUpperCase().contains('9 NAGA') || (rank != null && rank! >= 1 && rank! <= 12);
+  bool get is9Naga => is12Naga;
+  bool get isTaipan => badge.toUpperCase().contains('TAIPAN') || (rank != null && rank! > 12 && rank! <= 35);
   bool get isBankSentral => badge.toUpperCase().contains('BANK SENTRAL') || badge.toUpperCase().contains('OTORITAS');
   bool get hasVipBadge => isVip || badge.toUpperCase().contains('VIP');
 

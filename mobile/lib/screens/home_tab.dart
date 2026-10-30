@@ -1930,13 +1930,14 @@ class _HomeTabState extends State<HomeTab> {
         builder: (context, setSheetState) {
           final rawName = nameController.text.trim();
           final cleanName = rawName.replaceAll(RegExp(r'^PT\.?\s*', caseSensitive: false), '').trim();
+          final bool hasTbkInName = RegExp(r'\bTbk\.?\b', caseSensitive: false).hasMatch(rawName);
           final officialNamePreview = cleanName.isEmpty ? 'PT. [Nama Perusahaan]' : 'PT. $cleanName';
           final cleanSymbol = symbolController.text.trim().toUpperCase();
           final bool isSymbolValid = cleanSymbol.length == 4 && RegExp(r'^[A-Z]{4}$').hasMatch(cleanSymbol);
           final now = DateTime.now();
           const months = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
           final formattedCurrentDate = '${now.day} ${months[now.month - 1]} ${now.year} (Hari Ini)';
-          final bool canSubmit = cleanName.isNotEmpty && isSymbolValid && agreedToDeed && !isSubmitting;
+          final bool canSubmit = cleanName.isNotEmpty && !hasTbkInName && isSymbolValid && agreedToDeed && !isSubmitting;
 
           return Container(
             padding: EdgeInsets.only(
@@ -2071,6 +2072,29 @@ class _HomeTabState extends State<HomeTab> {
                     ),
                     onChanged: (_) => setSheetState(() {}),
                   ),
+                  if (hasTbkInName) ...[
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEF4444).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFFEF4444)),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.warning_amber_rounded, size: 14, color: Color(0xFFF87171)),
+                          SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              'Dilarang menggunakan "Tbk.". Status Tbk. hanya diperoleh secara sah setelah PT sukses Go Public via IPO di Bursa!',
+                              style: TextStyle(color: Color(0xFFFCA5A5), fontSize: 9.5, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 14),
 
                   // 2. Kode Singkatan Saham / Ticker (4 Huruf Kapital)
@@ -2110,6 +2134,29 @@ class _HomeTabState extends State<HomeTab> {
                     ),
                     onChanged: (_) => setSheetState(() {}),
                   ),
+                  if (hasTbkInName) ...[
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEF4444).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFFEF4444)),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.warning_amber_rounded, size: 14, color: Color(0xFFF87171)),
+                          SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              'Dilarang menggunakan "Tbk.". Status Tbk. hanya diperoleh secara sah setelah PT sukses Go Public via IPO di Bursa!',
+                              style: TextStyle(color: Color(0xFFFCA5A5), fontSize: 9.5, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 14),
 
                   // 3. Sektor Industri

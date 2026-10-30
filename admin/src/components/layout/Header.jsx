@@ -41,7 +41,7 @@ export default function Header({ currentPage, adminUser, onLogout, onToggleMobil
           <button
             type="button"
             onClick={onToggleMobileSidebar}
-            className="md:hidden p-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800/90 border border-slate-800 transition cursor-pointer shrink-0"
+            className="lg:hidden p-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800/90 border border-slate-800 transition cursor-pointer shrink-0"
             title="Buka Menu Navigasi"
           >
             <Menu size={20} />

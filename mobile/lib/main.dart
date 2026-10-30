@@ -15,13 +15,25 @@ void main() async {
     DeviceOrientation.portraitUp,
   ]);
   ErrorWidget.builder = (FlutterErrorDetails details) {
+    FlutterError.dumpErrorToConsole(details);
     return Container(
       color: const Color(0xFF0F172A),
       alignment: Alignment.center,
-      padding: const EdgeInsets.all(12),
-      child: const Text(
-        'Sinkronisasi tampilan...',
-        style: TextStyle(color: Color(0xFF64748B), fontSize: 10),
+      padding: const EdgeInsets.all(16),
+      child: const Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(color: Color(0xFF38BDF8), strokeWidth: 2),
+          ),
+          SizedBox(height: 10),
+          Text(
+            'Memuat pembaruan data tampilan...',
+            style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.w500),
+          ),
+        ],
       ),
     );
   };

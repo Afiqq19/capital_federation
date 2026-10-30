@@ -23,18 +23,18 @@ import {
 
 export default function PublicDownloadLandingPage() {
   const [versionInfo, setVersionInfo] = useState({
-    version: '1.5.0',
-    buildNumber: 5,
-    apkVersion: 'v1.5.0-CFX Production (Build 5)',
+    version: '1.5.9',
+    buildNumber: 13,
+    apkVersion: 'v1.5.9 (Build 13)',
     minAndroid: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
     fileSizeMb: '24.7 MB',
     downloadUrl: '/api/download/apk',
     downloadCount: 148,
-    totalCompanies: 236,
-    totalPlayers: 126,
+    totalCompanies: 504,
+    totalPlayers: 1055,
     sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
     releaseNotes:
-      'Ticker Saham 4-Huruf Resmi (Tanpa Angka), Perbaikan Nama PT, Efek Emas Chat Sultan 9 Naga & VIP, Perbaikan Bookbuilding E-IPO, dan Deteksi Update Otomatis',
+      'Ekspansi 12 Naga & 1.000+ Konglomerat, Perbaikan Profil Realtime, Validasi Pendirian PT, dan Performa Optimal',
   });
   const [topLeaders, setTopLeaders] = useState([]);
   const [topStocks, setTopStocks] = useState([]);
@@ -75,7 +75,7 @@ export default function PublicDownloadLandingPage() {
       })
       .catch(() => {});
 
-    // 3. Fetch Top 10 Leaders (9 Naga & Taipan)
+    // 3. Fetch Top 12 Leaders (12 Naga & Taipan)
     fetch('/api/leaderboard')
       .then((r) => r.json())
       .then((data) => {
@@ -187,7 +187,7 @@ export default function PublicDownloadLandingPage() {
               className="hover:text-amber-300 transition cursor-pointer bg-transparent border-0 p-0 text-amber-300 font-black text-xs flex items-center gap-1.5"
             >
               <Crown size={13} className="text-amber-400" />
-              Top 9 Naga
+              Top 12 Naga
             </button>
             <button
               type="button"
@@ -228,7 +228,7 @@ export default function PublicDownloadLandingPage() {
                 </span>
                 , & Rebut Takhta{' '}
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-sky-400">
-                  Sultan 9 Naga!
+                  Sultan 12 Naga!
                 </span>
               </h1>
 
@@ -238,7 +238,7 @@ export default function PublicDownloadLandingPage() {
                 dengan modal awal, perdagangkan saham <strong className="text-sky-400">{versionInfo.totalCompanies}+ emiten</strong>{' '}
                 berkode 4-huruf resmi, dirikan <strong className="text-amber-300">PT berbadan hukum Akta Notaris</strong>,
                 bawa perusahaan Anda melantai di bursa lewat <strong className="text-emerald-400">E-IPO 4 Tahap</strong>,
-                hingga kuasai ekonomi negara sebagai <strong>Sultan 9 Naga</strong>!
+                hingga kuasai ekonomi negara sebagai <strong>Sultan 12 Naga</strong>!
               </p>
 
               {/* Main Download Box */}
@@ -345,11 +345,11 @@ export default function PublicDownloadLandingPage() {
                   </div>
                 </div>
 
-                {/* Top 9 Naga Preview Widget */}
+                {/* Top 12 Naga Preview Widget */}
                 <div id="hero-peringkat" className="space-y-2.5">
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-black text-amber-300 flex items-center gap-1.5">
-                      🐉 TOP KONGLOMERAT (SULTAN 9 NAGA)
+                      🐉 TOP KONGLOMERAT (SULTAN 12 NAGA)
                     </span>
                     <button
                       type="button"
@@ -381,7 +381,7 @@ export default function PublicDownloadLandingPage() {
                                   {u.username}
                                 </span>
                                 <span className="px-1.5 py-0.2 rounded bg-gradient-to-r from-amber-500 to-orange-600 text-[9px] font-black text-white">
-                                  9 NAGA
+                                  12 NAGA
                                 </span>
                               </div>
                               <div className="text-[10px] text-slate-400 truncate">
@@ -406,7 +406,7 @@ export default function PublicDownloadLandingPage() {
         </div>
       </section>
 
-      {/* PAPAN PERINGKAT RESMI SULTAN 9 NAGA & TOP 10 TAIPAN (DEDICATED SECTION) */}
+      {/* PAPAN PERINGKAT RESMI SULTAN 12 NAGA & TOP 10 TAIPAN (DEDICATED SECTION) */}
       <section id="peringkat" className="py-16 bg-[#080D1A] border-y border-slate-800/80 scroll-mt-24">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10">
           <div className="text-center max-w-3xl mx-auto space-y-3">
@@ -415,7 +415,7 @@ export default function PublicDownloadLandingPage() {
               PAPAN PERINGKAT RESMI BURSA MODAL FEDERASI
             </span>
             <h2 className="text-2xl sm:text-4xl font-black text-white">
-              Klasemen Sultan 9 Naga &amp; Top Taipan Terkaya
+              Klasemen Sultan 12 Naga &amp; Top Taipan Terkaya
             </h2>
             <p className="text-slate-400 text-sm">
               Peringkat langsung 24/7 berdasarkan akumulasi modal kas pribadi, nilai portofolio saham bursa,
@@ -433,7 +433,7 @@ export default function PublicDownloadLandingPage() {
                 </div>
                 <div className="text-base font-black text-white">{topLeaders[1]?.username}</div>
                 <span className="px-2 py-0.5 rounded-full bg-slate-700/60 text-slate-300 text-[10px] font-bold mt-1">
-                  9 NAGA FEDERASI
+                  12 NAGA FEDERASI
                 </span>
                 <div className="text-xs text-sky-400 font-semibold mt-2 truncate max-w-full">
                   {topLeaders[1]?.ptName || 'PT Tbk.'}
@@ -454,7 +454,7 @@ export default function PublicDownloadLandingPage() {
                 </div>
                 <div className="text-xl font-black text-amber-300">{topLeaders[0]?.username}</div>
                 <span className="px-2.5 py-0.5 rounded-full bg-amber-500/25 border border-amber-500/50 text-amber-300 text-[11px] font-black mt-1">
-                  SULTAN 9 NAGA #1
+                  SULTAN 12 NAGA #1
                 </span>
                 <div className="text-xs text-sky-300 font-bold mt-2 truncate max-w-full">
                   {topLeaders[0]?.ptName || 'PT. Kencana Artha Persada Tbk.'}
@@ -472,7 +472,7 @@ export default function PublicDownloadLandingPage() {
                 </div>
                 <div className="text-base font-black text-white">{topLeaders[2]?.username}</div>
                 <span className="px-2 py-0.5 rounded-full bg-amber-900/40 text-amber-300 text-[10px] font-bold mt-1">
-                  9 NAGA FEDERASI
+                  12 NAGA FEDERASI
                 </span>
                 <div className="text-xs text-sky-400 font-semibold mt-2 truncate max-w-full">
                   {topLeaders[2]?.ptName || 'PT Tbk.'}
@@ -512,9 +512,9 @@ export default function PublicDownloadLandingPage() {
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-black text-white truncate">{u.username}</span>
-                        {idx < 9 ? (
+                        {idx < 12 ? (
                           <span className="px-2 py-0.5 rounded bg-gradient-to-r from-amber-500 to-orange-600 text-[9.5px] font-black text-white shadow-sm">
-                            9 NAGA
+                            12 NAGA
                           </span>
                         ) : (
                           <span className="px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/40 text-[9.5px] font-bold">
@@ -605,11 +605,11 @@ export default function PublicDownloadLandingPage() {
                 <Crown size={22} />
               </div>
               <h3 className="text-base font-black text-white">
-                4. Takhta Sultan 9 Naga &amp; Chat Emas
+                4. Takhta Sultan 12 Naga &amp; Chat Emas
               </h3>
               <p className="text-xs text-slate-300 leading-relaxed">
-                Kumpulkan kekayaan tertinggi dan tembus <strong>Top 9 Papan Peringkat Konglomerat</strong> untuk
-                menyandang gelar <strong>🐉 Sultan 9 Naga</strong>. Setiap pesan Anda di Chat Global Bursa
+                Kumpulkan kekayaan tertinggi dan tembus <strong>Top 12 Papan Peringkat Konglomerat</strong> untuk
+                menyandang gelar <strong>🐉 Sultan 12 Naga</strong>. Setiap pesan Anda di Chat Global Bursa
                 akan tampil dengan bingkai &amp; mahkota emas eksklusif!
               </p>
             </div>

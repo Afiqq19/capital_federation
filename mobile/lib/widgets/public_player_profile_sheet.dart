@@ -48,18 +48,27 @@ class _PublicPlayerProfileSheetState extends State<PublicPlayerProfileSheet> {
   }
 
   Future<void> _fetchProfile() async {
-    final res = await ApiService.getPublicPlayerProfile(widget.userId);
-    if (!mounted) return;
-    if (res['error'] != null) {
-      setState(() {
-        _isLoading = false;
-        _errorMessage = res['error'].toString();
-      });
-    } else {
-      setState(() {
-        _isLoading = false;
-        _profileData = res;
-      });
+    try {
+      final res = await ApiService.getPublicPlayerProfile(widget.userId);
+      if (!mounted) return;
+      if (res['error'] != null) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = res['error'].toString();
+        });
+      } else {
+        setState(() {
+          _isLoading = false;
+          _profileData = res;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = e.toString();
+        });
+      }
     }
   }
 
@@ -81,14 +90,14 @@ class _PublicPlayerProfileSheetState extends State<PublicPlayerProfileSheet> {
             ? widget.initialData!['rank']
             : (num.tryParse(_profileData?['rank']?.toString() ?? widget.initialData?['rank']?.toString() ?? '99') ?? 99);
     final int rank = rankNum.toInt();
-    final bool is9Naga = rank <= 9;
-    final bool isTaipan = rank > 9 && rank <= 25;
+    final bool is12Naga = rank <= 12;
+    final bool isTaipan = rank > 12 && rank <= 35;
     final bool isVip = _profileData?['isVip'] == true || widget.initialData?['isVip'] == true;
     final String username = (_profileData?['username'] ?? widget.initialData?['username'] ?? 'Konglomerat').toString().trim();
 
     Color themeColor = const Color(0xFF38BDF8);
     LinearGradient? headerGradient;
-    if (is9Naga) {
+    if (is12Naga) {
       themeColor = const Color(0xFFF59E0B);
       headerGradient = const LinearGradient(
         colors: [Color(0xFF2B1F06), Color(0xFF141109), Color(0xFF0F172A)],
@@ -112,20 +121,15 @@ class _PublicPlayerProfileSheetState extends State<PublicPlayerProfileSheet> {
       'companyCash': widget.initialData?['companyCash'] ?? 0,
       'stockValuation': widget.initialData?['stockValuation'] ?? 0,
     };
-    final privacyData = _profileData?['privacy'] ?? {
-      'maskedEmail': 'Disamarkan demi privasi',
-      'maskedVaultAccount': 'CFX-VAULT-****',
-      'protectionSeal': 'UU Perlindungan Nasabah & Kustodian Sentral IPMC',
-    };
     final holdingData = _profileData?['holding'] ?? {
       'hasPt': widget.initialData?['hasPt'] == true || (widget.initialData?['ptName'] != null && widget.initialData!['ptName'].toString().isNotEmpty),
       'ptName': widget.initialData?['ptName'] ?? 'Belum Mendirikan PT',
       'symbol': widget.initialData?['ptSymbol'] ?? 'PT',
       'sector': widget.initialData?['sector'] ?? 'Strategis',
       'isIpo': widget.initialData?['isIpo'] == true,
-      'fundamentalScore': 75,
-      'rdLevel': 1,
-      'employeesCount': 0,
+      'fundamentalScore': 85,
+      'rdLevel': is12Naga ? 12 : 2,
+      'employeesCount': is12Naga ? 250 : 25,
       'subsidiaries': [],
     };
     final portfolioShares = _profileData?['portfolioShares'] ?? [];
@@ -149,245 +153,246 @@ class _PublicPlayerProfileSheetState extends State<PublicPlayerProfileSheet> {
         ),
         child: Column(
           children: [
-          // Drag handle
-          Center(
-            child: Container(
-              width: 44,
-              height: 4,
-              decoration: BoxDecoration(
-                color: const Color(0xFF334155),
-                borderRadius: BorderRadius.circular(2),
+            // Drag handle
+            Center(
+              child: Container(
+                width: 44,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF334155),
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 14),
+            const SizedBox(height: 14),
 
-          // Header Profile Ringkas
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              gradient: headerGradient ??
-                  const LinearGradient(
-                    colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+            // Header Profile Ringkas
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                gradient: headerGradient ??
+                    const LinearGradient(
+                      colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: themeColor.withValues(alpha: 0.5)),
+              ),
+              child: Row(
+                children: [
+                  // Avatar Prestise
+                  Container(
+                    width: 54,
+                    height: 54,
+                    decoration: BoxDecoration(
+                      gradient: is12Naga
+                          ? const LinearGradient(colors: [Color(0xFFF59E0B), Color(0xFFB45309)])
+                          : (isVip
+                              ? const LinearGradient(colors: [Color(0xFFA855F7), Color(0xFFEC4899)])
+                              : const LinearGradient(colors: [Color(0xFF38BDF8), Color(0xFF0284C7)])),
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: themeColor.withValues(alpha: 0.35),
+                          blurRadius: 10,
+                          offset: const Offset(0, 3),
+                        )
+                      ],
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      is12Naga ? '🐉' : (isVip ? '💎' : (username.isNotEmpty ? username[0].toUpperCase() : 'K')),
+                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Colors.white),
+                    ),
                   ),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: themeColor.withValues(alpha: 0.5)),
+                  const SizedBox(width: 14),
+
+                  // Nama & Badge
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Wrap(
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: [
+                            Text(
+                              username,
+                              style: TextStyle(
+                                color: is12Naga ? const Color(0xFFFDE68A) : Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            if (is12Naga)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(colors: [Color(0xFFF59E0B), Color(0xFFB45309)]),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  '🐉 12 NAGA #$rank',
+                                  style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w900),
+                                ),
+                              )
+                            else if (isTaipan)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF38BDF8).withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(color: const Color(0xFF38BDF8)),
+                                ),
+                                child: Text(
+                                  '👑 TAIPAN #$rank',
+                                  style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 9, fontWeight: FontWeight.w900),
+                                ),
+                              ),
+                            if (isVip)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(colors: [Color(0xFFA855F7), Color(0xFFEC4899)]),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Text(
+                                  '💎 VIP',
+                                  style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w900),
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            const Icon(Icons.verified_user_rounded, size: 13, color: Color(0xFF34D399)),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                'Anggota Terdaftar Sejak: ${_formatDate(_profileData?['joinedAt'])}',
+                                style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
-            child: Row(
-              children: [
-                // Avatar Prestise
-                Container(
-                  width: 54,
-                  height: 54,
-                  decoration: BoxDecoration(
-                    gradient: is9Naga
-                        ? const LinearGradient(colors: [Color(0xFFF59E0B), Color(0xFFB45309)])
-                        : (isVip
-                            ? const LinearGradient(colors: [Color(0xFFA855F7), Color(0xFFEC4899)])
-                            : const LinearGradient(colors: [Color(0xFF38BDF8), Color(0xFF0284C7)])),
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: themeColor.withValues(alpha: 0.35),
-                        blurRadius: 10,
-                        offset: const Offset(0, 3),
-                      )
-                    ],
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    is9Naga ? '🐉' : (isVip ? '💎' : (username.isNotEmpty ? username[0].toUpperCase() : 'K')),
-                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Colors.white),
-                  ),
-                ),
-                const SizedBox(width: 14),
+            const SizedBox(height: 14),
 
-                // Nama & Badge
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Wrap(
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        spacing: 6,
-                        runSpacing: 4,
-                        children: [
-                          Text(
-                            username,
-                            style: TextStyle(
-                              color: is9Naga ? const Color(0xFFFDE68A) : Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                          if (is9Naga)
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                              decoration: BoxDecoration(
-                                gradient: const LinearGradient(colors: [Color(0xFFF59E0B), Color(0xFFB45309)]),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                '🐉 9 NAGA #$rank',
-                                style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w900),
-                              ),
-                            )
-                          else if (isTaipan)
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF38BDF8).withValues(alpha: 0.2),
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(color: const Color(0xFF38BDF8)),
-                              ),
-                              child: Text(
-                                '👑 TAIPAN #$rank',
-                                style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 9, fontWeight: FontWeight.w900),
-                              ),
-                            ),
-                          if (isVip)
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                gradient: const LinearGradient(colors: [Color(0xFFA855F7), Color(0xFFEC4899)]),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: const Text(
-                                '💎 VIP',
-                                style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w900),
-                              ),
-                            ),
-                        ],
+            // Body Scrollable
+            Expanded(
+              child: ListView(
+                children: [
+                  if (_isLoading)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: themeColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: themeColor.withValues(alpha: 0.25)),
                       ),
-                      const SizedBox(height: 4),
-                      Row(
+                      child: Row(
                         children: [
-                          const Icon(Icons.verified_user_rounded, size: 13, color: Color(0xFF34D399)),
-                          const SizedBox(width: 4),
+                          SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(color: themeColor, strokeWidth: 2),
+                          ),
+                          const SizedBox(width: 10),
                           Expanded(
                             child: Text(
-                              'Anggota Terdaftar Sejak: ${_formatDate(_profileData?['joinedAt'])}',
-                              style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                              'Menyinkronkan portofolio & aset konglomerat realtime...',
+                              style: TextStyle(color: themeColor, fontSize: 10.5, fontWeight: FontWeight.bold),
                             ),
                           ),
                         ],
                       ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-
-          // Body Scrollable (Langsung tampil instan dari initialData & realtime sinkron)
-          Expanded(
-            child: ListView(
-              children: [
-                if (_isLoading)
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: themeColor.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: themeColor.withValues(alpha: 0.25)),
-                    ),
-                    child: Row(
-                      children: [
-                        SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(color: themeColor, strokeWidth: 2),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            'Menyinkronkan portofolio saham realtime dari Kustodian...',
-                            style: TextStyle(color: themeColor, fontSize: 10.5, fontWeight: FontWeight.bold),
+                    )
+                  else if (_errorMessage != null)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEF4444).withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.info_outline_rounded, size: 15, color: Color(0xFFF87171)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Pratinjau Data Offline: $_errorMessage',
+                              style: const TextStyle(color: Color(0xFFFCA5A5), fontSize: 10.5),
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  )
-                else if (_errorMessage != null)
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFEF4444).withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.3)),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.info_outline_rounded, size: 15, color: Color(0xFFF87171)),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Pratinjau Data Offline: $_errorMessage',
-                            style: const TextStyle(color: Color(0xFFFCA5A5), fontSize: 10.5),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
 
-                // 1. KOTAK TOTAL KEKAYAAN BERSIH (NET WORTH)
-                _buildNetWorthCard(wealthData, is9Naga, themeColor),
+                  // 1. KOTAK TOTAL KEKAYAAN BERSIH (NET WORTH)
+                  _buildNetWorthCard(wealthData, is12Naga, themeColor),
 
-                const SizedBox(height: 12),
+                  const SizedBox(height: 12),
 
-                // 2. KOTAK KEAMANAN & PRIVASI TERTUTUP (KUSTODIAN)
-                _buildPrivacyCard(privacyData),
+                  // 2. HOLDING PERSEROAN TERBATAS & SEMUA ANAK USAHA / HASIL AKUISISI
+                  _buildHoldingCard(holdingData),
 
-                const SizedBox(height: 12),
+                  const SizedBox(height: 12),
 
-                // 3. HOLDING PERSEROAN TERBATAS (PT INDUK & ANAK USAHA)
-                _buildHoldingCard(holdingData),
+                  // 3. PORTOFOLIO SAHAM TERBUKA DI BURSA
+                  _buildPortfolioSharesCard(portfolioShares),
 
-                const SizedBox(height: 12),
-
-                // 4. PORTOFOLIO SAHAM TERBUKA (PUBLIC SHARE REGISTRY)
-                _buildPortfolioSharesCard(portfolioShares),
-
-                const SizedBox(height: 16),
-              ],
-            ),
-          ),
-
-          // Tombol Tutup Lembar Profil
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton(
-              style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFF94A3B8),
-                side: const BorderSide(color: Color(0xFF334155)),
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  const SizedBox(height: 16),
+                ],
               ),
-              onPressed: () => Navigator.pop(context),
-              child: const Text('TUTUP ARSIP PROFIL', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
             ),
-          ),
-        ],
+
+            // Tombol Tutup Lembar Profil
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF94A3B8),
+                  side: const BorderSide(color: Color(0xFF334155)),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                onPressed: () => Navigator.pop(context),
+                child: const Text('TUTUP ARSIP PROFIL', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+              ),
+            ),
+          ],
+        ),
       ),
-    ),
-  );
+    );
   }
 
   // 1. KARTU NET WORTH
-  Widget _buildNetWorthCard(dynamic wealth, bool is9Naga, Color themeColor) {
-    final double netWorth = (wealth?['netWorth'] as num?)?.toDouble() ??
-        (widget.initialData?['netWorth'] as num?)?.toDouble() ??
-        0.0;
-    final double personalCash = (wealth?['personalCash'] as num?)?.toDouble() ?? 0.0;
-    final double companyCash = (wealth?['companyCash'] as num?)?.toDouble() ?? 0.0;
-    final double stockValuation = (wealth?['stockValuation'] as num?)?.toDouble() ?? 0.0;
+  Widget _buildNetWorthCard(dynamic wealth, bool is12Naga, Color themeColor) {
+    final double netWorth = (wealth?['netWorth'] is num)
+        ? (wealth['netWorth'] as num).toDouble()
+        : (double.tryParse(wealth?['netWorth']?.toString() ?? '0') ?? 0.0);
+    final double personalCash = (wealth?['personalCash'] is num)
+        ? (wealth['personalCash'] as num).toDouble()
+        : (double.tryParse(wealth?['personalCash']?.toString() ?? '0') ?? 0.0);
+    final double companyCash = (wealth?['companyCash'] is num)
+        ? (wealth['companyCash'] as num).toDouble()
+        : (double.tryParse(wealth?['companyCash']?.toString() ?? '0') ?? 0.0);
+    final double stockValuation = (wealth?['stockValuation'] is num)
+        ? (wealth['stockValuation'] as num).toDouble()
+        : (double.tryParse(wealth?['stockValuation']?.toString() ?? '0') ?? 0.0);
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -435,7 +440,7 @@ class _PublicPlayerProfileSheetState extends State<PublicPlayerProfileSheet> {
           Text(
             CurrencyFormatter.formatFull(netWorth),
             style: TextStyle(
-              color: is9Naga ? const Color(0xFFFDE68A) : const Color(0xFF34D399),
+              color: is12Naga ? const Color(0xFFFDE68A) : const Color(0xFF34D399),
               fontSize: 22,
               fontWeight: FontWeight.w900,
               fontFamily: 'monospace',
@@ -477,83 +482,16 @@ class _PublicPlayerProfileSheetState extends State<PublicPlayerProfileSheet> {
     );
   }
 
-  // 2. KARTU PRIVASI
-  Widget _buildPrivacyCard(dynamic privacy) {
-    final String maskedEmail = privacy?['maskedEmail'] ?? 'Disamarkan demi privasi';
-    final String maskedVault = privacy?['maskedVaultAccount'] ?? 'CFX-VAULT-****';
-
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFF070B14),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFF1E293B)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Row(
-            children: [
-              Icon(Icons.shield_rounded, size: 16, color: Color(0xFF10B981)),
-              SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Proteksi Kerahasiaan & Privasi',
-                  style: TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.bold),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          _buildPrivacyRow('Rekening Vault:', maskedVault, Icons.lock_outline_rounded),
-          _buildPrivacyRow('Alamat Email:', maskedEmail, Icons.email_outlined),
-          _buildPrivacyRow('Kredensial Sandi:', '100% Terenkripsi', Icons.key_rounded),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPrivacyRow(String label, String value, IconData icon) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
-        children: [
-          Icon(icon, size: 12, color: const Color(0xFF64748B)),
-          const SizedBox(width: 6),
-          Expanded(
-            flex: 5,
-            child: Text(
-              label,
-              style: const TextStyle(color: Color(0xFF64748B), fontSize: 10.5),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          const SizedBox(width: 6),
-          Flexible(
-            flex: 5,
-            child: Text(
-              value,
-              textAlign: TextAlign.end,
-              style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.w600, fontFamily: 'monospace'),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // 3. KARTU HOLDING PERSEROAN TERBATAS
+  // 2. KARTU HOLDING PERSEROAN TERBATAS & SEMUA ANAK USAHA / HASIL AKUISISI
   Widget _buildHoldingCard(dynamic holding) {
     final bool hasPt = holding?['hasPt'] == true;
     final String ptName = holding?['ptName'] ?? 'Belum Mendirikan PT';
     final String symbol = holding?['symbol'] ?? '-';
     final String sector = holding?['sector'] ?? 'Finansial';
     final bool isIpo = holding?['isIpo'] == true;
-    final num fundScore = holding?['fundamentalScore'] ?? 75;
-    final int rdLevel = holding?['rdLevel'] ?? 1;
-    final int employees = holding?['employeesCount'] ?? 0;
+    final num fundScore = holding?['fundamentalScore'] ?? 85;
+    final int rdLevel = (holding?['rdLevel'] is num) ? (holding['rdLevel'] as num).toInt() : 1;
+    final int employees = (holding?['employeesCount'] is num) ? (holding['employeesCount'] as num).toInt() : 0;
     final List subsidiaries = holding?['subsidiaries'] as List? ?? [];
 
     return Container(
@@ -576,7 +514,7 @@ class _PublicPlayerProfileSheetState extends State<PublicPlayerProfileSheet> {
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'HOLDING PERSEROAN (PT)',
+                        'HOLDING PERSEROAN (PT UTAMA)',
                         style: TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.bold),
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -626,28 +564,83 @@ class _PublicPlayerProfileSheetState extends State<PublicPlayerProfileSheet> {
           ),
           if (subsidiaries.isNotEmpty) ...[
             const Divider(color: Color(0xFF1E293B), height: 20),
-            const Text(
-              'Anak Perusahaan & Unit Hasil Akuisisi:',
-              style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.bold),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Seluruh Anak Usaha & PT Hasil Akuisisi:',
+                  style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  '${subsidiaries.length} Entitas',
+                  style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 10, fontWeight: FontWeight.bold),
+                ),
+              ],
             ),
-            const SizedBox(height: 6),
-            ...subsidiaries.take(3).map((s) => Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 2.5),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          '• ${s['name']} (${s['symbol']})',
-                          style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 11),
-                          overflow: TextOverflow.ellipsis,
+            const SizedBox(height: 8),
+            ...subsidiaries.map((s) {
+              final bool isSubIpo = s['isIpo'] == true;
+              return Container(
+                margin: const EdgeInsets.only(bottom: 6),
+                padding: const EdgeInsets.all(9),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF070B14),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFF1E293B)),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: isSubIpo ? const Color(0xFF10B981).withValues(alpha: 0.15) : const Color(0xFF64748B).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        s['symbol'] ?? 'PT',
+                        style: TextStyle(
+                          color: isSubIpo ? const Color(0xFF34D399) : const Color(0xFF94A3B8),
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      Text('Sektor ${s['sector']}', style: const TextStyle(color: Color(0xFF64748B), fontSize: 10)),
-                    ],
-                  ),
-                )),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            s['name'] ?? '',
+                            style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            'Sektor ${s['sector'] ?? 'Strategis'} • Skor ${s['fundamentalScore'] ?? 80}/100',
+                            style: const TextStyle(color: Color(0xFF64748B), fontSize: 9.5),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E293B),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        isSubIpo ? 'TBK' : 'PRIVAT',
+                        style: TextStyle(
+                          color: isSubIpo ? const Color(0xFF38BDF8) : const Color(0xFF64748B),
+                          fontSize: 8.5,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
           ],
         ],
       ),
@@ -675,7 +668,7 @@ class _PublicPlayerProfileSheetState extends State<PublicPlayerProfileSheet> {
     );
   }
 
-  // 4. KARTU PORTOFOLIO SAHAM TERBUKA
+  // 3. KARTU PORTOFOLIO SAHAM TERBUKA
   Widget _buildPortfolioSharesCard(dynamic publicShares) {
     final List shares = publicShares as List? ?? [];
 
@@ -727,7 +720,15 @@ class _PublicPlayerProfileSheetState extends State<PublicPlayerProfileSheet> {
             )
           else
             ...shares.map((s) {
-              final double valuation = (s['valuation'] ?? 0).toDouble();
+              final double valuation = (s['valuation'] is num)
+                  ? (s['valuation'] as num).toDouble()
+                  : (double.tryParse(s['valuation']?.toString() ?? '0') ?? 0.0);
+              final num lotsVal = (s['lotsOwned'] is num)
+                  ? s['lotsOwned']
+                  : (num.tryParse(s['lotsOwned']?.toString() ?? '0') ?? 0);
+              final String formattedLots = NumberFormat('#,###', 'id_ID').format(lotsVal);
+              final dynamic porsiVal = s['ownershipPct'] ?? '0.00';
+
               return Container(
                 margin: const EdgeInsets.only(bottom: 8),
                 padding: const EdgeInsets.all(10),
@@ -761,7 +762,7 @@ class _PublicPlayerProfileSheetState extends State<PublicPlayerProfileSheet> {
                             overflow: TextOverflow.ellipsis,
                           ),
                           Text(
-                            '${(s['lotsOwned'] ?? 0).toLocaleString()} Lot • Porsi: ${s['ownershipPct']}%',
+                            '$formattedLots Lot • Porsi: $porsiVal%',
                             style: const TextStyle(color: Color(0xFF64748B), fontSize: 10),
                           ),
                         ],
@@ -780,10 +781,3 @@ class _PublicPlayerProfileSheetState extends State<PublicPlayerProfileSheet> {
     );
   }
 }
-
-extension NumberFormatExtension on num {
-  String toLocaleString() {
-    return NumberFormat('#,###', 'id_ID').format(this);
-  }
-}
-

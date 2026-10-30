@@ -196,6 +196,11 @@ export function AdminProvider({ children }) {
           await adminApi.editUser(userId, form);
           return { message: 'Data & saldo pemain berhasil disimpan' };
         }, { refresh: [refreshUsers, refreshBank] }),
+      deleteUser: (userId) =>
+        run(async () => {
+          const r = await adminApi.deleteUser(userId);
+          return { message: r.message || 'Akun pemain berhasil dihapus permanen' };
+        }, { refresh: [refreshUsers, refreshBank, refreshOverview] }),
       setBotStatus: (companyId, status) =>
         run(async () => {
           await adminApi.setBotStatus(companyId, status);

@@ -30,6 +30,7 @@ export const adminApi = {
   // ---- Pemain ----
   toggleBan: (userId) => request(`/api/admin/users/${userId}/ban`, { method: 'POST' }),
   editUser: (userId, form) => request(`/api/admin/users/${userId}/edit`, { method: 'POST', body: form }),
+  deleteUser: (userId) => request(`/api/admin/users/${userId}`, { method: 'DELETE' }),
 
   // ---- Bot & Makro ----
   setBotStatus: (companyId, status) => request(`/api/admin/bots/${companyId}/status`, { method: 'PUT', body: { status } }),
