@@ -5186,12 +5186,6 @@ app.get('/api/user/public-profile/:userId', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-      portfolioShares: publicShares
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
 
 // Chat Global Bursa (Menampilkan Status 9 NAGA Sultan, TAIPAN, VIP, & Bank Sentral)
 app.get('/api/chat', async (req, res) => {
