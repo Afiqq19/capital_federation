@@ -32,3 +32,4 @@ networks:
   mss-network:
     external: true
     name: mss-server-panel_mss-network
+

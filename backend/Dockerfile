@@ -20,3 +20,4 @@ EXPOSE 5000
 
 # Jalankan server
 CMD ["node", "src/server.js"]
+
