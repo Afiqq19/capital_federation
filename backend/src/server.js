@@ -7,7 +7,7 @@ const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 require('dotenv').config();
 
-const { query, initDb, recordCashFlow } = require('./db');
+const { query, initDb, recordCashFlow, syncAllToMariaDb } = require('./db');
 const MarketSimulationEngine = require('./engine/simulation');
 const SurveillanceService = require('./services/surveillance.service');
 const registerAdminRoutes = require('./routes/admin');
@@ -4928,6 +4928,7 @@ async function start() {
     console.log('🌱 Server baru terdeteksi (0 emiten). Menjalankan inisialisasi pasar perdana...');
     const { seed } = require('./seed');
     await seed();
+    await syncAllToMariaDb();
   }
   simulationEngine.start();
   surveillance.start();

@@ -72,6 +72,7 @@ const query = {
               reject(err);
             }
           } else {
+            scheduleMariaDbSync(sql);
             resolve({ lastID: this.lastID, changes: this.changes });
           }
         });
@@ -692,6 +693,9 @@ async function initDb() {
     CREATE INDEX IF NOT EXISTS idx_tender_bids_comp ON tender_bids(company_id);
   `);
 
+  // Connect to MariaDB MSS Panel (mss-db:3306 / db_capitalfederation) if available & restore existing data if container is fresh
+  await connectAndInitMariaDb();
+  await restoreFromMariaDbIfNeeded();
 
   // Ensure all existing company names have official 'PT. ' with dot
   await query.exec(`
@@ -1003,12 +1007,224 @@ async function initDb() {
     await query.run("UPDATE users SET role = 'ADMIN' WHERE username = 'admin'");
   }
 
+  await syncAllToMariaDb();
+
   console.log('Database tables verified / created with dual accounts (Personal & Company).');
+}
+
+// ============================================================================
+// MARIADB MSS PANEL BRIDGE (mss-db:3306 / db_capitalfederation)
+// Automatically creates & synchronizes all tables with MariaDB on Linux Server
+// while maintaining 100% SQLite speed & query compatibility.
+// ============================================================================
+let mysqlPool = null;
+let mariaDbConnected = false;
+let syncTimer = null;
+let isSyncing = false;
+
+const SYNC_TABLES_ORDER = [
+  'central_bank_settings',
+  'users',
+  'companies',
+  'portfolios',
+  'transactions',
+  'loans',
+  'auction_items',
+  'auction_bids',
+  'chat_messages',
+  'company_shareholders',
+  'ipo_offerings',
+  'ipo_orders',
+  'ipo_bids',
+  'court_cases',
+  'court_chat_messages',
+  'private_deals',
+  'deal_deeds',
+  'state_treasury_ledger',
+  'sovereign_bonds',
+  'user_bond_holdings',
+  'sector_subsidies',
+  'government_tenders',
+  'tender_bids',
+  'debt_relief_records',
+  'market_orders',
+  'market_oversight_log',
+  'macro_events',
+  'news',
+  'cash_flow_ledger',
+  'price_history'
+];
+
+function getMariaColumnType(col) {
+  const upperType = String(col.type || '').toUpperCase();
+  const name = String(col.name || '').toLowerCase();
+  if (col.pk > 0) {
+    return upperType.includes('INT') ? 'BIGINT NOT NULL' : 'VARCHAR(191) NOT NULL';
+  }
+  if (upperType.includes('INT')) return 'BIGINT NULL';
+  if (upperType.includes('REAL') || upperType.includes('FLOA') || upperType.includes('DOUB')) return 'DOUBLE NULL';
+  if (
+    ['id', 'user_id', 'company_id', 'owner_id', 'username', 'symbol', 'sector', 'status', 'role', 'key', 'case_number', 'deal_number', 'deed_number', 'bond_code', 'tender_code'].includes(name)
+  ) {
+    return 'VARCHAR(191) NULL';
+  }
+  return 'LONGTEXT NULL';
+}
+
+async function connectAndInitMariaDb() {
+  const host = process.env.DB_HOST || 'mss-db';
+  const port = Number(process.env.DB_PORT) || 3306;
+  const user = process.env.DB_USERNAME || 'root';
+  const password = process.env.DB_PASSWORD || 'root_secret_pass';
+  const database = process.env.DB_DATABASE || 'db_capitalfederation';
+
+  try {
+    const mysql = require('mysql2/promise');
+    const bootstrapConn = await mysql.createConnection({
+      host,
+      port,
+      user,
+      password,
+      connectTimeout: 2500
+    });
+    await bootstrapConn.query(
+      `CREATE DATABASE IF NOT EXISTS \`${database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`
+    );
+    await bootstrapConn.end();
+
+    mysqlPool = mysql.createPool({
+      host,
+      port,
+      user,
+      password,
+      database,
+      waitForConnections: true,
+      connectionLimit: 5,
+      connectTimeout: 3000
+    });
+
+    // Ensure all tables and columns exist in MariaDB (db_capitalfederation)
+    for (const table of SYNC_TABLES_ORDER) {
+      const cols = await query.all(`PRAGMA table_info(${table})`);
+      if (!cols || cols.length === 0) continue;
+
+      const pkCols = cols.filter((c) => c.pk > 0).map((c) => `\`${c.name}\``);
+      const colDefs = cols.map((c) => `\`${c.name}\` ${getMariaColumnType(c)}`);
+      if (pkCols.length > 0) {
+        colDefs.push(`PRIMARY KEY (${pkCols.join(', ')})`);
+      }
+
+      const createSql = `CREATE TABLE IF NOT EXISTS \`${table}\` (${colDefs.join(', ')}) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`;
+      await mysqlPool.query(createSql);
+
+      // Ensure any newly migrated columns also exist in MariaDB
+      for (const c of cols) {
+        if (c.pk > 0) continue;
+        try {
+          await mysqlPool.query(
+            `ALTER TABLE \`${table}\` ADD COLUMN IF NOT EXISTS \`${c.name}\` ${getMariaColumnType(c)};`
+          );
+        } catch (_) {
+          // Ignore if column already exists or syntax varies
+        }
+      }
+    }
+
+    mariaDbConnected = true;
+    console.log(`🗄️  Connected & Verified MariaDB MSS Panel (${host}:${port}/${database})`);
+
+    // Periodic background sync every 25s
+    setInterval(() => {
+      syncAllToMariaDb().catch(() => {});
+    }, 25000);
+  } catch (err) {
+    mariaDbConnected = false;
+    console.log(
+      `ℹ️  MariaDB MSS Panel (${host}:${port}) belum terjangkau di environment ini (${err.code || err.message}) — menggunakan Persistent SQLite lokal.`
+    );
+  }
+}
+
+async function restoreFromMariaDbIfNeeded() {
+  if (!mariaDbConnected || !mysqlPool) return;
+  try {
+    const sqliteUsers = await query.get("SELECT COUNT(*) as count FROM users WHERE username != 'admin'");
+    const sqliteComps = await query.get('SELECT COUNT(*) as count FROM companies');
+    const [mariaUsersRows] = await mysqlPool.query("SELECT COUNT(*) as count FROM `users` WHERE `username` != 'admin'");
+    const [mariaCompsRows] = await mysqlPool.query('SELECT COUNT(*) as count FROM `companies`');
+
+    const mariaUserCount = mariaUsersRows?.[0]?.count || 0;
+    const mariaCompCount = mariaCompsRows?.[0]?.count || 0;
+
+    // Restore from MariaDB if SQLite is fresh/empty while MariaDB has existing data
+    if ((sqliteUsers.count === 0 && mariaUserCount > 0) || (sqliteComps.count === 0 && mariaCompCount > 0)) {
+      console.log('♻️  Memulihkan data pemain & pasar dari MariaDB (db_capitalfederation) ke engine lokal...');
+      await query.exec('PRAGMA foreign_keys = OFF;');
+      for (const table of SYNC_TABLES_ORDER) {
+        const [rows] = await mysqlPool.query(`SELECT * FROM \`${table}\``);
+        if (!rows || rows.length === 0) continue;
+        const colNames = Object.keys(rows[0]);
+        const placeholders = colNames.map(() => '?').join(', ');
+        const insertSql = `INSERT OR REPLACE INTO ${table} (${colNames.join(', ')}) VALUES (${placeholders})`;
+        for (const r of rows) {
+          await new Promise((resolve) => {
+            db.run(insertSql, colNames.map((k) => r[k]), () => resolve());
+          });
+        }
+      }
+      await query.exec('PRAGMA foreign_keys = ON;');
+      console.log(`✅ Pemulihan selesai (${mariaUserCount} akun pemain & ${mariaCompCount} emiten dipulihkan dari MariaDB).`);
+    }
+  } catch (err) {
+    console.error('Warning during MariaDB restore check:', err.message);
+  }
+}
+
+async function syncAllToMariaDb() {
+  if (!mariaDbConnected || !mysqlPool || isSyncing) return;
+  isSyncing = true;
+  try {
+    for (const table of SYNC_TABLES_ORDER) {
+      let limitClause = '';
+      if (table === 'price_history') limitClause = ' ORDER BY timestamp DESC LIMIT 500';
+      else if (table === 'cash_flow_ledger') limitClause = ' ORDER BY created_at DESC LIMIT 500';
+
+      const rows = await query.all(`SELECT * FROM ${table}${limitClause}`);
+      if (!rows || rows.length === 0) continue;
+
+      const colNames = Object.keys(rows[0]);
+      const quotedCols = colNames.map((c) => `\`${c}\``).join(', ');
+      const valuesMatrix = rows.map((r) => colNames.map((c) => r[c]));
+
+      // Batch in chunks of 200 rows
+      for (let i = 0; i < valuesMatrix.length; i += 200) {
+        const chunk = valuesMatrix.slice(i, i + 200);
+        await mysqlPool.query(`REPLACE INTO \`${table}\` (${quotedCols}) VALUES ?`, [chunk]);
+      }
+    }
+  } catch (err) {
+    // Non-fatal background sync error
+  } finally {
+    isSyncing = false;
+  }
+}
+
+function scheduleMariaDbSync(sql = '') {
+  if (!mariaDbConnected || !mysqlPool) return;
+  const upper = String(sql).trim().toUpperCase();
+  if (!upper.startsWith('INSERT') && !upper.startsWith('UPDATE') && !upper.startsWith('DELETE') && !upper.startsWith('REPLACE')) {
+    return;
+  }
+  if (syncTimer) clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => {
+    syncAllToMariaDb().catch(() => {});
+  }, 1500);
 }
 
 module.exports = {
   db,
   query,
   initDb,
-  recordCashFlow
+  recordCashFlow,
+  syncAllToMariaDb
 };
