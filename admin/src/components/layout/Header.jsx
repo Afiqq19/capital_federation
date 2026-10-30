@@ -2,9 +2,9 @@ import { useState, useEffect } from 'react';
 import { NAV_ITEMS } from '../../config/navigation';
 import { useAdmin } from '../../context/AdminContext';
 import { changePct, signedPct } from '../../lib/format';
-import { ShieldAlert, Radio, Ban, Clock, LogOut } from 'lucide-react';
+import { ShieldAlert, Radio, Ban, Clock, LogOut, Menu } from 'lucide-react';
 
-export default function Header({ currentPage, adminUser, onLogout }) {
+export default function Header({ currentPage, adminUser, onLogout, onToggleMobileSidebar }) {
   const { companies, oversight } = useAdmin();
   const [timeStr, setTimeStr] = useState('');
 
@@ -34,13 +34,26 @@ export default function Header({ currentPage, adminUser, onLogout }) {
   const suspCount = oversight?.suspensionList?.length || 0;
 
   return (
-    <header className="h-16 shrink-0 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-md px-6 flex items-center justify-between gap-4 z-20 overflow-hidden">
-      {/* Page Title & Breadcrumb */}
-      <div className="min-w-0 shrink">
-        <h1 className="text-base font-bold text-slate-100 tracking-tight flex items-center gap-2 truncate">
-          {currentNav.title}
-        </h1>
-        <p className="text-xs text-slate-400 truncate">{currentNav.subtitle}</p>
+    <header className="h-16 shrink-0 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-md px-4 sm:px-6 flex items-center justify-between gap-3 sm:gap-4 z-20 overflow-hidden">
+      {/* Page Title & Breadcrumb + Mobile Hamburger Button */}
+      <div className="flex items-center gap-3 min-w-0 shrink">
+        {onToggleMobileSidebar && (
+          <button
+            type="button"
+            onClick={onToggleMobileSidebar}
+            className="md:hidden p-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800/90 border border-slate-800 transition cursor-pointer shrink-0"
+            title="Buka Menu Navigasi"
+          >
+            <Menu size={20} />
+          </button>
+        )}
+
+        <div className="min-w-0">
+          <h1 className="text-sm sm:text-base font-bold text-slate-100 tracking-tight flex items-center gap-2 truncate">
+            {currentNav.title}
+          </h1>
+          <p className="text-[11px] sm:text-xs text-slate-400 truncate">{currentNav.subtitle}</p>
+        </div>
       </div>
 
       {/* Right Controls: Ticker + Badges + Clock */}

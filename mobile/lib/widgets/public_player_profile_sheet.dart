@@ -22,6 +22,7 @@ class PublicPlayerProfileSheet extends StatefulWidget {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: 0.75),
       builder: (_) => PublicPlayerProfileSheet(
         userId: userId,
         initialData: initialData,
@@ -97,25 +98,24 @@ class _PublicPlayerProfileSheetState extends State<PublicPlayerProfileSheet> {
       );
     }
 
+    final double sheetHeight = MediaQuery.of(context).size.height * 0.88;
+
     return Container(
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.90,
-      ),
-      padding: EdgeInsets.fromLTRB(20, 14, 20, MediaQuery.of(context).viewInsets.bottom + 20),
+      height: sheetHeight,
+      padding: EdgeInsets.fromLTRB(18, 12, 18, MediaQuery.of(context).viewInsets.bottom + 16),
       decoration: BoxDecoration(
         color: const Color(0xFF0A0F1E),
         borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
         border: Border(top: BorderSide(color: themeColor, width: 2.0)),
         boxShadow: [
           BoxShadow(
-            color: themeColor.withValues(alpha: 0.18),
-            blurRadius: 24,
+            color: themeColor.withValues(alpha: 0.25),
+            blurRadius: 28,
             offset: const Offset(0, -6),
           ),
         ],
       ),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         children: [
           // Drag handle
           Center(
@@ -255,35 +255,81 @@ class _PublicPlayerProfileSheetState extends State<PublicPlayerProfileSheet> {
           // Body Scrollable
           Expanded(
             child: _isLoading
-                ? const Center(
-                    child: CircularProgressIndicator(color: Color(0xFFF59E0B)),
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                          width: 36,
+                          height: 36,
+                          child: CircularProgressIndicator(
+                            color: themeColor,
+                            strokeWidth: 3,
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        Text(
+                          'Mengakses Arsip Kustodian Sentral...',
+                          style: TextStyle(color: themeColor, fontWeight: FontWeight.bold, fontSize: 12.5),
+                        ),
+                        const SizedBox(height: 4),
+                        const Text(
+                          'Memverifikasi kepemilikan saham, kas brankas & valuasi aset',
+                          style: TextStyle(color: Color(0xFF64748B), fontSize: 10.5),
+                        ),
+                      ],
+                    ),
                   )
                 : (_errorMessage != null)
                     ? Center(
-                        child: Text(
-                          _errorMessage!,
-                          style: const TextStyle(color: Color(0xFFF87171), fontSize: 12),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.error_outline_rounded, color: Color(0xFFF87171), size: 36),
+                            const SizedBox(height: 10),
+                            Text(
+                              _errorMessage!,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(color: Color(0xFFF87171), fontSize: 12),
+                            ),
+                            const SizedBox(height: 12),
+                            OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: themeColor,
+                                side: BorderSide(color: themeColor),
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  _isLoading = true;
+                                  _errorMessage = null;
+                                });
+                                _fetchProfile();
+                              },
+                              icon: const Icon(Icons.refresh_rounded, size: 16),
+                              label: const Text('Coba Lagi', style: TextStyle(fontSize: 11)),
+                            ),
+                          ],
                         ),
                       )
                     : ListView(
                         children: [
                           // 1. KOTAK TOTAL KEKAYAAN BERSIH (NET WORTH)
-                          _buildNetWorthCard(_profileData!['wealth'], is9Naga, themeColor),
+                          _buildNetWorthCard(_profileData?['wealth'], is9Naga, themeColor),
 
                           const SizedBox(height: 12),
 
                           // 2. KOTAK KEAMANAN & PRIVASI TERTUTUP (KUSTODIAN)
-                          _buildPrivacyCard(_profileData!['privacy']),
+                          _buildPrivacyCard(_profileData?['privacy']),
 
                           const SizedBox(height: 12),
 
                           // 3. HOLDING PERSEROAN TERBATAS (PT INDUK & ANAK USAHA)
-                          _buildHoldingCard(_profileData!['holding']),
+                          _buildHoldingCard(_profileData?['holding']),
 
                           const SizedBox(height: 12),
 
                           // 4. PORTOFOLIO SAHAM TERBUKA (PUBLIC SHARE REGISTRY)
-                          _buildPortfolioSharesCard(_profileData!['portfolioShares']),
+                          _buildPortfolioSharesCard(_profileData?['portfolioShares']),
 
                           const SizedBox(height: 16),
                         ],
@@ -311,10 +357,12 @@ class _PublicPlayerProfileSheetState extends State<PublicPlayerProfileSheet> {
 
   // 1. KARTU NET WORTH
   Widget _buildNetWorthCard(dynamic wealth, bool is9Naga, Color themeColor) {
-    final double netWorth = (wealth?['netWorth'] ?? 0).toDouble();
-    final double personalCash = (wealth?['personalCash'] ?? 0).toDouble();
-    final double companyCash = (wealth?['companyCash'] ?? 0).toDouble();
-    final double stockValuation = (wealth?['stockValuation'] ?? 0).toDouble();
+    final double netWorth = (wealth?['netWorth'] as num?)?.toDouble() ??
+        (widget.initialData?['netWorth'] as num?)?.toDouble() ??
+        0.0;
+    final double personalCash = (wealth?['personalCash'] as num?)?.toDouble() ?? 0.0;
+    final double companyCash = (wealth?['companyCash'] as num?)?.toDouble() ?? 0.0;
+    final double stockValuation = (wealth?['stockValuation'] as num?)?.toDouble() ?? 0.0;
 
     return Container(
       padding: const EdgeInsets.all(16),

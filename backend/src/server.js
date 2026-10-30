@@ -5800,13 +5800,13 @@ const localBuiltApkPath = path.join(__dirname, '../../mobile/build/app/outputs/f
 
 async function getApkSettingsMap() {
   const defaults = {
-    apk_version: '1.5.3',
-    apk_build_number: '7',
+    apk_version: '1.5.4',
+    apk_build_number: '8',
     apk_min_android: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
-    apk_file_size_mb: '24.8 MB',
-    apk_release_notes: 'Pembaruan Profil Konglomerat & Form Akun Terpadu, Layanan Email Resmi projek.msyafiq19@gmail.com, Arus Kas & Mutasi di Beranda Bersih, serta Perbaikan SQLite Verifikasi Akun.',
+    apk_file_size_mb: '25.0 MB',
+    apk_release_notes: 'Perbaikan Tampilan Lembar Profil Publik Pemain di Peringkat & Chat Bursa, Desain Responsif Web Admin Mobile HP, dan Optimasi Arsip Kustodian Sentral.',
     apk_external_url: '',
-    apk_download_count: '152',
+    apk_download_count: '168',
     apk_sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
     apk_updated_at: new Date().toISOString(),
   };
@@ -5817,11 +5817,11 @@ async function getApkSettingsMap() {
         defaults[r.key] = String(r.value);
       }
     }
-    if (parseInt(defaults.apk_build_number || '0', 10) < 7) {
-      defaults.apk_version = '1.5.3';
-      defaults.apk_build_number = '7';
-      defaults.apk_file_size_mb = '24.8 MB';
-      defaults.apk_release_notes = 'Pembaruan Profil Konglomerat & Form Akun Terpadu, Layanan Email Resmi projek.msyafiq19@gmail.com, Arus Kas & Mutasi di Beranda Bersih, serta Perbaikan SQLite Verifikasi Akun.';
+    if (parseInt(defaults.apk_build_number || '0', 10) < 8) {
+      defaults.apk_version = '1.5.4';
+      defaults.apk_build_number = '8';
+      defaults.apk_file_size_mb = '25.0 MB';
+      defaults.apk_release_notes = 'Perbaikan Tampilan Lembar Profil Publik Pemain di Peringkat & Chat Bursa, Desain Responsif Web Admin Mobile HP, dan Optimasi Arsip Kustodian Sentral.';
     }
   } catch (_) {}
   return defaults;
