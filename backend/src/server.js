@@ -325,6 +325,9 @@ app.post('/api/admin/system/fresh-reset', async (req, res) => {
 // 2. PENDIRIAN PT, R&D & PEMISAHAN REKENING (PRIBADI vs PT)
 // ----------------------------------------------------
 
+// Cooldown map untuk anti-spam multi-click pendirian PT
+const foundCompanyCooldownMap = new Map();
+
 // Mendirikan PT Pertama / Anak Perusahaan Baru (Akta Pendirian Notaris & Pengesahan Kemenkumham/IPMC)
 app.post('/api/company/found', async (req, res) => {
   try {
@@ -333,6 +336,13 @@ app.post('/api/company/found', async (req, res) => {
       return res.status(400).json({ error: 'Nama PT dan Sektor Industri wajib diisi' });
     }
 
+    // Anti-spam / Cooldown 4 detik untuk mencegah double-click
+    const nowTimestamp = Date.now();
+    if (foundCompanyCooldownMap.has(userId) && (nowTimestamp - foundCompanyCooldownMap.get(userId) < 4000)) {
+      return res.status(429).json({ error: 'Permintaan pendirian PT Anda sedang diverifikasi notaris. Mohon tunggu beberapa saat!' });
+    }
+    foundCompanyCooldownMap.set(userId, nowTimestamp);
+
     if (agreedToTerms === false || agreedToTerms === 'false') {
       return res.status(400).json({ error: 'Anda wajib menyetujui Akta Pendirian PT & Kepatuhan Regulasi IPMC!' });
     }
@@ -340,8 +350,24 @@ app.post('/api/company/found', async (req, res) => {
     const user = await query.get('SELECT * FROM users WHERE id = ?', [userId]);
     if (!user) return res.status(404).json({ error: 'User tidak ditemukan' });
 
-    // Format nama resmi perseroan dengan titik: PT. [Nama]
+    // Format nama resmi perseroan dengan titik: PT. [Nama] (Non-Tbk sampai resmi IPO)
     const officialName = formatCorporateName(ptName, false);
+
+    // Validasi Keunikan Nama Perusahaan di Kemenkumham Federasi
+    const strippedNewName = officialName.replace(/^PT\.?\s*/i, '').replace(/\s+Tbk\.?$/i, '').trim().toLowerCase();
+    const existingCompByName = await query.get(
+      `SELECT id, name FROM companies WHERE LOWER(REPLACE(REPLACE(REPLACE(name, 'PT.', ''), 'PT', ''), 'Tbk.', '')) = ?`,
+      [strippedNewName]
+    ) || await query.get(
+      `SELECT id, pt_name as name FROM users WHERE has_pt = 1 AND LOWER(REPLACE(REPLACE(REPLACE(pt_name, 'PT.', ''), 'PT', ''), 'Tbk.', '')) = ?`,
+      [strippedNewName]
+    );
+
+    if (existingCompByName) {
+      return res.status(400).json({
+        error: `Nama perseroan "${officialName}" sudah terdaftar resmi di Otoritas Kemenkumham Federasi (${existingCompByName.name}). Silakan gunakan nama PT lain yang unik!`
+      });
+    }
 
     // Validasi Kode Singkatan / Ticker Saham (Wajib 4 Huruf Kapital A-Z)
     const cleanSymbol = (symbol || '').trim().toUpperCase();
@@ -5800,11 +5826,11 @@ const localBuiltApkPath = path.join(__dirname, '../../mobile/build/app/outputs/f
 
 async function getApkSettingsMap() {
   const defaults = {
-    apk_version: '1.5.5',
-    apk_build_number: '9',
+    apk_version: '1.5.6',
+    apk_build_number: '10',
     apk_min_android: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
     apk_file_size_mb: '25.0 MB',
-    apk_release_notes: 'Lembar Profil Instan Konglomerat 9 Naga & Taipan di Peringkat (Bebas Layar Putih), Sinkronisasi Realtime Kustodian, dan UI Web Admin Mobile Responsif.',
+    apk_release_notes: 'Anti-Spam & Debounce Pendirian PT (Cegah Klik Dobel), Proteksi Nama PT Unik Berbadan Hukum Resmi, Perbaikan Tuntas Layar Profil Peringkat Bebas Abu-abu, & Klarifikasi Status Perseroan Tertutup vs Tbk.',
     apk_external_url: '',
     apk_download_count: '175',
     apk_sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
@@ -5818,10 +5844,10 @@ async function getApkSettingsMap() {
       }
     }
     if (parseInt(defaults.apk_build_number || '0', 10) < 9) {
-      defaults.apk_version = '1.5.5';
-      defaults.apk_build_number = '9';
+      defaults.apk_version = '1.5.6';
+      defaults.apk_build_number = '10';
       defaults.apk_file_size_mb = '25.0 MB';
-      defaults.apk_release_notes = 'Lembar Profil Instan Konglomerat 9 Naga & Taipan di Peringkat (Bebas Layar Putih), Sinkronisasi Realtime Kustodian, dan UI Web Admin Mobile Responsif.';
+      defaults.apk_release_notes = 'Anti-Spam & Debounce Pendirian PT (Cegah Klik Dobel), Proteksi Nama PT Unik Berbadan Hukum Resmi, Perbaikan Tuntas Layar Profil Peringkat Bebas Abu-abu, & Klarifikasi Status Perseroan Tertutup vs Tbk.';
     }
   } catch (_) {}
   return defaults;

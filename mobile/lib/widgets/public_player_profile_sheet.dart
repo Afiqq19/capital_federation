@@ -75,12 +75,16 @@ class _PublicPlayerProfileSheetState extends State<PublicPlayerProfileSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final num rankNum = _profileData?['rank'] ?? widget.initialData?['rank'] ?? 99;
+    final num rankNum = (_profileData?['rank'] is num)
+        ? _profileData!['rank']
+        : (widget.initialData?['rank'] is num)
+            ? widget.initialData!['rank']
+            : (num.tryParse(_profileData?['rank']?.toString() ?? widget.initialData?['rank']?.toString() ?? '99') ?? 99);
     final int rank = rankNum.toInt();
     final bool is9Naga = rank <= 9;
     final bool isTaipan = rank > 9 && rank <= 25;
     final bool isVip = _profileData?['isVip'] == true || widget.initialData?['isVip'] == true;
-    final String username = _profileData?['username'] ?? widget.initialData?['username'] ?? 'Konglomerat';
+    final String username = (_profileData?['username'] ?? widget.initialData?['username'] ?? 'Konglomerat').toString().trim();
 
     Color themeColor = const Color(0xFF38BDF8);
     LinearGradient? headerGradient;
@@ -116,12 +120,12 @@ class _PublicPlayerProfileSheetState extends State<PublicPlayerProfileSheet> {
     final holdingData = _profileData?['holding'] ?? {
       'hasPt': widget.initialData?['hasPt'] == true || (widget.initialData?['ptName'] != null && widget.initialData!['ptName'].toString().isNotEmpty),
       'ptName': widget.initialData?['ptName'] ?? 'Belum Mendirikan PT',
-      'symbol': 'TBK',
+      'symbol': widget.initialData?['ptSymbol'] ?? 'PT',
       'sector': widget.initialData?['sector'] ?? 'Strategis',
-      'isIpo': true,
-      'fundamentalScore': 85,
-      'rdLevel': 4,
-      'employeesCount': 35,
+      'isIpo': widget.initialData?['isIpo'] == true,
+      'fundamentalScore': 75,
+      'rdLevel': 1,
+      'employeesCount': 0,
       'subsidiaries': [],
     };
     final portfolioShares = _profileData?['portfolioShares'] ?? [];
@@ -194,7 +198,7 @@ class _PublicPlayerProfileSheetState extends State<PublicPlayerProfileSheet> {
                   ),
                   alignment: Alignment.center,
                   child: Text(
-                    is9Naga ? '🐉' : (isVip ? '💎' : username[0].toUpperCase()),
+                    is9Naga ? '🐉' : (isVip ? '💎' : (username.isNotEmpty ? username[0].toUpperCase() : 'K')),
                     style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Colors.white),
                   ),
                 ),
@@ -398,16 +402,22 @@ class _PublicPlayerProfileSheetState extends State<PublicPlayerProfileSheet> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Row(
-                children: [
-                  Icon(Icons.account_balance_rounded, size: 17, color: Color(0xFFF59E0B)),
-                  SizedBox(width: 8),
-                  Text(
-                    'TOTAL KEKAYAAN BERSIH (NET WORTH)',
-                    style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.w900),
-                  ),
-                ],
+              const Expanded(
+                child: Row(
+                  children: [
+                    Icon(Icons.account_balance_rounded, size: 17, color: Color(0xFFF59E0B)),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'TOTAL KEKAYAAN BERSIH',
+                        style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.w900),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
@@ -486,16 +496,19 @@ class _PublicPlayerProfileSheetState extends State<PublicPlayerProfileSheet> {
             children: [
               Icon(Icons.shield_rounded, size: 16, color: Color(0xFF10B981)),
               SizedBox(width: 8),
-              Text(
-                'Proteksi Kerahasiaan Perbankan & Privasi',
-                style: TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.bold),
+              Expanded(
+                child: Text(
+                  'Proteksi Kerahasiaan & Privasi',
+                  style: TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.bold),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),
           const SizedBox(height: 8),
-          _buildPrivacyRow('Rekening Kas Brankas:', maskedVault, Icons.lock_outline_rounded),
-          _buildPrivacyRow('Alamat Email Terdaftar:', maskedEmail, Icons.email_outlined),
-          _buildPrivacyRow('Kata Sandi & Kredensial:', '100% Terenkripsi (Zero Access)', Icons.key_rounded),
+          _buildPrivacyRow('Rekening Vault:', maskedVault, Icons.lock_outline_rounded),
+          _buildPrivacyRow('Alamat Email:', maskedEmail, Icons.email_outlined),
+          _buildPrivacyRow('Kredensial Sandi:', '100% Terenkripsi', Icons.key_rounded),
         ],
       ),
     );
@@ -505,18 +518,26 @@ class _PublicPlayerProfileSheetState extends State<PublicPlayerProfileSheet> {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            children: [
-              Icon(icon, size: 12, color: const Color(0xFF64748B)),
-              const SizedBox(width: 6),
-              Text(label, style: const TextStyle(color: Color(0xFF64748B), fontSize: 10.5)),
-            ],
+          Icon(icon, size: 12, color: const Color(0xFF64748B)),
+          const SizedBox(width: 6),
+          Expanded(
+            flex: 5,
+            child: Text(
+              label,
+              style: const TextStyle(color: Color(0xFF64748B), fontSize: 10.5),
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
-          Text(
-            value,
-            style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.w600, fontFamily: 'monospace'),
+          const SizedBox(width: 6),
+          Flexible(
+            flex: 5,
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.w600, fontFamily: 'monospace'),
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -548,16 +569,22 @@ class _PublicPlayerProfileSheetState extends State<PublicPlayerProfileSheet> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Row(
-                children: [
-                  Icon(Icons.business_rounded, size: 17, color: Color(0xFF38BDF8)),
-                  SizedBox(width: 8),
-                  Text(
-                    'HOLDING PERSEROAN (PT INDUK)',
-                    style: TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.bold),
-                  ),
-                ],
+              const Expanded(
+                child: Row(
+                  children: [
+                    Icon(Icons.business_rounded, size: 17, color: Color(0xFF38BDF8)),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'HOLDING PERSEROAN (PT)',
+                        style: TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.bold),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
               if (hasPt)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
@@ -609,7 +636,14 @@ class _PublicPlayerProfileSheetState extends State<PublicPlayerProfileSheet> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('• ${s['name']} (${s['symbol']})', style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 11)),
+                      Expanded(
+                        child: Text(
+                          '• ${s['name']} (${s['symbol']})',
+                          style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 11),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
                       Text('Sektor ${s['sector']}', style: const TextStyle(color: Color(0xFF64748B), fontSize: 10)),
                     ],
                   ),
@@ -658,16 +692,22 @@ class _PublicPlayerProfileSheetState extends State<PublicPlayerProfileSheet> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Row(
-                children: [
-                  Icon(Icons.pie_chart_rounded, size: 17, color: Color(0xFFF59E0B)),
-                  SizedBox(width: 8),
-                  Text(
-                    'KOLEKSI PORTOFOLIO EFEK TERBUKA',
-                    style: TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.bold),
-                  ),
-                ],
+              const Expanded(
+                child: Row(
+                  children: [
+                    Icon(Icons.pie_chart_rounded, size: 17, color: Color(0xFFF59E0B)),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'PORTOFOLIO EFEK TERBUKA',
+                        style: TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.bold),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
               Text(
                 '${shares.length} Emiten Dikoleksi',
                 style: const TextStyle(color: Color(0xFF64748B), fontSize: 10),

@@ -14,6 +14,17 @@ void main() async {
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
   ]);
+  ErrorWidget.builder = (FlutterErrorDetails details) {
+    return Container(
+      color: const Color(0xFF0F172A),
+      alignment: Alignment.center,
+      padding: const EdgeInsets.all(12),
+      child: const Text(
+        'Sinkronisasi tampilan...',
+        style: TextStyle(color: Color(0xFF64748B), fontSize: 10),
+      ),
+    );
+  };
   runApp(
     MultiProvider(
       providers: [

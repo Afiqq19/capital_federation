@@ -1920,6 +1920,7 @@ class _HomeTabState extends State<HomeTab> {
       'Transportasi & Logistik'
     ];
     bool agreedToDeed = false;
+    bool isSubmitting = false;
 
     showModalBottomSheet(
       context: context,
@@ -1935,7 +1936,7 @@ class _HomeTabState extends State<HomeTab> {
           final now = DateTime.now();
           const months = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
           final formattedCurrentDate = '${now.day} ${months[now.month - 1]} ${now.year} (Hari Ini)';
-          final bool canSubmit = cleanName.isNotEmpty && isSymbolValid && agreedToDeed;
+          final bool canSubmit = cleanName.isNotEmpty && isSymbolValid && agreedToDeed && !isSubmitting;
 
           return Container(
             padding: EdgeInsets.only(
@@ -2246,6 +2247,8 @@ class _HomeTabState extends State<HomeTab> {
                     child: ElevatedButton(
                       onPressed: canSubmit
                           ? () async {
+                              setSheetState(() => isSubmitting = true);
+                              HapticFeedback.mediumImpact();
                               final name = cleanName;
                               final symbol = cleanSymbol;
                               final desc = descController.text.trim();
@@ -2259,10 +2262,12 @@ class _HomeTabState extends State<HomeTab> {
                                 agreedToTerms: agreedToDeed,
                               );
                               if (context.mounted) {
+                                ScaffoldMessenger.of(context).clearSnackBars();
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
                                     content: Text(err ?? '🎉 SELAMAT! PT. $name ($symbol) resmi berbadan hukum dan terdaftar di IPMC!'),
                                     backgroundColor: err != null ? Colors.red : const Color(0xFF10B981),
+                                    duration: const Duration(seconds: 3),
                                   ),
                                 );
                               }
@@ -2273,10 +2278,16 @@ class _HomeTabState extends State<HomeTab> {
                         foregroundColor: canSubmit ? const Color(0xFF022C22) : const Color(0xFF64748B),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
-                      child: Text(
-                        canSubmit ? '✍️ TANDATANGANI AKTA & SAHKAN PT' : 'LENGKAPI FORMULIR & CENTANG CEKLIS',
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900),
-                      ),
+                      child: isSubmitting
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            )
+                          : Text(
+                              canSubmit ? '✍️ TANDATANGANI AKTA & SAHKAN PT' : 'LENGKAPI FORMULIR & CENTANG CEKLIS',
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900),
+                            ),
                     ),
                   ),
                 ],
