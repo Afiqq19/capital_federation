@@ -40,7 +40,32 @@ export default function PublicDownloadLandingPage() {
   const [topStocks, setTopStocks] = useState([]);
   const [isDownloading, setIsDownloading] = useState(false);
 
+  const scrollToSection = (sectionId) => {
+    const el = document.getElementById(sectionId);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
+  const handleNavClick = (sectionId, path) => {
+    if (window.location.pathname !== path) {
+      window.history.pushState(null, '', path);
+    }
+    scrollToSection(sectionId);
+  };
+
   useEffect(() => {
+    // 1. Amati URL awal (e.g. /peringkat, /tentang, /fitur, /spesifikasi)
+    const handleLocation = () => {
+      const clean = (window.location.pathname || '').replace(/^\/+|\/+$/g, '').toLowerCase();
+      if (['peringkat', 'tentang', 'fitur', 'spesifikasi'].includes(clean)) {
+        setTimeout(() => scrollToSection(clean), 180);
+      }
+    };
+    handleLocation();
+    window.addEventListener('popstate', handleLocation);
+
+    // 2. Fetch Version Info
     fetch('/api/version')
       .then((r) => r.json())
       .then((data) => {
@@ -50,15 +75,17 @@ export default function PublicDownloadLandingPage() {
       })
       .catch(() => {});
 
+    // 3. Fetch Top 10 Leaders (9 Naga & Taipan)
     fetch('/api/leaderboard')
       .then((r) => r.json())
       .then((data) => {
         if (Array.isArray(data)) {
-          setTopLeaders(data.slice(0, 5));
+          setTopLeaders(data.slice(0, 10));
         }
       })
       .catch(() => {});
 
+    // 4. Fetch Stocks
     fetch('/api/companies')
       .then((r) => r.json())
       .then((data) => {
@@ -67,6 +94,8 @@ export default function PublicDownloadLandingPage() {
         }
       })
       .catch(() => {});
+
+    return () => window.removeEventListener('popstate', handleLocation);
   }, []);
 
   const handleDownloadApk = () => {
@@ -138,18 +167,35 @@ export default function PublicDownloadLandingPage() {
           </div>
 
           <nav className="hidden md:flex items-center gap-6 text-xs font-bold text-slate-300">
-            <a href="#tentang" className="hover:text-amber-400 transition">
+            <button
+              type="button"
+              onClick={() => handleNavClick('tentang', '/tentang')}
+              className="hover:text-amber-400 transition cursor-pointer bg-transparent border-0 p-0 text-slate-300 font-bold text-xs"
+            >
               Tentang Game
-            </a>
-            <a href="#fitur" className="hover:text-amber-400 transition">
+            </button>
+            <button
+              type="button"
+              onClick={() => handleNavClick('fitur', '/fitur')}
+              className="hover:text-amber-400 transition cursor-pointer bg-transparent border-0 p-0 text-slate-300 font-bold text-xs"
+            >
               Fitur Utama
-            </a>
-            <a href="#spesifikasi" className="hover:text-amber-400 transition">
-              Sertifikasi & Spesifikasi HP
-            </a>
-            <a href="#peringkat" className="hover:text-amber-400 transition">
+            </button>
+            <button
+              type="button"
+              onClick={() => handleNavClick('peringkat', '/peringkat')}
+              className="hover:text-amber-300 transition cursor-pointer bg-transparent border-0 p-0 text-amber-300 font-black text-xs flex items-center gap-1.5"
+            >
+              <Crown size={13} className="text-amber-400" />
               Top 9 Naga
-            </a>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleNavClick('spesifikasi', '/spesifikasi')}
+              className="hover:text-amber-400 transition cursor-pointer bg-transparent border-0 p-0 text-slate-300 font-bold text-xs"
+            >
+              Sertifikasi &amp; Spesifikasi HP
+            </button>
           </nav>
 
           <button
@@ -164,7 +210,7 @@ export default function PublicDownloadLandingPage() {
       </header>
 
       {/* HERO SECTION */}
-      <section id="tentang" className="relative overflow-hidden pt-12 pb-16 lg:pt-16 lg:pb-24">
+      <section id="tentang" className="relative overflow-hidden pt-12 pb-16 lg:pt-16 lg:pb-24 scroll-mt-24">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-amber-500/10 via-sky-500/5 to-transparent pointer-events-none" />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
@@ -299,13 +345,19 @@ export default function PublicDownloadLandingPage() {
                   </div>
                 </div>
 
-                {/* Top 9 Naga Preview */}
-                <div id="peringkat" className="space-y-2.5">
+                {/* Top 9 Naga Preview Widget */}
+                <div id="hero-peringkat" className="space-y-2.5">
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-black text-amber-300 flex items-center gap-1.5">
                       🐉 TOP KONGLOMERAT (SULTAN 9 NAGA)
                     </span>
-                    <span className="text-[10px] text-slate-400">Live Leaderboard</span>
+                    <button
+                      type="button"
+                      onClick={() => handleNavClick('peringkat', '/peringkat')}
+                      className="text-[10px] text-amber-400 hover:text-amber-300 font-bold bg-transparent border-0 cursor-pointer"
+                    >
+                      Lihat Semua &rarr;
+                    </button>
                   </div>
 
                   <div className="space-y-2">
@@ -314,7 +366,7 @@ export default function PublicDownloadLandingPage() {
                         Memuat data konglomerat...
                       </div>
                     ) : (
-                      topLeaders.map((u, idx) => (
+                      topLeaders.slice(0, 5).map((u, idx) => (
                         <div
                           key={u.id || idx}
                           className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950/90 border border-amber-500/25"
@@ -354,8 +406,143 @@ export default function PublicDownloadLandingPage() {
         </div>
       </section>
 
+      {/* PAPAN PERINGKAT RESMI SULTAN 9 NAGA & TOP 10 TAIPAN (DEDICATED SECTION) */}
+      <section id="peringkat" className="py-16 bg-[#080D1A] border-y border-slate-800/80 scroll-mt-24">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10">
+          <div className="text-center max-w-3xl mx-auto space-y-3">
+            <span className="px-3.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/35 text-amber-300 text-xs font-black tracking-wide inline-flex items-center gap-1.5">
+              <Crown size={14} className="text-amber-400" />
+              PAPAN PERINGKAT RESMI BURSA MODAL FEDERASI
+            </span>
+            <h2 className="text-2xl sm:text-4xl font-black text-white">
+              Klasemen Sultan 9 Naga &amp; Top Taipan Terkaya
+            </h2>
+            <p className="text-slate-400 text-sm">
+              Peringkat langsung 24/7 berdasarkan akumulasi modal kas pribadi, nilai portofolio saham bursa,
+              dan kepemilikan PT Terbuka (Tbk.).
+            </p>
+          </div>
+
+          {/* Top 3 Podium */}
+          {topLeaders.length >= 3 && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5 max-w-4xl mx-auto pt-4">
+              {/* Rank 2 */}
+              <div className="order-2 md:order-1 p-6 rounded-2xl bg-gradient-to-b from-slate-900 to-slate-950 border border-slate-700/80 shadow-xl flex flex-col items-center text-center relative mt-0 md:mt-6">
+                <div className="w-12 h-12 rounded-full bg-slate-400/20 border-2 border-slate-300 flex items-center justify-center text-slate-200 font-black text-lg mb-3 shadow-md">
+                  🥈 2
+                </div>
+                <div className="text-base font-black text-white">{topLeaders[1]?.username}</div>
+                <span className="px-2 py-0.5 rounded-full bg-slate-700/60 text-slate-300 text-[10px] font-bold mt-1">
+                  9 NAGA FEDERASI
+                </span>
+                <div className="text-xs text-sky-400 font-semibold mt-2 truncate max-w-full">
+                  {topLeaders[1]?.ptName || 'PT Tbk.'}
+                </div>
+                <div className="text-lg font-black text-amber-400 font-mono mt-3">
+                  {formatIb(topLeaders[1]?.netWorth)}
+                </div>
+                <span className="text-[10px] text-slate-500">Total Kekayaan Bersih</span>
+              </div>
+
+              {/* Rank 1 (Crown) */}
+              <div className="order-1 md:order-2 p-7 rounded-2xl bg-gradient-to-b from-[#1E1808] via-slate-900 to-slate-950 border-2 border-amber-500 shadow-2xl shadow-amber-500/20 flex flex-col items-center text-center relative -mt-2">
+                <div className="absolute -top-3 px-3 py-0.5 rounded-full bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 text-[10px] font-black uppercase tracking-wider">
+                  PEMIMPIN KONGSI #1
+                </div>
+                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 border-2 border-amber-300 flex items-center justify-center text-slate-950 font-black text-2xl mb-3 shadow-lg shadow-amber-500/30">
+                  👑
+                </div>
+                <div className="text-xl font-black text-amber-300">{topLeaders[0]?.username}</div>
+                <span className="px-2.5 py-0.5 rounded-full bg-amber-500/25 border border-amber-500/50 text-amber-300 text-[11px] font-black mt-1">
+                  SULTAN 9 NAGA #1
+                </span>
+                <div className="text-xs text-sky-300 font-bold mt-2 truncate max-w-full">
+                  {topLeaders[0]?.ptName || 'PT. Kencana Artha Persada Tbk.'}
+                </div>
+                <div className="text-2xl font-black text-amber-400 font-mono mt-3">
+                  {formatIb(topLeaders[0]?.netWorth)}
+                </div>
+                <span className="text-[11px] text-slate-400">Total Kekayaan Bersih</span>
+              </div>
+
+              {/* Rank 3 */}
+              <div className="order-3 md:order-3 p-6 rounded-2xl bg-gradient-to-b from-slate-900 to-slate-950 border border-amber-700/60 shadow-xl flex flex-col items-center text-center relative mt-0 md:mt-8">
+                <div className="w-12 h-12 rounded-full bg-amber-800/30 border-2 border-amber-600 flex items-center justify-center text-amber-300 font-black text-lg mb-3 shadow-md">
+                  🥉 3
+                </div>
+                <div className="text-base font-black text-white">{topLeaders[2]?.username}</div>
+                <span className="px-2 py-0.5 rounded-full bg-amber-900/40 text-amber-300 text-[10px] font-bold mt-1">
+                  9 NAGA FEDERASI
+                </span>
+                <div className="text-xs text-sky-400 font-semibold mt-2 truncate max-w-full">
+                  {topLeaders[2]?.ptName || 'PT Tbk.'}
+                </div>
+                <div className="text-lg font-black text-amber-400 font-mono mt-3">
+                  {formatIb(topLeaders[2]?.netWorth)}
+                </div>
+                <span className="text-[10px] text-slate-500">Total Kekayaan Bersih</span>
+              </div>
+            </div>
+          )}
+
+          {/* Full Top 10 Table */}
+          <div className="rounded-2xl bg-slate-900/90 border border-slate-800 overflow-hidden shadow-xl max-w-5xl mx-auto">
+            <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/60">
+              <div className="flex items-center gap-2">
+                <Crown size={16} className="text-amber-400" />
+                <span className="text-xs font-black text-slate-200">KLASEMEN RESMI TOP TAIPAN SAHAM</span>
+              </div>
+              <span className="text-[11px] text-slate-400">Update Real-Time CFX</span>
+            </div>
+            <div className="divide-y divide-slate-800/80">
+              {topLeaders.map((u, idx) => (
+                <div
+                  key={u.id || idx}
+                  className="px-6 py-3.5 flex items-center justify-between hover:bg-slate-800/40 transition gap-4"
+                >
+                  <div className="flex items-center gap-3.5 min-w-0">
+                    <span className={`w-8 h-8 rounded-xl font-mono font-black text-xs flex items-center justify-center shrink-0 ${
+                      idx === 0 ? 'bg-amber-500 text-slate-950' :
+                      idx === 1 ? 'bg-slate-300 text-slate-950' :
+                      idx === 2 ? 'bg-amber-700 text-white' :
+                      'bg-slate-800 text-slate-300 border border-slate-700'
+                    }`}>
+                      #{idx + 1}
+                    </span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-black text-white truncate">{u.username}</span>
+                        {idx < 9 ? (
+                          <span className="px-2 py-0.5 rounded bg-gradient-to-r from-amber-500 to-orange-600 text-[9.5px] font-black text-white shadow-sm">
+                            9 NAGA
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/40 text-[9.5px] font-bold">
+                            TAIPAN
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-slate-400 truncate mt-0.5">
+                        {u.ptName || 'Perusahaan Terbuka (Tbk.)'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="text-right shrink-0">
+                    <div className="text-sm sm:text-base font-black text-amber-400 font-mono">
+                      {formatIb(u.netWorth)}
+                    </div>
+                    <div className="text-[10px] text-slate-500">Total Kekayaan</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* FITUR & ISI GAME LENGKAP */}
-      <section id="fitur" className="py-16 bg-[#090E1C] border-y border-slate-800/80">
+      <section id="fitur" className="py-16 bg-[#090E1C] border-y border-slate-800/80 scroll-mt-24">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10">
           <div className="text-center max-w-3xl mx-auto space-y-3">
             <span className="px-3 py-1 rounded-full bg-sky-500/10 border border-sky-500/30 text-sky-400 text-xs font-bold">
@@ -459,7 +646,7 @@ export default function PublicDownloadLandingPage() {
       </section>
 
       {/* SERTIFIKASI PERANGKAT & SPESIFIKASI MINIMUM HP (ANDROID 10+) */}
-      <section id="spesifikasi" className="py-16">
+      <section id="spesifikasi" className="py-16 scroll-mt-24">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10">
           <div className="text-center max-w-3xl mx-auto space-y-3">
             <span className="px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold">

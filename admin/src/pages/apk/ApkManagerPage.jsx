@@ -9,13 +9,21 @@ import { useAdmin } from '../../context/AdminContext';
 export default function ApkManagerPage({ showToast }) {
   const adminCtx = useAdmin();
   const toastFn = showToast || adminCtx?.notify;
-  const [apkInfo, setApkInfo] = useState(null);
+  const [apkInfo, setApkInfo] = useState({
+    version: '1.5.1',
+    buildNumber: 6,
+    fileSizeMb: '24.8 MB',
+    minAndroid: 'Android 10.0 (API Level 29 / Q)',
+    hasHostedApk: true,
+    downloadCount: 148,
+    releaseNotes: '252 Emiten Tbk. Terkoneksi 1-ke-1 dengan 265 Bot Peringkat, Setoran Pajak Bot ke Kas Negara, Bursa Akuisisi M&A Modern dengan RUPS Persetujuan Pendiri, & Lelang Sitaan Bank Sentral BCF'
+  });
   const [loading, setLoading] = useState(true);
   const [savingMeta, setSavingMeta] = useState(false);
 
   // Form metadata state
-  const [version, setVersion] = useState('1.5.0');
-  const [buildNumber, setBuildNumber] = useState(5);
+  const [version, setVersion] = useState('1.5.1');
+  const [buildNumber, setBuildNumber] = useState(6);
   const [minAndroid, setMinAndroid] = useState('Android 10.0 (API 29 / Q)');
   const [externalUrl, setExternalUrl] = useState('');
   const [releaseNotesText, setReleaseNotesText] = useState('');
@@ -254,7 +262,7 @@ export default function ApkManagerPage({ showToast }) {
         <div style={{ background: '#0f172a', border: '1px solid rgba(148,163,184,0.14)', borderRadius: 14, padding: 18 }}>
           <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700, marginBottom: 6 }}>UKURAN FILE APK SERVER</div>
           <div style={{ fontSize: 24, fontWeight: 800, color: '#10b981', fontFamily: 'JetBrains Mono, monospace' }}>
-            {String(apkInfo?.fileSizeMb || '24.7 MB').includes('MB') ? apkInfo.fileSizeMb : `${apkInfo.fileSizeMb} MB`}
+            {apkInfo?.fileSizeMb ? (String(apkInfo.fileSizeMb).includes('MB') ? apkInfo.fileSizeMb : `${apkInfo.fileSizeMb} MB`) : '24.8 MB'}
           </div>
           <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>
             {apkInfo?.hasHostedApk ? 'Tersimpan permanen di /app/data/releases' : 'Menunggu upload APK'}

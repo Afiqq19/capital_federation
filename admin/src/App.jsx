@@ -41,7 +41,7 @@ const ROUTE_MAP = {
   deeds: '/akta',
   users: '/pemain',
   macro: '/krisis-makro',
-  apk: '/rilis-apk',
+  apk: '/setting-apk',
   legal: '/konstitusi',
   logs: '/transaksi',
   settings: '/pengaturan',
@@ -62,7 +62,7 @@ function getPageFromPath(pathname) {
   if (clean === 'akta' || clean === 'deeds' || clean === 'notaris') return 'deeds';
   if (clean === 'pemain' || clean === 'users' || clean === 'investor') return 'users';
   if (clean === 'krisis-makro' || clean === 'macro' || clean === 'berita') return 'macro';
-  if (clean === 'rilis-apk' || clean === 'apk' || clean === 'apk-manager') return 'apk';
+  if (clean === 'setting-apk' || clean === 'rilis-apk' || clean === 'apk' || clean === 'apk-manager') return 'apk';
   if (clean === 'konstitusi' || clean === 'legal') return 'legal';
   if (clean === 'transaksi' || clean === 'logs') return 'logs';
   if (clean === 'pengaturan' || clean === 'settings') return 'settings';
@@ -156,24 +156,37 @@ function checkIsAdminPortalUnlocked() {
     const params = new URLSearchParams(window.location.search || '');
     const key = params.get('key');
 
-    // Jika membuka /logincapital?key=19122004, buka kunci sesi portal admin
-    if (pathname === 'logincapital' && key === ADMIN_SECRET_KEY) {
-      sessionStorage.setItem('cf_admin_portal_unlocked', '1');
-      return true;
-    }
-
-    // Jika sedang di halaman root '/' atau '/download' atau '?preview=public', selalu tampilkan Website Download Publik
-    if (!pathname || pathname === 'download' || params.get('preview') === 'public') {
+    // 1. BLOKIR TOTAL URL '/login' BIASA:
+    // Tidak boleh menampilkan form login admin. Alihkan ke '/' (Landing Page)
+    if (pathname === 'login') {
+      window.history.replaceState({}, '', '/');
       return false;
     }
 
-    // Jika sudah unlock di sesi ini atau sudah memiliki token login admin dan mengakses route admin (/dashboard, dll)
+    // 2. AKSES RAHASIA ADMIN: HANYA DIIZINKAN DENGAN /logincapital?key=19122004
+    if (pathname === 'logincapital') {
+      if (key === ADMIN_SECRET_KEY) {
+        sessionStorage.setItem('cf_admin_portal_unlocked', '1');
+        return true;
+      }
+      // Jika tanpa key atau key salah, jangan beri tahu ada halaman login, langsung alihkan ke '/'
+      window.history.replaceState({}, '', '/');
+      return false;
+    }
+
+    // 3. DAFTAR HALAMAN PUBLIK: Selalu tampilkan Website Landing Page Resmi
+    const publicPaths = ['', 'download', 'peringkat', 'tentang', 'fitur', 'spesifikasi'];
+    if (publicPaths.includes(pathname) || params.get('preview') === 'public') {
+      return false;
+    }
+
+    // 4. Jika sesi portal admin sudah dibuka dan pengguna mengakses route admin (/dashboard, /setting-apk, dll)
     if (sessionStorage.getItem('cf_admin_portal_unlocked') === '1') {
       return true;
     }
 
     const hasToken = Boolean(localStorage.getItem('cf_admin_token') || sessionStorage.getItem('cf_admin_token'));
-    if (hasToken && pathname !== 'logincapital') {
+    if (hasToken) {
       return true;
     }
 
