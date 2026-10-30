@@ -5824,25 +5824,32 @@ io.on('connection', (socket) => {
 
 async function start() {
   await initDb();
-  // Auto-seed 100 emiten bursa HANYA saat pertama kali server baru di-launching (database masih 0 emiten)
-  // Saat ada update kodingan berikutnya, database TIDAK AKAN PERNAH di-seed ulang atau di-reset!
-  const compCount = await query.get('SELECT COUNT(*) as count FROM companies');
-  if (!compCount || compCount.count === 0) {
-    console.log('🌱 Server baru terdeteksi (0 emiten). Menjalankan inisialisasi pasar perdana...');
-    const { seed } = require('./seed');
-    await seed();
-    await syncAllToMariaDb();
-  } else {
-    // Pastikan 50 emiten tambahan dan 24 bot konglomerat/ritel aktif di database yang sudah berjalan
-    const { ensureMarketPopulation } = require('./seed');
-    await ensureMarketPopulation();
-    await syncAllToMariaDb();
-  }
-  simulationEngine.start();
-  surveillance.start();
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`🏦 Capital Federation Backend v1.4.0-CFX running on http://0.0.0.0:${PORT}`);
   });
+  try {
+    // Auto-seed 100 emiten bursa HANYA saat pertama kali server baru di-launching (database masih 0 emiten)
+    // Saat ada update kodingan berikutnya, database TIDAK AKAN PERNAH di-seed ulang atau di-reset!
+    const compCount = await query.get('SELECT COUNT(*) as count FROM companies');
+    if (!compCount || compCount.count === 0) {
+      console.log('🌱 Server baru terdeteksi (0 emiten). Menjalankan inisialisasi pasar perdana...');
+      const { seed } = require('./seed');
+      await seed();
+      await syncAllToMariaDb();
+    } else {
+      // Pastikan 250+ emiten Tbk. dan 265 bot konglomerat/ritel aktif di database yang sudah berjalan
+      const { ensureMarketPopulation } = require('./seed');
+      await ensureMarketPopulation();
+      await syncAllToMariaDb();
+    }
+  } catch (seedErr) {
+    console.error('⚠️ Non-fatal warning in ensureMarketPopulation:', seedErr.message);
+  }
+  simulationEngine.start();
+  surveillance.start();
 }
 
-start().catch(console.error);
+start().catch((err) => {
+  console.error('Fatal startup error:', err);
+  process.exit(1);
+});

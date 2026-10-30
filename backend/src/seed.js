@@ -532,19 +532,19 @@ async function ensureMarketPopulation() {
         const ownComp = orderedCompaniesForBots[idx];
         const founderLots = idx < 9 ? 15000 : (idx < 30 ? 4500 : 1200);
         await query.run(
-          `INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price)
+          `INSERT OR IGNORE INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price)
            VALUES (?, ?, ?, ?, ?)`,
           [uuidv4(), botRow.id, ownComp.id, founderLots, ownComp.base_price || ownComp.current_price]
         );
       }
       const stockCount = idx < 9 ? 3 : 2;
-      const startOffset = (idx * 5) % Math.max(1, orderedCompaniesForBots.length - 5);
+      const startOffset = (idx * 5 + 3) % Math.max(1, orderedCompaniesForBots.length - 5);
       for (let s = 0; s < stockCount; s++) {
         const comp = orderedCompaniesForBots[(startOffset + s) % orderedCompaniesForBots.length];
         if (comp) {
           const lots = idx < 9 ? 3500 : (idx < 30 ? 800 : 85);
           await query.run(
-            `INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price)
+            `INSERT OR IGNORE INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price)
              VALUES (?, ?, ?, ?, ?)`,
             [uuidv4(), botRow.id, comp.id, lots, comp.base_price || comp.current_price]
           );
