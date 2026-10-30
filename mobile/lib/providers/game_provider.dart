@@ -691,13 +691,22 @@ class GameProvider extends ChangeNotifier {
     }
   }
 
-  Future<Map<String, dynamic>> takeoverCompany({required String companyId, required int percentage}) async {
+  Future<Map<String, dynamic>> takeoverCompany({
+    required String companyId,
+    required int percentage,
+    String offerTier = 'RESCUE_30',
+    String paymentSource = 'AUTO',
+    String pitchNotes = '',
+  }) async {
     if (_user == null) return {'error': 'Sesi user belum aktif'};
     try {
       final res = await ApiService.negotiateTakeover(
         userId: _user!.id,
         companyId: companyId,
         percentageOffer: percentage,
+        offerTier: offerTier,
+        paymentSource: paymentSource,
+        pitchNotes: pitchNotes,
       );
       if (res['success'] == true) {
         await refreshPortfolio();

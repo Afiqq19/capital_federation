@@ -3916,291 +3916,843 @@ app.get('/api/portfolio/:userId', async (req, res) => {
   }
 });
 
-// Takeover Targets (Kritis)
+// Takeover Targets (Pasar Akuisisi M&A & Restrukturisasi Emiten)
 app.get('/api/takeover/targets', async (req, res) => {
   try {
-    const targets = await query.all(`
-      SELECT c.*, u.username as owner_username, u.pt_name as owner_pt_name
+    let targets = await query.all(`
+      SELECT c.*, 
+             COALESCE(u.username, NULLIF(c.founder_name, ''), 'galih') as owner_username,
+             COALESCE(u.pt_name, c.name) as owner_pt_name,
+             COALESCE((SELECT sh.percentage FROM company_shareholders sh WHERE sh.company_id = c.id ORDER BY sh.percentage DESC LIMIT 1), 60.0) as founder_share_pct
       FROM companies c
       LEFT JOIN users u ON c.owner_id = u.id
-      WHERE c.status = 'CRITICAL'
+      WHERE c.status = 'CRITICAL' OR (c.uma_flag = 1 AND c.uma_direction = 'DOWN')
       ORDER BY c.current_price ASC
+      LIMIT 35
     `);
+
+    if (!targets || targets.length < 8) {
+      targets = await query.all(`
+        SELECT c.*, 
+               COALESCE(u.username, NULLIF(c.founder_name, ''), 'galih') as owner_username,
+               COALESCE(u.pt_name, c.name) as owner_pt_name,
+               COALESCE((SELECT sh.percentage FROM company_shareholders sh WHERE sh.company_id = c.id ORDER BY sh.percentage DESC LIMIT 1), 60.0) as founder_share_pct
+        FROM companies c
+        LEFT JOIN users u ON c.owner_id = u.id
+        ORDER BY c.fundamental_score ASC, c.current_price ASC
+        LIMIT 20
+      `);
+    }
     res.json(targets);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Takeover Negotiation (Akuisisi Kontrol M&A & Akta Notaris Resmi)
+// Helper: Eksekusi Final Pengalihan Saham Pengendali & Penerbitan Akta M&A setelah Disetujui Pendiri
+async function executeApprovedAcquisition({
+  company,
+  buyerUser,
+  sellerUserId,
+  sellerName,
+  isHumanSeller,
+  pct,
+  discountFactor,
+  rawAcquisitionPrice,
+  meteraiFee,
+  notaryAdminFee,
+  totalDeduction,
+  proposalId = null,
+}) {
+  const companyId = company.id;
+  const userId = buyerUser.id;
+
+  // 1. Jika Penjual adalah Pemain/Bot di DB, Berikan Dana Hasil Akuisisi
+  if (sellerUserId && sellerUserId !== 'consortium-trustee') {
+    await query.run('UPDATE users SET balance_ib = balance_ib + ? WHERE id = ?', [rawAcquisitionPrice, sellerUserId]);
+    io.emit('user:balance_updated', { userId: sellerUserId });
+  }
+
+  // 2. Setor Bea Meterai & Notariat ke Kas Negara
+  await query.run(`
+    INSERT INTO state_treasury_ledger (id, source_type, title, amount_ib, direction, reference_id, notes)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `, [
+    uuidv4(),
+    'METERAI_FEE',
+    `Penerimaan Bea Meterai & Notariat Akta M&A ${company.symbol}`,
+    meteraiFee + notaryAdminFee,
+    'INCOME',
+    company.id,
+    `Akuisisi ${pct}% saham pengendali ${company.name} oleh ${buyerUser.username} (Disetujui Pendiri: ${sellerName})`
+  ]);
+  io.emit('treasury:updated');
+
+  // 3. Update Status & Kepemilikan Perusahaan
+  await query.run(`
+    UPDATE companies 
+    SET status = 'HEALTHY', 
+        owner_id = ?, 
+        founder_name = ?,
+        is_acquired = 1, 
+        dividend_rate = 0.05,
+        fundamental_score = CASE WHEN fundamental_score < 78 THEN 82.0 ELSE fundamental_score END,
+        uma_flag = 0,
+        is_seized = 0
+    WHERE id = ?
+  `, [userId, buyerUser.username, companyId]);
+
+  // 4. Update Portofolio Saham Pembeli & Penjual
+  const acquiredLots = Math.round(((company.total_shares || 10000000) * (pct / 100.0)) / 100);
+  const sharesTransferred = acquiredLots * 100;
+  const avgPrice = Math.max(50, Math.round(company.current_price * discountFactor));
+
+  if (sellerUserId && sellerUserId !== 'consortium-trustee') {
+    await query.run(`
+      UPDATE portfolios 
+      SET lots_owned = MAX(0, lots_owned - ?) 
+      WHERE user_id = ? AND company_id = ?
+    `, [acquiredLots, sellerUserId, companyId]);
+  }
+
+  const existingBuyerPort = await query.get('SELECT * FROM portfolios WHERE user_id = ? AND company_id = ?', [userId, companyId]);
+  if (existingBuyerPort) {
+    await query.run(`
+      UPDATE portfolios 
+      SET lots_owned = lots_owned + ?, avg_buy_price = ? 
+      WHERE id = ?
+    `, [acquiredLots, avgPrice, existingBuyerPort.id]);
+  } else {
+    await query.run(`
+      INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price)
+      VALUES (?, ?, ?, ?, ?)
+    `, [uuidv4(), userId, companyId, acquiredLots, avgPrice]);
+  }
+
+  // 5. Sinkronisasi Struktur Pemegang Saham (Cap Table)
+  const prevFounderRow = await query.get(`
+    SELECT * FROM company_shareholders 
+    WHERE company_id = ? ORDER BY percentage DESC LIMIT 1
+  `, [companyId]);
+  const prevFounderPct = prevFounderRow ? prevFounderRow.percentage : 60.0;
+  const remainingFounderPct = Math.max(0, parseFloat((prevFounderPct - pct).toFixed(1)));
+  const remainingPctForOthers = Math.max(0, parseFloat((100.0 - pct - remainingFounderPct).toFixed(1)));
+
+  await query.run('DELETE FROM company_shareholders WHERE company_id = ?', [companyId]);
+
+  const totalShares = company.total_shares || 10000000;
+  const newShareholders = [];
+  newShareholders.push({
+    id: uuidv4(),
+    company_id: companyId,
+    holder_name: `${buyerUser.username} (Pemegang Saham Pengendali Baru)`,
+    holder_type: 'FOUNDER',
+    shares_count: sharesTransferred,
+    percentage: pct,
+    user_id: userId
+  });
+
+  if (remainingFounderPct > 0) {
+    newShareholders.push({
+      id: uuidv4(),
+      company_id: companyId,
+      holder_name: `${sellerName} (Pendiri Lama)`,
+      holder_type: 'CO_FOUNDER',
+      shares_count: Math.round(totalShares * (remainingFounderPct / 100.0)),
+      percentage: remainingFounderPct,
+      user_id: sellerUserId !== 'consortium-trustee' ? sellerUserId : null
+    });
+  }
+
+  if (remainingPctForOthers > 0) {
+    const inst1 = parseFloat((remainingPctForOthers * 0.55).toFixed(1));
+    const pub = parseFloat((remainingPctForOthers - inst1).toFixed(1));
+    newShareholders.push({
+      id: uuidv4(),
+      company_id: companyId,
+      holder_name: 'Konsorsium Institusi Federasi',
+      holder_type: 'INSTITUTION',
+      shares_count: Math.round(totalShares * (inst1 / 100.0)),
+      percentage: inst1,
+      user_id: null
+    });
+    newShareholders.push({
+      id: uuidv4(),
+      company_id: companyId,
+      holder_name: 'Publik Masyarakat (Bursa Efek)',
+      holder_type: 'PUBLIC',
+      shares_count: Math.round(totalShares * (pub / 100.0)),
+      percentage: pub,
+      user_id: null
+    });
+  }
+
+  for (const sh of newShareholders) {
+    await query.run(`
+      INSERT INTO company_shareholders (id, company_id, holder_name, holder_type, shares_count, percentage, user_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `, [sh.id, sh.company_id, sh.holder_name, sh.holder_type, sh.shares_count, sh.percentage, sh.user_id]);
+  }
+
+  // 6. Penerbitan Akta Notaris Resmi ke deal_deeds
+  const deedId = uuidv4();
+  const deedNumber = `AKTA-MA/2026/10/${Math.floor(1000 + Math.random() * 9000)}`;
+  await query.run(`
+    INSERT INTO deal_deeds (
+      id, deed_number, deal_id, seller_user_id, seller_name, 
+      buyer_user_id, buyer_name, company_id, company_name, company_symbol,
+      percentage_transferred, shares_transferred, price_per_share, total_price_ib,
+      meterai_status, status, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+  `, [
+    deedId,
+    deedNumber,
+    `MA-${company.symbol}-${Date.now()}`,
+    sellerUserId || 'consortium-trustee',
+    sellerName,
+    userId,
+    buyerUser.username,
+    company.id,
+    company.name,
+    company.symbol,
+    pct,
+    sharesTransferred,
+    avgPrice,
+    rawAcquisitionPrice,
+    'LUNAS_IB_10000',
+    'ACTIVE'
+  ]);
+  io.emit('deed:created');
+
+  if (proposalId) {
+    await query.run(
+      `UPDATE acquisition_proposals 
+       SET status = 'APPROVED', deed_id = ?, deed_number = ?, responded_at = CURRENT_TIMESTAMP 
+       WHERE id = ?`,
+      [deedId, deedNumber, proposalId]
+    );
+  }
+
+  // 7. Rebound Tren Bullish & Breaking News
+  if (simulationEngine && typeof simulationEngine.setStockTrend === 'function') {
+    simulationEngine.setStockTrend(company.symbol, 12.0);
+  }
+
+  const newsItem = {
+    id: uuidv4(),
+    title: `🏢 AKUISISI DISETUJUI PENDIRI: ${buyerUser.username} Resmi Mengakuisisi ${pct}% Saham ${company.name} (${company.symbol})!`,
+    content: `Pendiri & Pemegang Saham Terbesar (${sellerName}) resmi menandatangani persetujuan RUPS Luar Biasa senilai IB ${rawAcquisitionPrice.toLocaleString('id-ID')}. Akta Notaris No. ${deedNumber} telah disahkan!`,
+    affected_sector: company.sector,
+    sentiment: 'BULLISH',
+    published_at: new Date().toISOString()
+  };
+  await query.run(
+    'INSERT INTO news (id, title, content, affected_sector, sentiment, published_at) VALUES (?, ?, ?, ?, ?, ?)',
+    [newsItem.id, newsItem.title, newsItem.content, newsItem.affected_sector, newsItem.sentiment, newsItem.published_at]
+  );
+  io.emit('market:news_broadcast', newsItem);
+  io.emit('company:status_changed', { companyId: company.id, status: 'HEALTHY' });
+  io.emit('user:balance_updated', { userId });
+
+  return {
+    deed: {
+      id: deedId,
+      deed_number: deedNumber,
+      company_name: company.name,
+      company_symbol: company.symbol,
+      seller_name: sellerName,
+      buyer_name: buyerUser.username,
+      percentage_transferred: pct,
+      shares_transferred: sharesTransferred,
+      lots_transferred: acquiredLots,
+      price_per_share: avgPrice,
+      raw_price_ib: rawAcquisitionPrice,
+      meterai_fee: meteraiFee,
+      notary_fee: notaryAdminFee,
+      total_deduction_ib: totalDeduction,
+      founder_approval_note: `Disetujui dalam RUPS Luar Biasa oleh Pendiri & Pemegang Saham Terbesar (${sellerName})`,
+      created_at: new Date().toISOString()
+    },
+    shareholders: newShareholders,
+  };
+}
+
+// Takeover Negotiation & Proposal Persetujuan Pendiri / Pemegang Saham Terbesar
 app.post('/api/takeover/negotiate', async (req, res) => {
   try {
-    const { userId, companyId, percentageOffer } = req.body;
+    const { userId, companyId, percentageOffer, offerTier = 'RESCUE_30', paymentSource = 'AUTO', pitchNotes = '' } = req.body;
     const user = await query.get('SELECT * FROM users WHERE id = ?', [userId]);
     if (!user) return res.status(404).json({ error: 'User tidak ditemukan' });
 
+    // Cari berdasarkan ID, Symbol, maupun Nama agar tidak pernah gagal "Emiten tidak ditemukan"
     const company = await query.get(`
-      SELECT c.*, u.username as owner_username, u.pt_name as owner_pt_name
+      SELECT c.*, u.username as owner_username, u.pt_name as owner_pt_name, u.role as owner_role
       FROM companies c
       LEFT JOIN users u ON c.owner_id = u.id
-      WHERE c.id = ? AND c.status = 'CRITICAL'
-    `, [companyId]);
-    if (!company) return res.status(400).json({ error: 'Emiten tidak ditemukan atau tidak berstatus krisis' });
+      WHERE c.id = ? OR UPPER(c.symbol) = UPPER(?) OR c.name = ?
+    `, [companyId, String(companyId || '').trim(), String(companyId || '').trim()]);
 
-    const pct = Math.max(51, Math.min(100, parseInt(percentageOffer) || 51));
-    const totalValuation = company.total_shares * company.current_price;
-    const discountFactor = 0.70; // Diskon 30% Penyelamatan Krisis
-    const rawAcquisitionPrice = Math.round(totalValuation * (pct / 100.0) * discountFactor);
-    const meteraiFee = 10000; // Bea Meterai Elektronik Rp 10.000 (IB 10.000)
-    const notaryAdminFee = 40000; // Biaya Notariat & Pendaftaran Niaga
-    const totalDeduction = rawAcquisitionPrice + meteraiFee + notaryAdminFee;
-
-    if (user.balance_ib < totalDeduction) {
-      return res.status(400).json({
-        error: `Saldo kas pribadi tidak cukup. Butuh IB ${totalDeduction.toLocaleString('id-ID')} (termasuk Bea Meterai & Notariat).`
-      });
+    if (!company) {
+      return res.status(404).json({ error: 'Emiten tidak ditemukan di database Bursa Efek.' });
+    }
+    if (company.owner_id === userId) {
+      return res.status(400).json({ error: 'Anda sudah menjadi Pemilik / Pemegang Saham Pengendali emiten ini!' });
     }
 
-    // Identifikasi Penjual (Pemilik Lama vs Konsorsium Kurator)
+    const pct = Math.max(51, Math.min(100, parseInt(percentageOffer, 10) || 51));
+    const totalValuation = (company.total_shares || 10000000) * company.current_price;
+
+    let discountFactor = 0.70; // Default RESCUE_30 (-30% Diskon Penyelamatan)
+    if (offerTier === 'MARKET_FAIR') discountFactor = 1.00;
+    else if (offerTier === 'PREMIUM_15') discountFactor = 1.15;
+
+    const rawAcquisitionPrice = Math.round(totalValuation * (pct / 100.0) * discountFactor);
+    const meteraiFee = 10000;
+    const notaryAdminFee = 40000;
+    const totalDeduction = rawAcquisitionPrice + meteraiFee + notaryAdminFee;
+
+    // Pilih sumber dana (Kas Pribadi atau Kas Perusahaan PT)
+    let useCompanyCash = false;
+    if (paymentSource === 'COMPANY') {
+      if ((user.company_balance_ib || 0) < totalDeduction) {
+        return res.status(400).json({
+          error: `Saldo Kas Perusahaan (PT) tidak cukup. Butuh IB ${totalDeduction.toLocaleString('id-ID')}.`
+        });
+      }
+      useCompanyCash = true;
+    } else if (paymentSource === 'PERSONAL') {
+      if ((user.balance_ib || 0) < totalDeduction) {
+        return res.status(400).json({
+          error: `Saldo Kas Pribadi tidak cukup. Butuh IB ${totalDeduction.toLocaleString('id-ID')}.`
+        });
+      }
+    } else {
+      if ((user.balance_ib || 0) >= totalDeduction) {
+        useCompanyCash = false;
+      } else if ((user.company_balance_ib || 0) >= totalDeduction) {
+        useCompanyCash = true;
+      } else {
+        return res.status(400).json({
+          error: `Saldo Kas Pribadi (IB ${(user.balance_ib || 0).toLocaleString('id-ID')}) maupun Kas PT (IB ${(user.company_balance_ib || 0).toLocaleString('id-ID')}) tidak mencukupi. Butuh IB ${totalDeduction.toLocaleString('id-ID')}.`
+        });
+      }
+    }
+
+    // Identifikasi Pendiri / Pemegang Saham Terbesar
     let sellerUserId = company.owner_id;
-    let sellerName = company.owner_username;
-    let isHumanSeller = false;
+    let sellerName = company.owner_username || company.founder_name || 'galih';
+    let isBotFounder = true;
 
     if (sellerUserId && sellerUserId !== userId) {
       const sellerUser = await query.get('SELECT * FROM users WHERE id = ?', [sellerUserId]);
       if (sellerUser) {
         sellerName = sellerUser.username;
-        isHumanSeller = true;
+        isBotFounder = String(sellerUser.id).startsWith('bot-user-');
       }
-    }
-    if (!sellerName) {
-      sellerName = 'Konsorsium Kurator Niaga Federasi';
-      sellerUserId = 'consortium-trustee';
-    }
-
-    // 1. Potong Saldo Pembeli
-    await query.run('UPDATE users SET balance_ib = balance_ib - ? WHERE id = ?', [totalDeduction, userId]);
-
-    // 2. Jika Penjual adalah Pemain Lain, Berikan Dana Hasil Penjualan
-    if (isHumanSeller) {
-      await query.run('UPDATE users SET balance_ib = balance_ib + ? WHERE id = ?', [rawAcquisitionPrice, sellerUserId]);
-      io.emit('user:balance_updated', { userId: sellerUserId });
+    } else if (!sellerUserId) {
+      sellerUserId = 'bot-user-007';
+      sellerName = company.founder_name || 'galih';
+      isBotFounder = true;
     }
 
-    // 3. Setor Bea Meterai & Notariat ke Kas Negara
-    await query.run(`
-      INSERT INTO state_treasury_ledger (id, source_type, title, amount_ib, direction, reference_id, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `, [
-      uuidv4(),
-      'METERAI_FEE',
-      `Penerimaan Bea Meterai & Notariat Akta M&A ${company.symbol}`,
-      meteraiFee + notaryAdminFee,
-      'INCOME',
-      company.id,
-      `Akuisisi ${pct}% saham ${company.name} oleh ${user.username} dari ${sellerName}`
-    ]);
-    io.emit('treasury:updated');
+    const founderSh = await query.get(
+      'SELECT percentage FROM company_shareholders WHERE company_id = ? ORDER BY percentage DESC LIMIT 1',
+      [company.id]
+    );
+    const founderSharePct = founderSh?.percentage || 60.0;
 
-    // 4. Update Status Perusahaan
-    await query.run(`
-      UPDATE companies 
-      SET status = 'HEALTHY', 
-          owner_id = ?, 
-          is_acquired = 1, 
-          dividend_rate = 0.05,
-          uma_flag = 0,
-          is_seized = 0
-      WHERE id = ?
-    `, [userId, companyId]);
-
-    // 5. Update Portofolio Saham Pembeli & Penjual
-    const acquiredLots = Math.round((company.total_shares * (pct / 100.0)) / 100);
-    const sharesTransferred = acquiredLots * 100;
-    const avgPrice = Math.round(company.current_price * discountFactor);
-
-    if (isHumanSeller) {
-      await query.run(`
-        UPDATE portfolios 
-        SET lots_owned = MAX(0, lots_owned - ?) 
-        WHERE user_id = ? AND company_id = ?
-      `, [acquiredLots, sellerUserId, companyId]);
-    }
-
-    const existingBuyerPort = await query.get('SELECT * FROM portfolios WHERE user_id = ? AND company_id = ?', [userId, companyId]);
-    if (existingBuyerPort) {
-      await query.run(`
-        UPDATE portfolios 
-        SET lots_owned = lots_owned + ?, avg_buy_price = ? 
-        WHERE id = ?
-      `, [acquiredLots, avgPrice, existingBuyerPort.id]);
+    // 1. Potong / Escrow Saldo Pembeli
+    if (useCompanyCash) {
+      await query.run('UPDATE users SET company_balance_ib = company_balance_ib - ? WHERE id = ?', [totalDeduction, userId]);
     } else {
+      await query.run('UPDATE users SET balance_ib = balance_ib - ? WHERE id = ?', [totalDeduction, userId]);
+    }
+
+    const acquiredLots = Math.round(((company.total_shares || 10000000) * (pct / 100.0)) / 100);
+    const avgPrice = Math.max(50, Math.round(company.current_price * discountFactor));
+    const proposalId = uuidv4();
+    const cleanPitch = (pitchNotes || '').trim() || `Proposal akuisisi ${pct}% saham pengendali & injeksi restrukturisasi perseroan ${company.name}.`;
+
+    // JIKA PENDIRI ADALAH PEMAIN ASLI (BUKAN BOT): Masuk antrean Persetujuan Pendiri (PENDING_FOUNDER)!
+    if (!isBotFounder) {
       await query.run(`
-        INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price)
-        VALUES (?, ?, ?, ?, ?)
-      `, [uuidv4(), userId, companyId, acquiredLots, avgPrice]);
-    }
+        INSERT INTO acquisition_proposals (
+          id, company_id, company_symbol, company_name, sector,
+          buyer_user_id, buyer_username, founder_user_id, founder_username, founder_share_pct,
+          is_bot_founder, percentage_requested, lots_transferred, price_per_share_ib,
+          raw_acquisition_ib, total_deduction_ib, offer_tier, payment_source, pitch_notes, status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING_FOUNDER')
+      `, [
+        proposalId, company.id, company.symbol, company.name, company.sector,
+        userId, user.username, sellerUserId, sellerName, founderSharePct,
+        pct, acquiredLots, avgPrice, rawAcquisitionPrice, totalDeduction,
+        offerTier, useCompanyCash ? 'COMPANY' : 'PERSONAL', cleanPitch
+      ]);
 
-    // 6. SINKRONISASI STRUKTUR PEMEGANG SAHAM (CAP TABLE) KE DB
-    const prevFounderRow = await query.get(`
-      SELECT * FROM company_shareholders 
-      WHERE company_id = ? AND (holder_type = 'FOUNDER' OR user_id = ?)
-    `, [companyId, sellerUserId]);
-    const prevFounderPct = prevFounderRow ? prevFounderRow.percentage : 70.0;
-    const remainingFounderPct = Math.max(0, parseFloat((prevFounderPct - pct).toFixed(1)));
-    const remainingPctForOthers = Math.max(0, parseFloat((100.0 - pct - remainingFounderPct).toFixed(1)));
+      io.emit('user:balance_updated', { userId });
+      io.to(sellerUserId).emit('takeover:proposal_received', {
+        proposalId,
+        companySymbol: company.symbol,
+        companyName: company.name,
+        buyerUsername: user.username,
+        percentage: pct,
+        offerIb: rawAcquisitionPrice
+      });
 
-    await query.run('DELETE FROM company_shareholders WHERE company_id = ?', [companyId]);
-
-    const newShareholders = [];
-    // Pemegang Saham Pengendali Baru (Pembeli)
-    newShareholders.push({
-      id: uuidv4(),
-      company_id: companyId,
-      holder_name: `${user.username} (Pemegang Saham Pengendali Baru)`,
-      holder_type: 'FOUNDER',
-      shares_count: sharesTransferred,
-      percentage: pct,
-      user_id: userId
-    });
-
-    // Mantan Pendiri jika masih memiliki sisa porsi
-    if (remainingFounderPct > 0) {
-      newShareholders.push({
-        id: uuidv4(),
-        company_id: companyId,
-        holder_name: `${sellerName} (Mantan Pendiri)`,
-        holder_type: 'CO_FOUNDER',
-        shares_count: Math.round(company.total_shares * (remainingFounderPct / 100.0)),
-        percentage: remainingFounderPct,
-        user_id: isHumanSeller ? sellerUserId : null
+      return res.json({
+        success: true,
+        pendingFounderApproval: true,
+        message: `Proposal Akuisisi ${pct}% saham ${company.name} telah dikirim kepada Pendiri & Pemegang Saham Terbesar (@${sellerName}) untuk disetujui dalam RUPS!`,
+        proposal: {
+          id: proposalId,
+          company_name: company.name,
+          company_symbol: company.symbol,
+          founder_username: sellerName,
+          founder_share_pct: founderSharePct,
+          percentage_requested: pct,
+          raw_acquisition_ib: rawAcquisitionPrice,
+          status: 'PENDING_FOUNDER'
+        }
       });
     }
 
-    // Institusi & Publik Ritel
-    if (remainingPctForOthers > 0) {
-      const inst1 = parseFloat((remainingPctForOthers * 0.50).toFixed(1));
-      const inst2 = parseFloat((remainingPctForOthers * 0.30).toFixed(1));
-      const pub = parseFloat((remainingPctForOthers - inst1 - inst2).toFixed(1));
+    // JIKA PENDIRI ADALAH BOT PEMILIK PT: Pendiri mengevaluasi & menandatangani Persetujuan RUPS Luar Biasa!
+    const founderApprovalNote = `Selaku Pendiri & Pemegang Saham Terbesar (${founderSharePct}% Hak Suara) ${company.name}, saya (@${sellerName}) menyetujui proposal akuisisi & restrukturisasi dari @${user.username} sebesar ${pct}% saham pengendali.`;
 
-      newShareholders.push({
-        id: uuidv4(),
-        company_id: companyId,
-        holder_name: 'Konsorsium Astra Investama',
-        holder_type: 'INSTITUTION',
-        shares_count: Math.round(company.total_shares * (inst1 / 100.0)),
-        percentage: inst1,
-        user_id: null
-      });
-      newShareholders.push({
-        id: uuidv4(),
-        company_id: companyId,
-        holder_name: 'Dana Pensiun Mandiri Investama',
-        holder_type: 'INSTITUTION',
-        shares_count: Math.round(company.total_shares * (inst2 / 100.0)),
-        percentage: inst2,
-        user_id: null
-      });
-      newShareholders.push({
-        id: uuidv4(),
-        company_id: companyId,
-        holder_name: 'Publik Ritel (Bursa Efek)',
-        holder_type: 'PUBLIC',
-        shares_count: Math.round(company.total_shares * (pub / 100.0)),
-        percentage: pub,
-        user_id: null
-      });
-    }
-
-    for (const sh of newShareholders) {
-      await query.run(`
-        INSERT INTO company_shareholders (id, company_id, holder_name, holder_type, shares_count, percentage, user_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `, [sh.id, sh.company_id, sh.holder_name, sh.holder_type, sh.shares_count, sh.percentage, sh.user_id]);
-    }
-
-    // 7. PENERBITAN AKTA NOTARIS RESMI KE DEAL_DEEDS
-    const deedId = uuidv4();
-    const deedNumber = `AKTA-MA/2026/04/${Math.floor(1000 + Math.random() * 9000)}`;
     await query.run(`
-      INSERT INTO deal_deeds (
-        id, deed_number, deal_id, seller_user_id, seller_name, 
-        buyer_user_id, buyer_name, company_id, company_name, company_symbol,
-        percentage_transferred, shares_transferred, price_per_share, total_price_ib,
-        meterai_status, status, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      INSERT INTO acquisition_proposals (
+        id, company_id, company_symbol, company_name, sector,
+        buyer_user_id, buyer_username, founder_user_id, founder_username, founder_share_pct,
+        is_bot_founder, percentage_requested, lots_transferred, price_per_share_ib,
+        raw_acquisition_ib, total_deduction_ib, offer_tier, payment_source, pitch_notes,
+        status, founder_response_note, responded_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, 'APPROVED', ?, CURRENT_TIMESTAMP)
     `, [
-      deedId,
-      deedNumber,
-      `MA-${company.symbol}-${Date.now()}`,
+      proposalId, company.id, company.symbol, company.name, company.sector,
+      userId, user.username, sellerUserId, sellerName, founderSharePct,
+      pct, acquiredLots, avgPrice, rawAcquisitionPrice, totalDeduction,
+      offerTier, useCompanyCash ? 'COMPANY' : 'PERSONAL', cleanPitch, founderApprovalNote
+    ]);
+
+    const execResult = await executeApprovedAcquisition({
+      company,
+      buyerUser: user,
       sellerUserId,
       sellerName,
-      userId,
-      user.username,
-      company.id,
-      company.name,
-      company.symbol,
+      isHumanSeller: false,
       pct,
-      sharesTransferred,
-      avgPrice,
+      discountFactor,
       rawAcquisitionPrice,
-      'LUNAS_IB_10000',
-      'ACTIVE'
-    ]);
-    io.emit('deed:created');
+      meteraiFee,
+      notaryAdminFee,
+      totalDeduction,
+      proposalId
+    });
 
-    // 8. Dorong Rebound Tren Bullish di Simulasi Pasar & Berita
-    if (simulationEngine && typeof simulationEngine.setStockTrend === 'function') {
-      simulationEngine.setStockTrend(company.symbol, 12.0);
-    }
-
-    const newsItem = {
-      id: uuidv4(),
-      title: `🏢 AKUISISI HISTORIS: ${user.username} Resmi Mengakuisisi ${pct}% Saham ${company.name} (${company.symbol})!`,
-      content: `Penyelamatan emiten krisis disepakati bersama ${sellerName} dengan nilai transaksi IB ${rawAcquisitionPrice.toLocaleString('id-ID')}. Akta Notaris Resmi No. ${deedNumber} telah diterbitkan dan tercatat di Brankas Notariat Niaga Federasi.`,
-      affected_sector: company.sector,
-      sentiment: 'BULLISH',
-      published_at: new Date().toISOString()
-    };
-    await query.run(
-      'INSERT INTO news (id, title, content, affected_sector, sentiment, published_at) VALUES (?, ?, ?, ?, ?, ?)',
-      [newsItem.id, newsItem.title, newsItem.content, newsItem.affected_sector, newsItem.sentiment, newsItem.published_at]
-    );
-    io.emit('market:news_broadcast', newsItem);
-    io.emit('company:status_changed', { companyId: company.id, status: 'HEALTHY' });
-    io.emit('user:balance_updated', { userId });
+    const updatedUser = await query.get('SELECT balance_ib, company_balance_ib FROM users WHERE id = ?', [userId]);
 
     res.json({
       success: true,
-      message: `Sukses mengakuisisi ${pct}% saham ${company.name}!`,
-      deed: {
-        id: deedId,
-        deed_number: deedNumber,
-        company_name: company.name,
-        company_symbol: company.symbol,
-        seller_name: sellerName,
-        buyer_name: user.username,
-        percentage_transferred: pct,
-        shares_transferred: sharesTransferred,
-        lots_transferred: acquiredLots,
-        price_per_share: avgPrice,
-        raw_price_ib: rawAcquisitionPrice,
-        meterai_fee: meteraiFee,
-        notary_fee: notaryAdminFee,
-        total_deduction_ib: totalDeduction,
-        created_at: new Date().toISOString()
+      pendingFounderApproval: false,
+      message: `Disetujui Pendiri (@${sellerName})! Sukses mengakuisisi ${pct}% saham pengendali ${company.name}!`,
+      founderApproval: {
+        founder_username: sellerName,
+        founder_share_pct: founderSharePct,
+        decision: 'APPROVED',
+        statement: founderApprovalNote,
+        approved_at: new Date().toISOString()
       },
-      shareholders: newShareholders,
-      newPersonalBalance: user.balance_ib - totalDeduction
+      deed: execResult.deed,
+      shareholders: execResult.shareholders,
+      newPersonalBalance: updatedUser.balance_ib,
+      newCompanyBalance: updatedUser.company_balance_ib
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Auctions
+// Daftar Proposal Akuisisi (Masuk ke Pendiri & Riwayat Pengajuan Pembeli)
+app.get('/api/takeover/proposals', async (req, res) => {
+  try {
+    const { userId } = req.query;
+    if (!userId) return res.json({ incoming: [], outgoing: [] });
+
+    // Jika pemain memiliki PT sendiri dan belum pernah menerima tawaran akuisisi dari Konglomerat Bot,
+    // buatkan 1 tawaran akuisisi masuk (Incoming Offer) dari Sultan 9 Naga agar pemain bisa merasakan menyetujui/menolak sebagai Pendiri!
+    const userOwnedComp = await query.get('SELECT * FROM companies WHERE owner_id = ? LIMIT 1', [userId]);
+    if (userOwnedComp) {
+      const existingIncoming = await query.get(
+        'SELECT COUNT(*) as count FROM acquisition_proposals WHERE company_id = ? AND founder_user_id = ?',
+        [userOwnedComp.id, userId]
+      );
+      if (!existingIncoming || existingIncoming.count === 0) {
+        const userRow = await query.get('SELECT username FROM users WHERE id = ?', [userId]);
+        const botBidder = await query.get("SELECT id, username FROM users WHERE username = 'haziq' LIMIT 1");
+        const pctReq = 51;
+        const lotsReq = Math.round(((userOwnedComp.total_shares || 10000000) * 0.51) / 100);
+        const premiumPrice = Math.round((userOwnedComp.current_price || 1500) * 1.15);
+        const rawOfferIb = lotsReq * 100 * premiumPrice;
+
+        await query.run(`
+          INSERT INTO acquisition_proposals (
+            id, company_id, company_symbol, company_name, sector,
+            buyer_user_id, buyer_username, founder_user_id, founder_username, founder_share_pct,
+            is_bot_founder, percentage_requested, lots_transferred, price_per_share_ib,
+            raw_acquisition_ib, total_deduction_ib, offer_tier, payment_source, pitch_notes, status
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 60.0, 0, ?, ?, ?, ?, ?, 'PREMIUM_15', 'PERSONAL', ?, 'PENDING_FOUNDER')
+        `, [
+          uuidv4(),
+          userOwnedComp.id,
+          userOwnedComp.symbol,
+          userOwnedComp.name,
+          userOwnedComp.sector,
+          botBidder ? botBidder.id : 'bot-user-001',
+          botBidder ? botBidder.username : 'haziq',
+          userId,
+          userRow ? userRow.username : 'Pendiri Utama',
+          pctReq,
+          lotsReq,
+          premiumPrice,
+          rawOfferIb,
+          rawOfferIb + 50000,
+          `Konsorsium Holding 9 Naga (@haziq) menawarkan Premi +15% di atas harga pasar untuk mengakuisisi 51% saham pengendali ${userOwnedComp.name}. Membutuhkan persetujuan Anda selaku Pendiri & Pemegang Saham Terbesar.`
+        ]);
+      }
+    }
+
+    const incoming = await query.all(`
+      SELECT * FROM acquisition_proposals
+      WHERE founder_user_id = ?
+      ORDER BY CASE WHEN status = 'PENDING_FOUNDER' THEN 0 ELSE 1 END, created_at DESC
+      LIMIT 30
+    `, [userId]);
+
+    const outgoing = await query.all(`
+      SELECT * FROM acquisition_proposals
+      WHERE buyer_user_id = ?
+      ORDER BY created_at DESC
+      LIMIT 30
+    `, [userId]);
+
+    res.json({ incoming: incoming || [], outgoing: outgoing || [] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Keputusan Pendiri / Pemegang Saham Terbesar atas Proposal Akuisisi (APPROVE / REJECT)
+app.post('/api/takeover/proposals/:id/respond', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId, decision, note = '' } = req.body; // decision: 'APPROVE' | 'REJECT'
+    const prop = await query.get('SELECT * FROM acquisition_proposals WHERE id = ?', [id]);
+    if (!prop) return res.status(404).json({ error: 'Proposal akuisisi tidak ditemukan' });
+    if (prop.status !== 'PENDING_FOUNDER') {
+      return res.status(400).json({ error: `Proposal ini sudah diproses (${prop.status})` });
+    }
+    if (prop.founder_user_id !== userId) {
+      return res.status(403).json({ error: 'Hanya Pendiri / Pemegang Saham Terbesar yang berhak memberikan persetujuan RUPS!' });
+    }
+
+    const act = String(decision || '').toUpperCase();
+    if (act === 'REJECT') {
+      // Kembalikan dana escrow kepada calon pembeli (jika bukan bot atau kembalikan ke saldo pembeli)
+      if (prop.payment_source === 'COMPANY') {
+        await query.run('UPDATE users SET company_balance_ib = company_balance_ib + ? WHERE id = ?', [prop.total_deduction_ib, prop.buyer_user_id]);
+      } else {
+        await query.run('UPDATE users SET balance_ib = balance_ib + ? WHERE id = ?', [prop.total_deduction_ib, prop.buyer_user_id]);
+      }
+      await query.run(
+        `UPDATE acquisition_proposals 
+         SET status = 'REJECTED', founder_response_note = ?, responded_at = CURRENT_TIMESTAMP 
+         WHERE id = ?`,
+        [note || 'Ditolak oleh Pendiri & Pemegang Saham Terbesar dalam RUPS Luar Biasa.', id]
+      );
+      io.emit('user:balance_updated', { userId: prop.buyer_user_id });
+
+      return res.json({
+        success: true,
+        status: 'REJECTED',
+        message: `Anda selaku Pendiri resmi MENOLAK proposal akuisisi dari @${prop.buyer_username}. Kepemilikan ${prop.company_name} tetap 100% di tangan Anda!`
+      });
+    }
+
+    // Jika APPROVE (Disetujui oleh Pendiri)
+    const company = await query.get('SELECT * FROM companies WHERE id = ?', [prop.company_id]);
+    const buyerUser = await query.get('SELECT * FROM users WHERE id = ?', [prop.buyer_user_id]);
+    if (!company || !buyerUser) {
+      return res.status(404).json({ error: 'Data perusahaan atau pembeli tidak ditemukan' });
+    }
+
+    const discountFactor = prop.offer_tier === 'PREMIUM_15' ? 1.15 : (prop.offer_tier === 'MARKET_FAIR' ? 1.0 : 0.70);
+    const execResult = await executeApprovedAcquisition({
+      company,
+      buyerUser,
+      sellerUserId: prop.founder_user_id,
+      sellerName: prop.founder_username,
+      isHumanSeller: true,
+      pct: prop.percentage_requested,
+      discountFactor,
+      rawAcquisitionPrice: prop.raw_acquisition_ib,
+      meteraiFee: 10000,
+      notaryAdminFee: 40000,
+      totalDeduction: prop.total_deduction_ib,
+      proposalId: prop.id
+    });
+
+    await query.run(
+      `UPDATE acquisition_proposals SET founder_response_note = ? WHERE id = ?`,
+      [note || `Disetujui secara resmi oleh Pendiri (@${prop.founder_username}).`, prop.id]
+    );
+
+    const updatedFounder = await query.get('SELECT balance_ib, company_balance_ib FROM users WHERE id = ?', [userId]);
+
+    res.json({
+      success: true,
+      status: 'APPROVED',
+      message: `🎉 Anda resmi MENYETUJUI akuisisi ${prop.percentage_requested}% saham ${prop.company_name}! Dana segar IB ${prop.raw_acquisition_ib.toLocaleString('id-ID')} telah masuk ke Kas Pribadi Anda.`,
+      deed: execResult.deed,
+      newPersonalBalance: updatedFounder?.balance_ib
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Lelang Aset Sitaan Bank Sentral Federasi (BCF) & PNAF
 app.get('/api/auctions', async (req, res) => {
-  res.json([]);
+  try {
+    // 1. Pastikan selalu ada minimal 5 paket lelang aset sitaan kredit macet yang aktif di Balai Lelang BCF
+    const activeCount = await query.get("SELECT COUNT(*) as count FROM auction_items WHERE status = 'ACTIVE'");
+    if (!activeCount || activeCount.count < 5) {
+      const candidateComps = await query.all(`
+        SELECT * FROM companies 
+        WHERE is_seized = 1 OR status = 'CRITICAL' OR current_price BETWEEN 600 AND 4500
+        ORDER BY is_seized DESC, fundamental_score ASC
+        LIMIT 8
+      `);
+      const expiresIso = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
+      const sharePackages = [3500000, 5100000, 2500000, 6000000, 4000000, 5500000];
+
+      for (let i = 0; i < Math.min(6, candidateComps.length); i++) {
+        const c = candidateComps[i];
+        const exists = await query.get("SELECT id FROM auction_items WHERE company_id = ? AND status = 'ACTIVE'", [c.id]);
+        if (!exists) {
+          const sharesOffered = sharePackages[i % sharePackages.length];
+          const marketVal = sharesOffered * (c.current_price || 1000);
+          const startBid = Math.round(marketVal * 0.65); // Diskon Lelang Likuidasi 35%
+          const currBid = Math.round(marketVal * 0.68);
+          await query.run(`
+            INSERT INTO auction_items (id, company_id, shares_offered, starting_bid_ib, current_bid_ib, highest_bidder_id, status, expires_at)
+            VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE', ?)
+          `, [
+            `auc-${c.symbol.toLowerCase()}-${Date.now().toString().slice(-4)}`,
+            c.id,
+            sharesOffered,
+            startBid,
+            currBid,
+            `bot-user-0${11 + i}`,
+            expiresIso
+          ]);
+        }
+      }
+    }
+
+    const rows = await query.all(`
+      SELECT a.*, 
+             c.symbol as company_symbol, c.name as company_name, c.sector, 
+             c.current_price, c.total_shares, c.fundamental_score, c.is_seized, c.seize_reason,
+             COALESCE(u.username, 'Konsorsium Lelang BCF') as highest_bidder_name,
+             COALESCE(owner.username, c.founder_name, 'Debitur Wanprestasi') as former_owner_name
+      FROM auction_items a
+      JOIN companies c ON a.company_id = c.id
+      LEFT JOIN users u ON a.highest_bidder_id = u.id
+      LEFT JOIN users owner ON c.owner_id = owner.id
+      WHERE a.status = 'ACTIVE'
+      ORDER BY a.created_at DESC
+    `);
+
+    const reasons = [
+      'Eksekusi Agunan Kredit Macet (NPL) Bank Sentral Federasi',
+      'Penyitaan Jaminan Obligasi Korporasi Gagal Bayar',
+      'Putusan Eksekusi Lelang Pengadilan Niaga (PNAF)',
+      'Likuidasi Paksa Portofolio Debitur Insolven BCF',
+    ];
+
+    const formatted = (rows || []).map((r, idx) => {
+      const totalShares = r.total_shares || 10000000;
+      const pctStake = Math.round((r.shares_offered / totalShares) * 100);
+      const lotsOffered = Math.round(r.shares_offered / 100);
+      const marketVal = Math.round(r.shares_offered * (r.current_price || 1000));
+      const buyoutPrice = Math.round(marketVal * 0.82); // Tebus Instan Hemat 18% dari harga pasar
+      const minNextBid = Math.round(r.current_bid_ib * 1.05);
+
+      return {
+        ...r,
+        percentage_stake: pctStake,
+        lots_offered: lotsOffered,
+        market_valuation_ib: marketVal,
+        buyout_price_ib: Math.max(minNextBid, buyoutPrice),
+        min_next_bid_ib: minNextBid,
+        discount_pct: Math.max(15, Math.round((1 - (r.current_bid_ib / Math.max(1, marketVal))) * 100)),
+        collateral_reason: r.seize_reason || reasons[idx % reasons.length],
+        is_majority_control: pctStake >= 50
+      };
+    });
+
+    res.json(formatted);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Tawar Lelang (BID) atau Tebus Instan (BUYOUT) Aset Sitaan Bank Sentral
+app.post('/api/auctions/bid', async (req, res) => {
+  try {
+    const { userId, auctionId, action = 'BUYOUT', bidAmountIb, paymentSource = 'AUTO' } = req.body;
+    const user = await query.get('SELECT * FROM users WHERE id = ?', [userId]);
+    if (!user) return res.status(404).json({ error: 'User tidak ditemukan' });
+
+    const auc = await query.get(`
+      SELECT a.*, c.symbol as company_symbol, c.name as company_name, c.sector, c.current_price, c.total_shares, c.owner_id
+      FROM auction_items a
+      JOIN companies c ON a.company_id = c.id
+      WHERE a.id = ? AND a.status = 'ACTIVE'
+    `, [auctionId]);
+    if (!auc) return res.status(404).json({ error: 'Paket lelang sitaan tidak ditemukan atau sudah ditutup' });
+
+    const totalShares = auc.total_shares || 10000000;
+    const pctStake = Math.round((auc.shares_offered / totalShares) * 100);
+    const lotsOffered = Math.round(auc.shares_offered / 100);
+    const marketVal = Math.round(auc.shares_offered * (auc.current_price || 1000));
+    const minNextBid = Math.round(auc.current_bid_ib * 1.05);
+    const buyoutPrice = Math.max(minNextBid, Math.round(marketVal * 0.82));
+
+    const isBuyout = String(action).toUpperCase() === 'BUYOUT';
+    const requiredIb = isBuyout ? buyoutPrice : Math.max(minNextBid, Math.round(Number(bidAmountIb) || minNextBid));
+
+    let useCompanyCash = false;
+    if (paymentSource === 'COMPANY') {
+      if ((user.company_balance_ib || 0) < requiredIb) {
+        return res.status(400).json({ error: `Saldo Kas PT tidak mencukupi. Butuh IB ${requiredIb.toLocaleString('id-ID')}.` });
+      }
+      useCompanyCash = true;
+    } else if ((user.balance_ib || 0) >= requiredIb) {
+      useCompanyCash = false;
+    } else if ((user.company_balance_ib || 0) >= requiredIb) {
+      useCompanyCash = true;
+    } else {
+      return res.status(400).json({
+        error: `Saldo Kas Pribadi maupun Kas PT tidak mencukupi untuk menebus lelang sebesar IB ${requiredIb.toLocaleString('id-ID')}.`
+      });
+    }
+
+    if (!isBuyout) {
+      // Hanya pasang tawaran tertinggi (BID)
+      await query.run(
+        'UPDATE auction_items SET current_bid_ib = ?, highest_bidder_id = ? WHERE id = ?',
+        [requiredIb, userId, auctionId]
+      );
+      await query.run(
+        'INSERT INTO auction_bids (id, auction_item_id, user_id, bid_amount_ib) VALUES (?, ?, ?, ?)',
+        [uuidv4(), auctionId, userId, requiredIb]
+      );
+      return res.json({
+        success: true,
+        isBuyout: false,
+        message: `Penawaran lelang tertinggi IB ${requiredIb.toLocaleString('id-ID')} atas ${auc.company_symbol} berhasil dicatat atas nama @${user.username}!`
+      });
+    }
+
+    // EKSEKUSI TEBUS INSTAN (BUYOUT) LELANG SITAAN BANK SENTRAL
+    if (useCompanyCash) {
+      await query.run('UPDATE users SET company_balance_ib = company_balance_ib - ? WHERE id = ?', [requiredIb, userId]);
+    } else {
+      await query.run('UPDATE users SET balance_ib = balance_ib - ? WHERE id = ?', [requiredIb, userId]);
+    }
+
+    await query.run(
+      "UPDATE auction_items SET current_bid_ib = ?, highest_bidder_id = ?, status = 'COMPLETED' WHERE id = ?",
+      [requiredIb, userId, auctionId]
+    );
+
+    // Masukkan hasil lelang sitaan ke Brankas Kas Negara (SEIZURE_FINE)
+    await query.run(`
+      INSERT INTO state_treasury_ledger (id, source_type, title, amount_ib, direction, reference_id, notes)
+      VALUES (?, 'SEIZURE_FINE', ?, ?, 'INCOME', ?, ?)
+    `, [
+      uuidv4(),
+      `Penerimaan Lelang Aset Sitaan BCF - ${auc.company_symbol} (${pctStake}% Saham)`,
+      requiredIb,
+      auc.company_id,
+      `Ditebus oleh @${user.username} melalui Balai Lelang Sitaan Bank Sentral`
+    ]);
+    io.emit('treasury:updated');
+
+    // Tambahkan saham lelang ke portofolio pemenang
+    const effPrice = Math.max(50, Math.round(requiredIb / auc.shares_offered));
+    const existPort = await query.get('SELECT * FROM portfolios WHERE user_id = ? AND company_id = ?', [userId, auc.company_id]);
+    if (existPort) {
+      await query.run('UPDATE portfolios SET lots_owned = lots_owned + ?, avg_buy_price = ? WHERE id = ?', [lotsOffered, effPrice, existPort.id]);
+    } else {
+      await query.run(
+        'INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price) VALUES (?, ?, ?, ?, ?)',
+        [uuidv4(), userId, auc.company_id, lotsOffered, effPrice]
+      );
+    }
+
+    // Jika paket saham >= 50%, pemenang otomatis menjadi Pemegang Saham Pengendali Baru!
+    if (pctStake >= 50) {
+      await query.run(
+        `UPDATE companies SET owner_id = ?, founder_name = ?, status = 'HEALTHY', is_seized = 0, is_acquired = 1 WHERE id = ?`,
+        [userId, user.username, auc.company_id]
+      );
+    }
+
+    // Terbitkan Risalah Lelang Resmi ke deal_deeds
+    const deedId = uuidv4();
+    const deedNumber = `RISALAH-BCF/2026/10/${Math.floor(1000 + Math.random() * 9000)}`;
+    await query.run(`
+      INSERT INTO deal_deeds (
+        id, deed_number, deal_id, seller_user_id, seller_name, 
+        buyer_user_id, buyer_name, company_id, company_name, company_symbol,
+        percentage_transferred, shares_transferred, price_per_share, total_price_ib,
+        meterai_status, status, created_at
+      ) VALUES (?, ?, ?, 'bank-central-bcf', 'Balai Lelang Sitaan Bank Sentral (BCF)', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'LUNAS_IB_10000', 'ACTIVE', CURRENT_TIMESTAMP)
+    `, [
+      deedId, deedNumber, `AUC-${auc.company_symbol}-${Date.now()}`,
+      userId, user.username, auc.company_id, auc.company_name, auc.company_symbol,
+      pctStake, auc.shares_offered, effPrice, requiredIb
+    ]);
+
+    const updatedUser = await query.get('SELECT balance_ib, company_balance_ib FROM users WHERE id = ?', [userId]);
+    io.emit('user:balance_updated', { userId });
+
+    res.json({
+      success: true,
+      isBuyout: true,
+      message: `🎉 Selamat! Anda berhasil memenangkan & menebus lelang sitaan ${pctStake}% saham ${auc.company_name} (${lotsOffered.toLocaleString('id-ID')} Lot)!`,
+      deed: {
+        id: deedId,
+        deed_number: deedNumber,
+        company_name: auc.company_name,
+        company_symbol: auc.company_symbol,
+        seller_name: 'Balai Lelang Sitaan Bank Sentral (BCF)',
+        buyer_name: user.username,
+        percentage_transferred: pctStake,
+        shares_transferred: auc.shares_offered,
+        lots_transferred: lotsOffered,
+        price_per_share: effPrice,
+        raw_price_ib: requiredIb,
+        created_at: new Date().toISOString()
+      },
+      newPersonalBalance: updatedUser.balance_ib,
+      newCompanyBalance: updatedUser.company_balance_ib
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Helper format nama PT agar tidak pernah menjadi "PT PT."

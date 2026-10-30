@@ -560,6 +560,34 @@ async function initDb() {
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS acquisition_proposals (
+      id TEXT PRIMARY KEY,
+      company_id TEXT NOT NULL,
+      company_symbol TEXT NOT NULL,
+      company_name TEXT NOT NULL,
+      sector TEXT,
+      buyer_user_id TEXT NOT NULL,
+      buyer_username TEXT NOT NULL,
+      founder_user_id TEXT,
+      founder_username TEXT NOT NULL,
+      founder_share_pct REAL DEFAULT 60.0,
+      is_bot_founder INTEGER DEFAULT 1,
+      percentage_requested INTEGER NOT NULL,
+      lots_transferred INTEGER NOT NULL,
+      price_per_share_ib REAL NOT NULL,
+      raw_acquisition_ib REAL NOT NULL,
+      total_deduction_ib REAL NOT NULL,
+      offer_tier TEXT DEFAULT 'RESCUE_30',
+      payment_source TEXT DEFAULT 'PERSONAL',
+      pitch_notes TEXT,
+      status TEXT DEFAULT 'PENDING_FOUNDER',
+      founder_response_note TEXT,
+      deed_id TEXT,
+      deed_number TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      responded_at TEXT
+    );
+
     CREATE TABLE IF NOT EXISTS court_chat_messages (
       id TEXT PRIMARY KEY,
       case_id TEXT NOT NULL,
@@ -1040,6 +1068,7 @@ const SYNC_TABLES_ORDER = [
   'court_chat_messages',
   'private_deals',
   'deal_deeds',
+  'acquisition_proposals',
   'state_treasury_ledger',
   'sovereign_bonds',
   'user_bond_holdings',

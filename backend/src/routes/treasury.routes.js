@@ -25,7 +25,7 @@ module.exports = function(io, simulationEngine) {
           if (r.source_type === 'SEIZURE_FINE') finesTotal += amt;
           if (r.source_type === 'PNAF_FILING_FEE') filingFeesTotal += amt;
           if (r.source_type === 'METERAI_FEE') meteraiTotal += amt;
-          if (r.source_type === 'TRANSACTION_TAX') taxTotal += amt;
+          if (r.source_type === 'TRANSACTION_TAX' || r.source_type === 'CORPORATE_TAX') taxTotal += amt;
           if (r.source_type === 'CORPORATE_TAX') corporateTaxTotal += amt;
         } else {
           totalExpense += amt;
@@ -47,6 +47,7 @@ module.exports = function(io, simulationEngine) {
           filingFeesTotal,
           meteraiTotal,
           taxTotal,
+          corporateTaxTotal,
           baseReserve
         },
         seizedCompaniesCount: seizedCount ? seizedCount.count : 0,

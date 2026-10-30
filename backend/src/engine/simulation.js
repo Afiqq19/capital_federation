@@ -489,7 +489,7 @@ class MarketSimulationEngine {
       this.io.emit('market:ticker', updatedList);
       this.io.emit('market:overview', overview);
 
-      // Generate 1-2 real-time market trades for Running Trade tape
+      // Generate 1-3 real-time market trades for Running Trade tape (Bandar 9 Naga & Investor Ritel)
       const tradeableList = updatedList.filter(c => c.status !== 'SUSPENDED');
       if (tradeableList.length > 0) {
         const tradesCount = Math.floor(Math.random() * 2) + 1;
@@ -499,11 +499,52 @@ class MarketSimulationEngine {
         const ss = String(nowObj.getSeconds()).padStart(2, '0');
         const timeStr = `${hh}:${mm}:${ss}`;
 
+        let tickBotTaxIb = 0;
+        let lastBotTraderName = 'haziq';
+        let lastBotSymbol = 'KEAP';
+
         for (let t = 0; t < tradesCount; t++) {
           const randComp = tradeableList[Math.floor(Math.random() * tradeableList.length)];
-          const isBuy = Math.random() > 0.45;
-          const lotSize = Math.floor(Math.random() * 250) + 15;
-          const randomBot = BOT_ROSTER[Math.floor(Math.random() * BOT_ROSTER.length)];
+          const isBuy = Math.random() > 0.44;
+          const botIdx = Math.floor(Math.random() * BOT_ROSTER.length);
+          const randomBot = BOT_ROSTER[botIdx];
+          // Bandar (Top 30 Konglomerat) transaksi blok besar 120-950 lot, Ritel 5-95 lot
+          const isBandar = botIdx < 30;
+          const lotSize = isBandar
+            ? Math.floor(Math.random() * 830) + 120
+            : Math.floor(Math.random() * 90) + 5;
+
+          const tradeValueIb = lotSize * 100 * (randComp.current_price || 1000);
+          const feeIb = Math.max(1500, Math.round(tradeValueIb * 0.0015)); // 0.15% Pajak Transaksi Bursa
+          tickBotTaxIb += feeIb;
+          if (randomBot) lastBotTraderName = randomBot.username;
+          lastBotSymbol = randComp.symbol;
+
+          // Update kepemilikan saham bot di tabel portfolios secara nyata
+          if (randomBot && randComp.id) {
+            try {
+              const botDb = await query.get('SELECT id, balance_ib FROM users WHERE username = ?', [randomBot.username]);
+              if (botDb) {
+                const existPort = await query.get(
+                  'SELECT id, lots_owned FROM portfolios WHERE user_id = ? AND company_id = ?',
+                  [botDb.id, randComp.id]
+                );
+                if (isBuy) {
+                  if (existPort) {
+                    await query.run('UPDATE portfolios SET lots_owned = lots_owned + ? WHERE id = ?', [lotSize, existPort.id]);
+                  } else {
+                    await query.run(
+                      'INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price) VALUES (?, ?, ?, ?, ?)',
+                      [uuidv4(), botDb.id, randComp.id, lotSize, randComp.current_price]
+                    );
+                  }
+                } else if (existPort && existPort.lots_owned > lotSize + 50) {
+                  await query.run('UPDATE portfolios SET lots_owned = lots_owned - ? WHERE id = ?', [lotSize, existPort.id]);
+                }
+              }
+            } catch (_) {}
+          }
+
           const bgTrade = {
             id: uuidv4(),
             time: timeStr,
@@ -511,12 +552,30 @@ class MarketSimulationEngine {
             price: randComp.current_price,
             lots: lotSize,
             type: isBuy ? 'BUY' : 'SELL',
-            username: randomBot ? randomBot.username : (isBuy ? 'Konsorsium Reksa Dana' : 'Ritel Publik'),
+            username: randomBot ? randomBot.username : (isBuy ? 'haziq' : 'ritel'),
             isUser: false,
             timestamp: nowObj.toISOString(),
           };
           this.recordTrade(bgTrade);
           this.io.emit('trade:executed', bgTrade);
+        }
+
+        // Setorkan Pajak Transaksi Bursa (0.15%) dari aktivitas Bandar & Ritel Bot ke Kas Negara setiap 4 tick (~16 detik)
+        if (this.tickCount % 4 === 0 && tickBotTaxIb > 0) {
+          try {
+            await query.run(
+              `INSERT INTO state_treasury_ledger (id, source_type, title, amount_ib, direction, reference_id, notes)
+               VALUES (?, 'TRANSACTION_TAX', ?, ?, 'INCOME', ?, ?)`,
+              [
+                uuidv4(),
+                `Pajak Transaksi Bursa (0.15%) - Aktivitas Bandar & Ritel (${lastBotSymbol})`,
+                tickBotTaxIb * 4,
+                lastBotSymbol,
+                `Setoran otomatis pajak transaksi bursa oleh ${lastBotTraderName} dkk.`
+              ]
+            );
+            this.io.emit('treasury:updated');
+          } catch (_) {}
         }
       }
 
@@ -815,10 +874,14 @@ class MarketSimulationEngine {
       } catch (_) {}
 
       const processedCompanyIds = new Set();
+      let collectiveBotTaxIb = 0;
+      let collectiveBotCompaniesCount = 0;
       const ptOwners = await query.all('SELECT * FROM users WHERE has_pt = 1 AND is_banned = 0');
       for (const u of ptOwners) {
+        const isBotUser = String(u.id || '').startsWith('bot-user-');
+        const isTop9Bot = isBotUser && parseInt(String(u.id).replace('bot-user-', ''), 10) <= 9;
         // Cek apakah PT Utama user sedang disita negara/PNAF atau BANGKRUT (PAILIT)
-        const primaryComp = await query.get('SELECT id, is_seized, status, name, symbol, sector FROM companies WHERE owner_id = ? AND is_bot = 0', [u.id]);
+        const primaryComp = await query.get('SELECT id, is_seized, status, name, symbol, sector FROM companies WHERE owner_id = ?', [u.id]);
         if (primaryComp) {
           processedCompanyIds.add(primaryComp.id);
           if (primaryComp.is_seized === 1 || primaryComp.status === 'BANKRUPT') {
@@ -839,28 +902,28 @@ class MarketSimulationEngine {
         }
 
         // Beban operasional dasar & gaji karyawan
-        const staffSalaries = (u.employees_count || 0) * salaryPerHead;
+        const staffSalaries = (u.employees_count || (isBotUser ? 20 : 0)) * salaryPerHead;
         const ceoSalary = u.ceo_level > 0 ? 1500000 : 0;
         const cfoSalary = u.cfo_level > 0 ? 1000000 : 0;
         const cmoSalary = u.cmo_level > 0 ? 1000000 : 0;
 
         let totalExpenses = baseOps + staffSalaries + ceoSalary + cfoSalary + cmoSalary;
-        if (u.cfo_level > 0) {
+        if (u.cfo_level > 0 || isBotUser) {
           totalExpenses = Math.round(totalExpenses * 0.75);
         }
         totalExpenses = Math.max(0, totalExpenses - grantDeduction);
 
         // Omzet bisnis progresif (R&D, Merek, SDM, Skala PT)
-        let grossRev = (u.pt_level * 250000) + 
-                       ((u.rd_level || 1) * 450000) + 
-                       ((u.marketing_level || 1) * 300000) + 
-                       ((u.capacity_level || 1) * 200000) + 
-                       ((u.employees_count || 0) * 150000);
+        let grossRev = ((u.pt_level || 2) * 350000) + 
+                       ((u.rd_level || (isBotUser ? 3 : 1)) * 550000) + 
+                       ((u.marketing_level || (isBotUser ? 3 : 1)) * 400000) + 
+                       ((u.capacity_level || (isBotUser ? 3 : 1)) * 300000) + 
+                       ((u.employees_count || (isBotUser ? 25 : 0)) * 180000);
 
-        if (u.ceo_level > 0) grossRev *= 1.30;
-        if (u.cmo_level > 0) grossRev *= 1.35;
+        if (u.ceo_level > 0 || isTop9Bot) grossRev *= 1.35;
+        if (u.cmo_level > 0 || isBotUser) grossRev *= 1.30;
 
-        const multiplier = (u.fundamental_score / 100);
+        const multiplier = ((u.fundamental_score || 85) / 100);
         const totalGross = Math.round(grossRev * multiplier);
 
         // Laba/Rugi Bersih: jika baru berdiri (R&D & marketing rendah), bisa mengalami rugi awal / fase bakar modal
@@ -870,12 +933,16 @@ class MarketSimulationEngine {
           const corporateTax = Math.round(netRev * currentTaxRate); // PPh Badan disesuaikan dengan subsidi / regulasi
           const netAfterTax = netRev - corporateTax;
 
-          // Setor PPh Badan ke Kas Negara Federasi
-          await query.run(
-            'INSERT INTO state_treasury_ledger (id, source_type, title, amount_ib, direction, reference_id, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [uuidv4(), 'CORPORATE_TAX', `Penerimaan PPh Badan (${currentTaxPct}%) - ${u.pt_name || 'PT Utama'}`, corporateTax, 'INCOME', u.id, `Setoran PPh Badan ${currentTaxPct}% atas laba operasional periode ${intervalDesc}`]
-          );
-          this.io.emit('treasury:updated');
+          // Setor PPh Badan ke Kas Negara Federasi (Pemain asli & Top 9 Naga dicatat per PT, sisanya dikonsolidasi agar buku kas rapi)
+          if (!isBotUser || isTop9Bot) {
+            await query.run(
+              'INSERT INTO state_treasury_ledger (id, source_type, title, amount_ib, direction, reference_id, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
+              [uuidv4(), 'CORPORATE_TAX', `Penerimaan PPh Badan (${currentTaxPct}%) - ${u.pt_name || 'PT Utama'} (${u.username})`, corporateTax, 'INCOME', u.id, `Setoran PPh Badan ${currentTaxPct}% atas laba operasional periode ${intervalDesc}`]
+            );
+          } else {
+            collectiveBotTaxIb += corporateTax;
+            collectiveBotCompaniesCount++;
+          }
 
           await query.run(
             'UPDATE users SET company_balance_ib = company_balance_ib + ? WHERE id = ?',
@@ -885,41 +952,43 @@ class MarketSimulationEngine {
             await query.run('UPDATE companies SET company_balance_ib = COALESCE(company_balance_ib, 0) + ? WHERE id = ?', [netAfterTax, primaryComp.id]);
           }
 
-          const updatedUser = await query.get('SELECT company_balance_ib FROM users WHERE id = ?', [u.id]);
+          if (!isBotUser) {
+            const updatedUser = await query.get('SELECT company_balance_ib FROM users WHERE id = ?', [u.id]);
 
-          await recordCashFlow({
-            userId: u.id,
-            companyId: primaryComp?.id || null,
-            accountType: 'COMPANY',
-            category: 'REVENUE',
-            title: `Laba Bersih Omzet Operasional PT (Siklus ${intervalDesc})`,
-            amountIb: netAfterTax,
-            direction: 'INCOME',
-            balanceAfter: updatedUser.company_balance_ib,
-            notes: `Omzet Kotor: +IB ${totalGross.toLocaleString('id-ID')} | Beban Ops: -IB ${totalExpenses.toLocaleString('id-ID')}`
-          });
-          await recordCashFlow({
-            userId: u.id,
-            companyId: primaryComp?.id || null,
-            accountType: 'COMPANY',
-            category: 'TAX',
-            title: `Setoran PPh Badan (${taxRatePct}% Kas Negara)`,
-            amountIb: corporateTax,
-            direction: 'EXPENSE',
-            balanceAfter: updatedUser.company_balance_ib,
-            notes: `Setoran Pajak Penghasilan Badan ${taxRatePct}% atas laba operasional`
-          });
+            await recordCashFlow({
+              userId: u.id,
+              companyId: primaryComp?.id || null,
+              accountType: 'COMPANY',
+              category: 'REVENUE',
+              title: `Laba Bersih Omzet Operasional PT (Siklus ${intervalDesc})`,
+              amountIb: netAfterTax,
+              direction: 'INCOME',
+              balanceAfter: updatedUser.company_balance_ib,
+              notes: `Omzet Kotor: +IB ${totalGross.toLocaleString('id-ID')} | Beban Ops: -IB ${totalExpenses.toLocaleString('id-ID')}`
+            });
+            await recordCashFlow({
+              userId: u.id,
+              companyId: primaryComp?.id || null,
+              accountType: 'COMPANY',
+              category: 'TAX',
+              title: `Setoran PPh Badan (${taxRatePct}% Kas Negara)`,
+              amountIb: corporateTax,
+              direction: 'EXPENSE',
+              balanceAfter: updatedUser.company_balance_ib,
+              notes: `Setoran Pajak Penghasilan Badan ${taxRatePct}% atas laba operasional`
+            });
 
-          this.io.to(u.id).emit('company:revenue', {
-            amount: netAfterTax,
-            grossRevenue: totalGross,
-            expenses: totalExpenses,
-            tax: corporateTax,
-            netRevenue: netAfterTax,
-            newCompanyBalance: updatedUser.company_balance_ib,
-          });
-          this.io.emit('user:balance_updated', { userId: u.id, companyBalance: updatedUser.company_balance_ib });
-        } else if (netRev < 0) {
+            this.io.to(u.id).emit('company:revenue', {
+              amount: netAfterTax,
+              grossRevenue: totalGross,
+              expenses: totalExpenses,
+              tax: corporateTax,
+              netRevenue: netAfterTax,
+              newCompanyBalance: updatedUser.company_balance_ib,
+            });
+            this.io.emit('user:balance_updated', { userId: u.id, companyBalance: updatedUser.company_balance_ib });
+          }
+        } else if (netRev < 0 && !isBotUser) {
           // Fase Defisit / Bakar Modal (Biaya operasional & gaji melebihi omzet)
           const currentBal = u.company_balance_ib || 0;
           const candidateBal = currentBal + netRev;
@@ -999,6 +1068,22 @@ class MarketSimulationEngine {
             this.io.emit('user:balance_updated', { userId: u.id, companyBalance: candidateBal });
           }
         }
+      }
+
+      if (collectiveBotTaxIb > 0) {
+        await query.run(
+          'INSERT INTO state_treasury_ledger (id, source_type, title, amount_ib, direction, reference_id, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [
+            uuidv4(),
+            'CORPORATE_TAX',
+            `Penerimaan Kolektif PPh Badan (${taxRatePct}%) - ${collectiveBotCompaniesCount} Emiten Bursa CFX`,
+            collectiveBotTaxIb,
+            'INCOME',
+            'CFX-EMITEN-BATCH',
+            `Setoran PPh Badan otomatis ${collectiveBotCompaniesCount} perusahaan Tbk. periode ${intervalDesc}`
+          ]
+        );
+        this.io.emit('treasury:updated');
       }
 
       // Seluruh Unit Anak Perusahaan & Konglomerasi Pemain (termasuk hasil akuisisi seperti TECH04)

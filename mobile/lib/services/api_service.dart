@@ -639,11 +639,14 @@ class ApiService {
     return [];
   }
 
-  // Negotiate Takeover
+  // Negotiate Takeover (dengan Persetujuan Pendiri / Pemegang Saham Terbesar)
   static Future<Map<String, dynamic>> negotiateTakeover({
     required String userId,
     required String companyId,
     required int percentageOffer,
+    String offerTier = 'RESCUE_30',
+    String paymentSource = 'AUTO',
+    String pitchNotes = '',
   }) async {
     try {
       final response = await http.post(
@@ -653,11 +656,50 @@ class ApiService {
           'userId': userId,
           'companyId': companyId,
           'percentageOffer': percentageOffer,
+          'offerTier': offerTier,
+          'paymentSource': paymentSource,
+          'pitchNotes': pitchNotes,
         }),
-      ).timeout(const Duration(seconds: 5));
+      ).timeout(const Duration(seconds: 6));
       return jsonDecode(response.body);
     } catch (e) {
       return {'error': 'Gagal akuisisi: Gangguan koneksi'};
+    }
+  }
+
+  // Ambil Daftar Proposal Akuisisi (Masuk ke Pendiri & Riwayat Pengajuan)
+  static Future<Map<String, dynamic>> getTakeoverProposals(String userId) async {
+    try {
+      final response = await http
+          .get(Uri.parse('$baseUrl/api/takeover/proposals?userId=$userId'))
+          .timeout(const Duration(seconds: 5));
+      if (response.statusCode == 200) {
+        return Map<String, dynamic>.from(jsonDecode(response.body));
+      }
+    } catch (_) {}
+    return {'incoming': [], 'outgoing': []};
+  }
+
+  // Keputusan Pendiri atas Proposal Akuisisi (APPROVE / REJECT)
+  static Future<Map<String, dynamic>> respondTakeoverProposal({
+    required String proposalId,
+    required String userId,
+    required String decision,
+    String note = '',
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/takeover/proposals/$proposalId/respond'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'userId': userId,
+          'decision': decision,
+          'note': note,
+        }),
+      ).timeout(const Duration(seconds: 6));
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'error': 'Gagal memproses keputusan RUPS Pendiri: Gangguan koneksi'};
     }
   }
 
@@ -704,12 +746,38 @@ class ApiService {
   // Bank Auctions
   static Future<List<dynamic>> getAuctions() async {
     try {
-      final response = await http.get(Uri.parse('$baseUrl/api/auctions')).timeout(const Duration(seconds: 4));
+      final response = await http.get(Uri.parse('$baseUrl/api/auctions')).timeout(const Duration(seconds: 5));
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
       }
     } catch (_) {}
     return [];
+  }
+
+  // Tawar atau Tebus Instan Lelang Bank Sitaan
+  static Future<Map<String, dynamic>> bidAuction({
+    required String userId,
+    required String auctionId,
+    String action = 'BUYOUT',
+    double? bidAmountIb,
+    String paymentSource = 'AUTO',
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/auctions/bid'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'userId': userId,
+          'auctionId': auctionId,
+          'action': action,
+          if (bidAmountIb != null) 'bidAmountIb': bidAmountIb,
+          'paymentSource': paymentSource,
+        }),
+      ).timeout(const Duration(seconds: 6));
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'error': 'Gagal memproses lelang sitaan: Gangguan koneksi'};
+    }
   }
 
   // Real-time Running Trades tape from server

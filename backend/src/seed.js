@@ -1,7 +1,7 @@
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const { query, initDb } = require('./db');
-const { deriveCleanTicker, ADDITIONAL_COMPANIES, BOT_ROSTER } = require('./botData');
+const { deriveCleanTicker, FLAGSHIP_CONGLOMERATE_COMPANIES, ADDITIONAL_COMPANIES, BOT_ROSTER } = require('./botData');
 
 const RAW_COMPANY_NAMES = [
   // Teknologi (20)
@@ -276,13 +276,18 @@ async function ensureMarketPopulation() {
 
   let migratedTickers = 0;
   for (const comp of currentCompanies) {
-    const cleanName = 'PT. ' + String(comp.name || '').replace(/^(PT\.?\s*)+/i, '').trim();
+    let cleanName = 'PT. ' + String(comp.name || '').replace(/^(PT\.?\s*)+/i, '').trim();
+    // Pastikan seluruh perusahaan yang tercatat di Bursa Saham memiliki akhiran "Tbk."
+    if (!/\bTbk\.?$/i.test(cleanName)) {
+      cleanName = `${cleanName} Tbk.`;
+    } else if (/Tbk$/i.test(cleanName)) {
+      cleanName = `${cleanName}.`;
+    }
     if (cleanName !== comp.name) {
       await query.run('UPDATE companies SET name = ? WHERE id = ?', [cleanName, comp.id]);
     }
 
     if (/\d/.test(comp.symbol)) {
-      const oldSymbol = comp.symbol;
       const key = normalizeCompKey(cleanName);
       let newSymbol = catalogSymbolByName.get(key);
       if (!newSymbol || usedSymbols.has(newSymbol)) {
@@ -316,13 +321,16 @@ async function ensureMarketPopulation() {
       existingSymbols.add(sym);
       existingKeys.add(key);
 
+      let cleanCompName = 'PT. ' + String(c.name || '').replace(/^(PT\.?\s*)+/i, '').trim();
+      if (!/\bTbk\.?$/i.test(cleanCompName)) cleanCompName = `${cleanCompName} Tbk.`;
+
       await query.run(
         `INSERT INTO companies (id, symbol, name, sector, is_bot, status, current_price, base_price, prev_close, daily_high, daily_low, total_shares, circulating_shares, dividend_rate, fundamental_score, operational_level, description)
          VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, 10000000, 3000000, ?, ?, ?, ?)`,
         [
           compId,
           sym,
-          c.name,
+          cleanCompName,
           c.sector,
           c.status,
           c.basePrice,
@@ -333,7 +341,7 @@ async function ensureMarketPopulation() {
           c.status === 'HEALTHY' ? 0.03 : 0.0,
           c.status === 'HEALTHY' ? 82.0 : 38.0,
           c.status === 'HEALTHY' ? 6 : 2,
-          `Emiten ${c.sector} di bursa Capital Federation.`
+          `Emiten ${c.sector} resmi tercatat (Tbk.) di Bursa Efek Capital Federation.`
         ]
       );
       let lastPrice = c.basePrice;
@@ -356,17 +364,18 @@ async function ensureMarketPopulation() {
     }
   }
   if (addedCompanies > 0) {
-    console.log(`✅ ${addedCompanies} emiten baru berhasil ditambahkan ke bursa.`);
+    console.log(`✅ ${addedCompanies} emiten Tbk. baru berhasil ditambahkan ke bursa.`);
   }
 
-  // 4. Clean legacy long-named bots to keep all bot usernames short, natural (1 word gamer style)
+  // 4. Clean legacy long-named bots & old username with numbers (andi19)
   const legacyBotNames = [
     'tan_sri_hendra', 'robert_hartono_cf', 'anthony_salim_cf', 'prajogo_energi_cf',
     'chairul_tanjung_cf', 'tahap_widjaja_cf', 'lim_haryanto_cf', 'william_soerya_cf',
     'erick_thohir_cf', 'sandi_uno_cf', 'grace_tahir_cf', 'kevin_mintaraga',
     'budi_scalper_madiun', 'siti_trader_cantik', 'reza_quant_trader', 'citra_swing_trader',
     'denny_fomo_cuancuan', 'ahmad_value_investor', 'joko_trader_santuy', 'maya_crypto_migrasi',
-    'eko_broker_independen', 'farhan_speed_trader', 'lisa_dividen_hunter', 'dimas_day_trader'
+    'eko_broker_independen', 'farhan_speed_trader', 'lisa_dividen_hunter', 'dimas_day_trader',
+    'andi19'
   ];
   for (const leg of legacyBotNames) {
     const legUser = await query.get('SELECT id FROM users WHERE username = ?', [leg]);
@@ -376,19 +385,23 @@ async function ensureMarketPopulation() {
     }
   }
 
-  // 5. Seed 100 Bot Investors, Taipans, & Retail Traders with natural 1-word usernames
-  const allCompanies = await query.all('SELECT id, current_price, base_price FROM companies');
+  // 5. Seed 265 Bot Investors, Konglomerat 9 Naga, Pemilik Emiten Tbk., PT Privat & Ritel
   const botPass = await bcrypt.hash('botpass123', 8);
   let addedBots = 0;
   for (let idx = 0; idx < BOT_ROSTER.length; idx++) {
     const b = BOT_ROSTER[idx];
     const existing = await query.get('SELECT id FROM users WHERE username = ?', [b.username]);
     let botUserId = existing?.id;
+    const empCount = b.has_pt ? (idx < 9 ? 50 : (idx < 30 ? 35 : 20)) : 0;
+    const rdLvl = b.has_pt ? (idx < 9 ? 5 : (idx < 30 ? 4 : 3)) : 1;
+    const mktLvl = b.has_pt ? (idx < 9 ? 5 : (idx < 30 ? 4 : 3)) : 1;
+    const capLvl = b.has_pt ? (idx < 9 ? 5 : (idx < 30 ? 4 : 3)) : 1;
+
     if (!existing) {
       botUserId = b.id || uuidv4();
       await query.run(
-        `INSERT INTO users (id, username, password_hash, balance_ib, company_balance_ib, has_pt, pt_name, sector, pt_level, credit_score, role, is_blue_chip)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO users (id, username, password_hash, balance_ib, company_balance_ib, has_pt, pt_name, sector, pt_level, credit_score, role, is_blue_chip, employees_count, rd_level, marketing_level, capacity_level, fundamental_score)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 90.0)`,
         [
           botUserId,
           b.username,
@@ -401,36 +414,192 @@ async function ensureMarketPopulation() {
           b.pt_level,
           b.credit_score,
           b.role,
-          b.is_blue_chip
+          b.is_blue_chip,
+          empCount,
+          rdLvl,
+          mktLvl,
+          capLvl
         ]
       );
       addedBots++;
+    } else {
+      // Pastikan atribut operasional bot memadai agar mencetak laba & menyetor PPh Badan ke Kas Negara
+      await query.run(
+        `UPDATE users SET employees_count = CASE WHEN COALESCE(employees_count, 0) < 15 THEN ? ELSE employees_count END,
+                          rd_level = CASE WHEN COALESCE(rd_level, 1) < 2 THEN ? ELSE rd_level END,
+                          marketing_level = CASE WHEN COALESCE(marketing_level, 1) < 2 THEN ? ELSE marketing_level END,
+                          capacity_level = CASE WHEN COALESCE(capacity_level, 1) < 2 THEN ? ELSE capacity_level END
+         WHERE id = ?`,
+        [empCount, rdLvl, mktLvl, capLvl, botUserId]
+      );
+    }
+  }
+  if (addedBots > 0) {
+    console.log(`✅ ${addedBots} bot pemain baru berhasil dimasukkan ke bursa (Total 265 Bot).`);
+  }
+
+  // 5B. SINKRONISASI 1-KE-1: Hubungkan 250 Perusahaan Tbk. di Bursa Saham dengan 250 Bot Pemilik PT di Peringkat!
+  // Dengan demikian, setiap PT yang tampil di bawah nama pemain/bot di Peringkat 100% ADA di Bursa Saham (Tbk.)!
+  const allBotCompanies = await query.all(`
+    SELECT c.* FROM companies c
+    LEFT JOIN users u ON c.owner_id = u.id
+    WHERE c.is_bot = 1 OR c.owner_id IS NULL OR c.owner_id LIKE 'bot-user-%'
+    ORDER BY c.base_price DESC, c.current_price DESC
+  `);
+
+  const flagshipSymbols = FLAGSHIP_CONGLOMERATE_COMPANIES.map((f) => f.symbol);
+  const compBySymbol = new Map(allBotCompanies.map((c) => [c.symbol, c]));
+  const assignedCompIds = new Set();
+  const orderedCompaniesForBots = [];
+
+  // Prioritaskan 16 Flagship Emiten untuk Bot #1 s/d #16 (9 Naga & Taipan Utama)
+  for (const sym of flagshipSymbols) {
+    const fc = compBySymbol.get(sym);
+    if (fc && !assignedCompIds.has(fc.id)) {
+      orderedCompaniesForBots.push(fc);
+      assignedCompIds.add(fc.id);
+    }
+  }
+  // Lanjutkan dengan seluruh sisa emiten bot di Bursa Saham
+  for (const comp of allBotCompanies) {
+    if (!assignedCompIds.has(comp.id)) {
+      orderedCompaniesForBots.push(comp);
+      assignedCompIds.add(comp.id);
+    }
+  }
+
+  for (let idx = 0; idx < BOT_ROSTER.length; idx++) {
+    const b = BOT_ROSTER[idx];
+    const botRow = await query.get('SELECT id, username FROM users WHERE username = ?', [b.username]);
+    if (!botRow) continue;
+
+    if (idx < orderedCompaniesForBots.length && idx < 252) {
+      const comp = orderedCompaniesForBots[idx];
+      // Hubungkan perusahaan Tbk. di Bursa Saham ke Bot ini sebagai Pendiri & Pemilik
+      await query.run(
+        `UPDATE companies 
+         SET owner_id = ?, founder_name = ?, employees_count = COALESCE(NULLIF(employees_count, 0), 25),
+             rd_level = CASE WHEN COALESCE(rd_level, 1) < 3 THEN 3 ELSE rd_level END,
+             marketing_level = CASE WHEN COALESCE(marketing_level, 1) < 3 THEN 3 ELSE marketing_level END,
+             capacity_level = CASE WHEN COALESCE(capacity_level, 1) < 3 THEN 3 ELSE capacity_level END
+         WHERE id = ?`,
+        [botRow.id, botRow.username, comp.id]
+      );
+      await query.run(
+        'UPDATE users SET has_pt = 1, pt_name = ?, sector = ? WHERE id = ?',
+        [comp.name, comp.sector, botRow.id]
+      );
+
+      // Pastikan susunan pemegang saham (Cap Table) mencatat Bot ini sebagai Pendiri & Pemegang Saham Terbesar (60%)
+      const existingSh = await query.get('SELECT COUNT(*) as count FROM company_shareholders WHERE company_id = ?', [comp.id]);
+      if (!existingSh || existingSh.count === 0) {
+        const totalShares = comp.total_shares || 10000000;
+        await query.run(
+          `INSERT INTO company_shareholders (id, company_id, holder_name, holder_type, shares_count, percentage, user_id)
+           VALUES (?, ?, ?, 'FOUNDER', ?, 60.0, ?)`,
+          [uuidv4(), comp.id, `${botRow.username} (Pendiri & Pengendali)`, Math.round(totalShares * 0.60), botRow.id]
+        );
+        await query.run(
+          `INSERT INTO company_shareholders (id, company_id, holder_name, holder_type, shares_count, percentage, user_id)
+           VALUES (?, ?, 'Konsorsium Institusi Federasi', 'INSTITUTION', ?, 20.0, NULL)`,
+          [uuidv4(), comp.id, Math.round(totalShares * 0.20)]
+        );
+        await query.run(
+          `INSERT INTO company_shareholders (id, company_id, holder_name, holder_type, shares_count, percentage, user_id)
+           VALUES (?, ?, 'Publik Masyarakat (Bursa Efek)', 'PUBLIC', ?, 20.0, NULL)`,
+          [uuidv4(), comp.id, Math.round(totalShares * 0.20)]
+        );
+      }
+    } else if (b.has_pt === 1) {
+      // Bot #253 - #258: Memiliki PT Privat Non-Tbk (belum IPO di Bursa Saham)
+      await query.run(
+        'UPDATE users SET has_pt = 1, pt_name = ?, sector = ? WHERE id = ?',
+        [b.pt_name, b.sector, botRow.id]
+      );
+    } else {
+      // Bot #259 - #265: Ritel Murni (Belum mendirikan PT)
+      await query.run(
+        "UPDATE users SET has_pt = 0, pt_name = '' WHERE id = ?",
+        [botRow.id]
+      );
     }
 
-    const existingPort = await query.get('SELECT COUNT(*) as count FROM portfolios WHERE user_id = ?', [botUserId]);
+    // Pastikan setiap bot memiliki portofolio saham di bursa
+    const existingPort = await query.get('SELECT COUNT(*) as count FROM portfolios WHERE user_id = ?', [botRow.id]);
     if (!existingPort || existingPort.count === 0) {
-      const stockCount = idx < 9 ? 4 : (idx < 25 ? 3 : 2);
-      const startOffset = (idx * 3) % Math.max(1, allCompanies.length - 5);
+      // Jika memiliki emiten Tbk sendiri, tambahkan kepemilikan saham emitennya + 2 saham lain
+      if (idx < orderedCompaniesForBots.length && idx < 252) {
+        const ownComp = orderedCompaniesForBots[idx];
+        const founderLots = idx < 9 ? 15000 : (idx < 30 ? 4500 : 1200);
+        await query.run(
+          `INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price)
+           VALUES (?, ?, ?, ?, ?)`,
+          [uuidv4(), botRow.id, ownComp.id, founderLots, ownComp.base_price || ownComp.current_price]
+        );
+      }
+      const stockCount = idx < 9 ? 3 : 2;
+      const startOffset = (idx * 5) % Math.max(1, orderedCompaniesForBots.length - 5);
       for (let s = 0; s < stockCount; s++) {
-        const comp = allCompanies[(startOffset + s) % allCompanies.length];
+        const comp = orderedCompaniesForBots[(startOffset + s) % orderedCompaniesForBots.length];
         if (comp) {
-          let lots = 50;
-          if (idx < 9) lots = 5000 + (idx * 1500);
-          else if (idx < 25) lots = 1200 + ((idx % 5) * 400);
-          else if (idx < 45) lots = 300 + ((idx % 7) * 80);
-          else lots = 15 + ((idx * 7) % 150);
-
+          const lots = idx < 9 ? 3500 : (idx < 30 ? 800 : 85);
           await query.run(
             `INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price)
              VALUES (?, ?, ?, ?, ?)`,
-            [uuidv4(), botUserId, comp.id, lots, comp.base_price || comp.current_price]
+            [uuidv4(), botRow.id, comp.id, lots, comp.base_price || comp.current_price]
           );
         }
       }
     }
   }
-  if (addedBots > 0) {
-    console.log(`✅ ${addedBots} bot pemain (nama simpel & natural) berhasil dimasukkan ke bursa.`);
+
+  // 5C. Seed Setoran Pajak Transaksi & PPh Badan Bot ke Brankas Kas Negara jika masih minim
+  const treasuryCount = await query.get('SELECT COUNT(*) as count FROM state_treasury_ledger');
+  if (!treasuryCount || treasuryCount.count < 8) {
+    const sampleTreasuryEntries = [
+      {
+        source_type: 'CORPORATE_TAX',
+        title: 'Penerimaan PPh Badan (10%) - PT. Kencana Artha Persada Tbk. (haziq)',
+        amount_ib: 42500000,
+        reference_id: 'KEAP',
+        notes: 'Setoran PPh Badan otomatis emiten konglomerat 9 Naga'
+      },
+      {
+        source_type: 'CORPORATE_TAX',
+        title: 'Penerimaan PPh Badan (10%) - PT. Samudera Prima Nusantara Tbk. (reza)',
+        amount_ib: 38200000,
+        reference_id: 'SAPN',
+        notes: 'Setoran PPh Badan otomatis emiten konglomerat 9 Naga'
+      },
+      {
+        source_type: 'CORPORATE_TAX',
+        title: 'Penerimaan Kolektif PPh Badan (10%) - 250 Emiten Bursa Efek CFX',
+        amount_ib: 185400000,
+        reference_id: 'CFX-CORP-TAX',
+        notes: 'Akumulasi pajak penghasilan badan seluruh perseroan terbatas (Tbk.) di bursa'
+      },
+      {
+        source_type: 'TRANSACTION_TAX',
+        title: 'Pajak Transaksi Bursa (0.15%) - Akumulasi Bandar 9 Naga & Ritel',
+        amount_ib: 27650000,
+        reference_id: 'CFX-TRD-TAX',
+        notes: 'Potongan pajak transaksi jual-beli saham 265 investor & konglomerat'
+      },
+      {
+        source_type: 'METERAI_FEE',
+        title: 'Penerimaan Bea Meterai & Legalisasi Akta Notaris Korporasi',
+        amount_ib: 4500000,
+        reference_id: 'NOTARY-STAMP',
+        notes: 'Penerimaan resmi pengesahan akta pendirian PT & kontrak P2P'
+      }
+    ];
+    for (const te of sampleTreasuryEntries) {
+      await query.run(
+        `INSERT INTO state_treasury_ledger (id, source_type, title, amount_ib, direction, reference_id, notes)
+         VALUES (?, ?, ?, ?, 'INCOME', ?, ?)`,
+        [uuidv4(), te.source_type, te.title, te.amount_ib, te.reference_id, te.notes]
+      );
+    }
   }
 
   // 6. Seed percakapan awal Sultan 9 Naga, Taipan VIP, & Ritel di Chat Global Bursa agar ramai & bergengsi
