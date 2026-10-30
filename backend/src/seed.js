@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const { query, initDb } = require('./db');
+const { ADDITIONAL_COMPANIES, BOT_ROSTER } = require('./botData');
 
 const COMPANY_NAMES = [
   // Teknologi (20)
@@ -222,7 +223,112 @@ async function seed() {
     [uuidv4(), adminId, 'Bank Sentral', 'Bank Sentral', 'Selamat datang di Bursa Capital Federation (CFX)! Mulai merintis dari beli saham 1 Lot.', 'BANK SENTRAL']
   );
 
+  await ensureMarketPopulation();
+
   console.log(`✅ Database successfully initialized with realistic scale & progression!`);
+}
+
+async function ensureMarketPopulation() {
+  console.log('🤖 Checking market population (50 additional companies + 24 bot traders)...');
+  const now = Date.now();
+  let addedCompanies = 0;
+  for (const c of ADDITIONAL_COMPANIES) {
+    const existing = await query.get('SELECT id FROM companies WHERE symbol = ?', [c.symbol]);
+    if (!existing) {
+      const compId = uuidv4();
+      await query.run(
+        `INSERT INTO companies (id, symbol, name, sector, is_bot, status, current_price, base_price, prev_close, daily_high, daily_low, total_shares, circulating_shares, dividend_rate, fundamental_score, operational_level, description)
+         VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, 10000000, 3000000, ?, ?, ?, ?)`,
+        [
+          compId,
+          c.symbol,
+          c.name,
+          c.sector,
+          c.status,
+          c.basePrice,
+          c.basePrice,
+          c.basePrice,
+          c.basePrice * 1.02,
+          c.basePrice * 0.98,
+          c.status === 'HEALTHY' ? 0.03 : 0.0,
+          c.status === 'HEALTHY' ? 82.0 : 38.0,
+          c.status === 'HEALTHY' ? 6 : 2,
+          `Emiten ${c.sector} di bursa Capital Federation.`
+        ]
+      );
+      // seed 5 history points
+      let lastPrice = c.basePrice;
+      for (let i = 5; i >= 0; i--) {
+        const delta = (Math.random() - 0.49) * (lastPrice * 0.015);
+        const open = lastPrice;
+        const close = Math.max(50, Math.round(open + delta));
+        const high = Math.round(Math.max(open, close) + Math.random() * (open * 0.005));
+        const low = Math.round(Math.min(open, close) - Math.random() * (open * 0.005));
+        const volume = Math.floor(Math.random() * 5000) + 500;
+        lastPrice = close;
+        const ts = new Date(now - i * 60000).toISOString();
+        await query.run(
+          `INSERT INTO price_history (id, company_id, price, open, close, high, low, volume, timestamp)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [uuidv4(), compId, close, open, close, high, low, volume, ts]
+        );
+      }
+      addedCompanies++;
+    }
+  }
+  if (addedCompanies > 0) {
+    console.log(`✅ ${addedCompanies} emiten baru berhasil ditambahkan ke bursa.`);
+  }
+
+  // Seed 24 Bot Investors & Konglomerat
+  const botPass = await bcrypt.hash('botpass123', 8);
+  let addedBots = 0;
+  for (const b of BOT_ROSTER) {
+    const existing = await query.get('SELECT id FROM users WHERE username = ?', [b.username]);
+    let botUserId = existing?.id;
+    if (!existing) {
+      botUserId = b.id || uuidv4();
+      await query.run(
+        `INSERT INTO users (id, username, password_hash, balance_ib, company_balance_ib, has_pt, pt_name, sector, pt_level, credit_score, role, is_blue_chip)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          botUserId,
+          b.username,
+          botPass,
+          b.balance_ib,
+          b.company_balance_ib,
+          b.has_pt,
+          b.pt_name,
+          b.sector,
+          b.pt_level,
+          b.credit_score,
+          b.role,
+          b.is_blue_chip
+        ]
+      );
+      addedBots++;
+    }
+
+    // Ensure bot has initial stock portfolio
+    if (b.holdings && b.holdings.length > 0) {
+      for (const h of b.holdings) {
+        const comp = await query.get('SELECT id, current_price, base_price FROM companies WHERE symbol = ?', [h.symbol]);
+        if (comp) {
+          const port = await query.get('SELECT id FROM portfolios WHERE user_id = ? AND company_id = ?', [botUserId, comp.id]);
+          if (!port) {
+            await query.run(
+              `INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price)
+               VALUES (?, ?, ?, ?, ?)`,
+              [uuidv4(), botUserId, comp.id, h.lots, comp.base_price || comp.current_price]
+            );
+          }
+        }
+      }
+    }
+  }
+  if (addedBots > 0) {
+    console.log(`✅ ${addedBots} bot konglomerat & ritel berhasil dimasukkan ke ekosistem bursa.`);
+  }
 }
 
 if (require.main === module) {
@@ -234,4 +340,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { seed };
+module.exports = { seed, ensureMarketPopulation };

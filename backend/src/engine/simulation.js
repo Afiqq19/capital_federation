@@ -1,5 +1,6 @@
 const { v4: uuidv4 } = require('uuid');
 const { query, recordCashFlow } = require('../db');
+const { BOT_ROSTER } = require('../botData');
 
 class MarketSimulationEngine {
   constructor(io) {
@@ -502,6 +503,7 @@ class MarketSimulationEngine {
           const randComp = tradeableList[Math.floor(Math.random() * tradeableList.length)];
           const isBuy = Math.random() > 0.45;
           const lotSize = Math.floor(Math.random() * 250) + 15;
+          const randomBot = BOT_ROSTER[Math.floor(Math.random() * BOT_ROSTER.length)];
           const bgTrade = {
             id: uuidv4(),
             time: timeStr,
@@ -509,11 +511,12 @@ class MarketSimulationEngine {
             price: randComp.current_price,
             lots: lotSize,
             type: isBuy ? 'BUY' : 'SELL',
-            username: isBuy ? 'Konsorsium Reksa Dana' : 'Ritel Publik',
+            username: randomBot ? randomBot.username : (isBuy ? 'Konsorsium Reksa Dana' : 'Ritel Publik'),
             isUser: false,
             timestamp: nowObj.toISOString(),
           };
           this.recordTrade(bgTrade);
+          this.io.emit('trade:executed', bgTrade);
         }
       }
 

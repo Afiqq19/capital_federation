@@ -4929,6 +4929,11 @@ async function start() {
     const { seed } = require('./seed');
     await seed();
     await syncAllToMariaDb();
+  } else {
+    // Pastikan 50 emiten tambahan dan 24 bot konglomerat/ritel aktif di database yang sudah berjalan
+    const { ensureMarketPopulation } = require('./seed');
+    await ensureMarketPopulation();
+    await syncAllToMariaDb();
   }
   simulationEngine.start();
   surveillance.start();
