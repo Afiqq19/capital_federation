@@ -280,7 +280,7 @@ app.post('/api/user/email/verify', async (req, res) => {
     res.json({
       success: true,
       email: targetEmail,
-      sender: 'auth@xie.my.id',
+      sender: 'projek.msyafiq19@gmail.com',
       verificationToken: `CFX-AUTH-${Date.now()}`,
       verificationLink: `https://capitalfederation.xie.my.id/auth/verify?email=${encodeURIComponent(targetEmail)}&token=CFX-SECURE`,
       message: `Tautan verifikasi telah disahkan! Email ${targetEmail} resmi berstatus Terverifikasi di Otoritas Kustodian IPMC.`,
@@ -5804,7 +5804,7 @@ async function getApkSettingsMap() {
     apk_build_number: '7',
     apk_min_android: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
     apk_file_size_mb: '24.8 MB',
-    apk_release_notes: 'Pembaruan Profil Konglomerat & Form Akun Terpadu, Simulasi Email Resmi auth@xie.my.id, Arus Kas & Mutasi di Beranda Bersih, serta Perbaikan SQLite Verifikasi Akun.',
+    apk_release_notes: 'Pembaruan Profil Konglomerat & Form Akun Terpadu, Layanan Email Resmi projek.msyafiq19@gmail.com, Arus Kas & Mutasi di Beranda Bersih, serta Perbaikan SQLite Verifikasi Akun.',
     apk_external_url: '',
     apk_download_count: '152',
     apk_sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
@@ -5821,7 +5821,7 @@ async function getApkSettingsMap() {
       defaults.apk_version = '1.5.3';
       defaults.apk_build_number = '7';
       defaults.apk_file_size_mb = '24.8 MB';
-      defaults.apk_release_notes = 'Pembaruan Profil Konglomerat & Form Akun Terpadu, Simulasi Email Resmi auth@xie.my.id, Arus Kas & Mutasi di Beranda Bersih, serta Perbaikan SQLite Verifikasi Akun.';
+      defaults.apk_release_notes = 'Pembaruan Profil Konglomerat & Form Akun Terpadu, Layanan Email Resmi projek.msyafiq19@gmail.com, Arus Kas & Mutasi di Beranda Bersih, serta Perbaikan SQLite Verifikasi Akun.';
     }
   } catch (_) {}
   return defaults;

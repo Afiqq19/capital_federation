@@ -820,7 +820,13 @@ export default function PublicDownloadLandingPage() {
               &amp; Bursa Efek Republik Federasi Indigo.
             </span>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-4">
+            <a
+              href="mailto:projek.msyafiq19@gmail.com"
+              className="text-slate-400 hover:text-emerald-400 transition flex items-center gap-1.5"
+            >
+              <span>📧 Layanan &amp; Bug: <strong className="text-slate-200 hover:text-emerald-300">projek.msyafiq19@gmail.com</strong></span>
+            </a>
             <span className="text-emerald-400 font-semibold">● Server Online ({versionInfo.apkVersion})</span>
           </div>
         </div>

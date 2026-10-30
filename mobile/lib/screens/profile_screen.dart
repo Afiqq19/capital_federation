@@ -231,7 +231,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildMailHeaderRow('Dari:', 'auth@xie.my.id (Otoritas Kustodian CFX)'),
+                  _buildMailHeaderRow('Dari:', 'projek.msyafiq19@gmail.com (Otoritas Kustodian CFX)'),
                   const SizedBox(height: 4),
                   _buildMailHeaderRow('Kepada:', email),
                   const SizedBox(height: 4),
@@ -475,7 +475,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                         Icon(Icons.email_outlined, size: 13, color: Color(0xFFFCA5A5)),
                         SizedBox(width: 6),
                         Text(
-                          'support@xie.my.id',
+                          'projek.msyafiq19@gmail.com',
                           style: TextStyle(color: Color(0xFFFCA5A5), fontSize: 11, fontWeight: FontWeight.w900, fontFamily: 'monospace'),
                         ),
                       ],
@@ -527,7 +527,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                         Icon(Icons.feedback_outlined, size: 13, color: Color(0xFFFDE68A)),
                         SizedBox(width: 6),
                         Text(
-                          'support@xie.my.id',
+                          'projek.msyafiq19@gmail.com',
                           style: TextStyle(color: Color(0xFFFDE68A), fontSize: 11, fontWeight: FontWeight.w900, fontFamily: 'monospace'),
                         ),
                       ],
@@ -1150,7 +1150,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
               child: const Icon(Icons.help_center_rounded, color: Color(0xFF38BDF8), size: 20),
             ),
             title: const Text('Pusat Bantuan, Lapor Bug & Saran', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-            subtitle: const Text('Kirim laporan kendala / kritik saran ke support@xie.my.id', style: TextStyle(color: Color(0xFF64748B), fontSize: 10.5)),
+            subtitle: const Text('Kirim laporan kendala / kritik saran ke projek.msyafiq19@gmail.com', style: TextStyle(color: Color(0xFF64748B), fontSize: 10.5)),
             trailing: const Icon(Icons.chevron_right_rounded, color: Color(0xFF64748B)),
             onTap: _showHelpCenterDialog,
           ),
