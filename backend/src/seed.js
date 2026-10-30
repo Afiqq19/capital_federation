@@ -280,10 +280,29 @@ async function ensureMarketPopulation() {
     console.log(`✅ ${addedCompanies} emiten baru berhasil ditambahkan ke bursa.`);
   }
 
-  // Seed 24 Bot Investors & Konglomerat
+  // Clean legacy long-named bots to keep all bot usernames short, natural (1 word gamer style)
+  const legacyBotNames = [
+    'tan_sri_hendra', 'robert_hartono_cf', 'anthony_salim_cf', 'prajogo_energi_cf',
+    'chairul_tanjung_cf', 'tahap_widjaja_cf', 'lim_haryanto_cf', 'william_soerya_cf',
+    'erick_thohir_cf', 'sandi_uno_cf', 'grace_tahir_cf', 'kevin_mintaraga',
+    'budi_scalper_madiun', 'siti_trader_cantik', 'reza_quant_trader', 'citra_swing_trader',
+    'denny_fomo_cuancuan', 'ahmad_value_investor', 'joko_trader_santuy', 'maya_crypto_migrasi',
+    'eko_broker_independen', 'farhan_speed_trader', 'lisa_dividen_hunter', 'dimas_day_trader'
+  ];
+  for (const leg of legacyBotNames) {
+    const legUser = await query.get('SELECT id FROM users WHERE username = ?', [leg]);
+    if (legUser) {
+      await query.run('DELETE FROM portfolios WHERE user_id = ?', [legUser.id]);
+      await query.run('DELETE FROM users WHERE id = ?', [legUser.id]);
+    }
+  }
+
+  // Seed 100 Bot Investors, Taipans, & Retail Traders with natural 1-word usernames
+  const allCompanies = await query.all('SELECT id, current_price, base_price FROM companies');
   const botPass = await bcrypt.hash('botpass123', 8);
   let addedBots = 0;
-  for (const b of BOT_ROSTER) {
+  for (let idx = 0; idx < BOT_ROSTER.length; idx++) {
+    const b = BOT_ROSTER[idx];
     const existing = await query.get('SELECT id FROM users WHERE username = ?', [b.username]);
     let botUserId = existing?.id;
     if (!existing) {
@@ -310,24 +329,30 @@ async function ensureMarketPopulation() {
     }
 
     // Ensure bot has initial stock portfolio
-    if (b.holdings && b.holdings.length > 0) {
-      for (const h of b.holdings) {
-        const comp = await query.get('SELECT id, current_price, base_price FROM companies WHERE symbol = ?', [h.symbol]);
+    const existingPort = await query.get('SELECT COUNT(*) as count FROM portfolios WHERE user_id = ?', [botUserId]);
+    if (!existingPort || existingPort.count === 0) {
+      const stockCount = idx < 9 ? 4 : (idx < 25 ? 3 : 2);
+      const startOffset = (idx * 3) % Math.max(1, allCompanies.length - 5);
+      for (let s = 0; s < stockCount; s++) {
+        const comp = allCompanies[(startOffset + s) % allCompanies.length];
         if (comp) {
-          const port = await query.get('SELECT id FROM portfolios WHERE user_id = ? AND company_id = ?', [botUserId, comp.id]);
-          if (!port) {
-            await query.run(
-              `INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price)
-               VALUES (?, ?, ?, ?, ?)`,
-              [uuidv4(), botUserId, comp.id, h.lots, comp.base_price || comp.current_price]
-            );
-          }
+          let lots = 50;
+          if (idx < 9) lots = 5000 + (idx * 1500);
+          else if (idx < 25) lots = 1200 + ((idx % 5) * 400);
+          else if (idx < 45) lots = 300 + ((idx % 7) * 80);
+          else lots = 15 + ((idx * 7) % 150);
+
+          await query.run(
+            `INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price)
+             VALUES (?, ?, ?, ?, ?)`,
+            [uuidv4(), botUserId, comp.id, lots, comp.base_price || comp.current_price]
+          );
         }
       }
     }
   }
   if (addedBots > 0) {
-    console.log(`✅ ${addedBots} bot konglomerat & ritel berhasil dimasukkan ke ekosistem bursa.`);
+    console.log(`✅ ${addedBots} bot pemain (nama simpel & natural) berhasil dimasukkan ke bursa.`);
   }
 }
 

@@ -15,6 +15,7 @@ import 'cash_flow_ledger_screen.dart';
 import '../widgets/sovereign_bonds_modal.dart';
 import '../widgets/government_tenders_modal.dart';
 import 'profile_screen.dart';
+import 'leaderboard_tab.dart';
 
 class HomeTab extends StatefulWidget {
   const HomeTab({super.key});
@@ -96,6 +97,9 @@ class _HomeTabState extends State<HomeTab> {
                 const SizedBox(height: 16),
               ],
 
+              // Banner Papan Peringkat Konglomerat (Ramai & Kompetitif)
+              _buildLeaderboardBanner(context, provider, user),
+
               // Mode 1: Pemula (Belum Punya PT) vs Mode 2: Sudah Punya PT / Hasil Akuisisi
               if (!hasAnyBusiness)
                 _buildBeginnerView(context, provider, user)
@@ -103,6 +107,116 @@ class _HomeTabState extends State<HomeTab> {
                 _buildTycoonView(context, provider, user, activeEntity),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  // --- BANNER PAPAN PERINGKAT KONGLOMERAT ---
+  Widget _buildLeaderboardBanner(BuildContext context, GameProvider provider, UserModel user) {
+    final leaderboard = provider.leaderboard;
+    final int myRankIndex = leaderboard.indexWhere((item) => item['id'] == user.id || item['username'] == user.username);
+    final String rankLabel = myRankIndex >= 0 ? '#${myRankIndex + 1}' : 'Unranked';
+
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => Scaffold(
+              appBar: AppBar(
+                backgroundColor: const Color(0xFF0D1322),
+                title: const Text('Papan Peringkat Konglomerat', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                leading: IconButton(
+                  icon: const Icon(Icons.arrow_back_ios_new_rounded),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ),
+              body: const SafeArea(child: LeaderboardTab()),
+            ),
+          ),
+        );
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16.0),
+        padding: const EdgeInsets.all(14.0),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF1E1B4B), Color(0xFF0F172A), Color(0xFF312E81)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16.0),
+          border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.4), width: 1.2),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFFF59E0B).withValues(alpha: 0.12),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF59E0B).withValues(alpha: 0.18),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.military_tech_rounded, color: Color(0xFFF59E0B), size: 28),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Text(
+                        'PAPAN PERINGKAT KONGLOMERAT',
+                        style: TextStyle(
+                          color: Color(0xFFF59E0B),
+                          fontWeight: FontWeight.w900,
+                          fontSize: 10,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                      const Spacer(),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          '${leaderboard.length} Konglomerat Aktif',
+                          style: const TextStyle(color: Color(0xFF34D399), fontSize: 9, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Peringkat Anda: $rankLabel (${user.isBlueChip ? "BLUE CHIP" : "REGULER"})',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  const Text(
+                    'Lihat persaingan 100 taipan & ritel pasar modal ➔',
+                    style: TextStyle(
+                      color: Color(0xFF94A3B8),
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
