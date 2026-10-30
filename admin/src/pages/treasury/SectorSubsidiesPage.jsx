@@ -11,6 +11,7 @@ import {
   Percent,
   Sparkles,
   Zap,
+  TrendingUp,
   CheckCircle2,
   AlertTriangle,
   Building2,

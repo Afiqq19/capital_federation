@@ -23,13 +23,77 @@ import SovereignBondsPage from './pages/treasury/SovereignBondsPage';
 import SectorSubsidiesPage from './pages/treasury/SectorSubsidiesPage';
 import GovernmentTendersPage from './pages/tenders/GovernmentTendersPage';
 
+const ROUTE_MAP = {
+  dashboard: '/dashboard',
+  bank: '/banksentral',
+  treasury: '/kas-negara',
+  bonds: '/obligasi',
+  subsidies: '/subsidi',
+  tenders: '/tender',
+  court: '/pengadilan',
+  uma: '/uma',
+  suspension: '/suspensi',
+  companies: '/emiten',
+  deeds: '/akta',
+  users: '/pemain',
+  macro: '/krisis-makro',
+  legal: '/konstitusi',
+  logs: '/transaksi',
+  settings: '/pengaturan',
+};
+
+function getPageFromPath(pathname) {
+  const clean = (pathname || window.location.pathname || '/').toLowerCase().replace(/^\/+|\/+$/g, '');
+  if (!clean || clean === 'dashboard') return 'dashboard';
+  if (clean === 'banksentral' || clean === 'bank' || clean === 'bank-sentral') return 'bank';
+  if (clean === 'kas-negara' || clean === 'treasury' || clean === 'kas') return 'treasury';
+  if (clean === 'obligasi' || clean === 'bonds' || clean === 'sbn') return 'bonds';
+  if (clean === 'subsidi' || clean === 'subsidies' || clean === 'tax-holiday') return 'subsidies';
+  if (clean === 'tender' || clean === 'tenders') return 'tenders';
+  if (clean === 'pengadilan' || clean === 'court' || clean === 'pnaf') return 'court';
+  if (clean === 'uma') return 'uma';
+  if (clean === 'suspensi' || clean === 'suspension') return 'suspension';
+  if (clean === 'emiten' || clean === 'companies' || clean === 'saham') return 'companies';
+  if (clean === 'akta' || clean === 'deeds' || clean === 'notaris') return 'deeds';
+  if (clean === 'pemain' || clean === 'users' || clean === 'investor') return 'users';
+  if (clean === 'krisis-makro' || clean === 'macro' || clean === 'berita') return 'macro';
+  if (clean === 'konstitusi' || clean === 'legal') return 'legal';
+  if (clean === 'transaksi' || clean === 'logs') return 'logs';
+  if (clean === 'pengaturan' || clean === 'settings') return 'settings';
+  return 'dashboard';
+}
+
 function AdminContent({ adminUser, onLogout }) {
-  const [currentPage, setCurrentPage] = useState('dashboard');
+  const [currentPage, setCurrentPageState] = useState(() => getPageFromPath(window.location.pathname));
+
+  const handleNavigate = (page) => {
+    setCurrentPageState(page);
+    const targetPath = ROUTE_MAP[page] || '/dashboard';
+    if (window.location.pathname !== targetPath) {
+      window.history.pushState({ page }, '', targetPath);
+    }
+  };
+
+  useEffect(() => {
+    const onPopState = () => {
+      setCurrentPageState(getPageFromPath(window.location.pathname));
+    };
+    window.addEventListener('popstate', onPopState);
+
+    // Initial path normalization
+    const initialPage = getPageFromPath(window.location.pathname);
+    const normalizedPath = ROUTE_MAP[initialPage] || '/dashboard';
+    if (window.location.pathname === '/' || !window.location.pathname) {
+      window.history.replaceState({ page: initialPage }, '', normalizedPath);
+    }
+
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
 
   const renderPage = () => {
     switch (currentPage) {
       case 'dashboard':
-        return <DashboardPage onNavigate={setCurrentPage} />;
+        return <DashboardPage onNavigate={handleNavigate} />;
       case 'bank':
         return <BankCentralPage />;
       case 'treasury':
@@ -61,14 +125,14 @@ function AdminContent({ adminUser, onLogout }) {
       case 'settings':
         return <SettingsPage />;
       default:
-        return <DashboardPage onNavigate={setCurrentPage} />;
+        return <DashboardPage onNavigate={handleNavigate} />;
     }
   };
 
   return (
     <AdminLayout
       currentPage={currentPage}
-      onNavigate={setCurrentPage}
+      onNavigate={handleNavigate}
       adminUser={adminUser}
       onLogout={onLogout}
     >
