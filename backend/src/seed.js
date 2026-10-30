@@ -660,6 +660,68 @@ async function ensureMarketPopulation() {
   }
 }
 
+async function resetMarketFresh({ preserveHumanUsers = true } = {}) {
+  console.log('🔄 Memulai Reset & Penyegaran Pasar Bursa & Konglomerat (Fresh State)...');
+  await initDb();
+
+  // 1. Ambil data user manusia untuk dilindungi
+  let humanUsers = [];
+  if (preserveHumanUsers) {
+    humanUsers = await query.all("SELECT * FROM users WHERE id NOT LIKE 'bot-%' AND username != 'admin'");
+  }
+
+  // 2. Bersihkan tabel-tabel pasar modal
+  await query.exec('PRAGMA foreign_keys = OFF;');
+  await query.run('DELETE FROM market_orders');
+  await query.run('DELETE FROM transactions');
+  await query.run('DELETE FROM auction_bids');
+  await query.run('DELETE FROM auction_items');
+  await query.run('DELETE FROM ipo_bids');
+  await query.run('DELETE FROM ipo_orders');
+  await query.run('DELETE FROM ipo_offerings');
+  await query.run('DELETE FROM acquisition_proposals');
+  await query.run('DELETE FROM private_deals');
+  await query.run('DELETE FROM deal_deeds');
+  await query.run('DELETE FROM court_chat_messages');
+  await query.run('DELETE FROM court_cases');
+  await query.run('DELETE FROM chat_messages');
+  await query.run('DELETE FROM price_history');
+  await query.run('DELETE FROM company_shareholders');
+  await query.run('DELETE FROM portfolios');
+  await query.run('DELETE FROM companies');
+  await query.run("DELETE FROM users WHERE id LIKE 'bot-%'");
+  await query.run('DELETE FROM state_treasury_ledger');
+  await query.exec('PRAGMA foreign_keys = ON;');
+
+  // 3. Reset saldo & PT akun manusia ke modal perdana segar (50 Juta IB)
+  for (const u of humanUsers) {
+    await query.run(
+      `UPDATE users 
+       SET balance_ib = 50000000.0,
+           company_balance_ib = 0.0,
+           has_pt = 0,
+           pt_name = '',
+           pt_level = 1,
+           credit_score = 720,
+           rd_level = 1,
+           marketing_level = 1,
+           hr_level = 1,
+           capacity_level = 1,
+           employees_count = 0
+       WHERE id = ?`,
+      [u.id]
+    );
+  }
+
+  // 4. Jalankan populasi emiten & 265 bot baru
+  await ensureMarketPopulation();
+  console.log('✨ Pasar, 252+ Emiten Tbk, dan 265 Bot berhasil di-refresh menjadi BARU & BERSIH!');
+  return {
+    success: true,
+    message: 'Pasar Bursa Saham & Konglomerat berhasil di-refresh 100% menjadi baru dan bersih!'
+  };
+}
+
 if (require.main === module) {
   seed()
     .then(() => process.exit(0))
@@ -669,4 +731,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { seed, ensureMarketPopulation };
+module.exports = { seed, ensureMarketPopulation, resetMarketFresh };

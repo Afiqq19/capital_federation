@@ -15,145 +15,34 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  late TextEditingController _usernameController;
-  late TextEditingController _emailController;
-  bool _isSaving = false;
+
+  // Controllers untuk Pengaturan Akun
+  late final TextEditingController _usernameController;
+  late final TextEditingController _emailController;
+  final TextEditingController _newPasswordController = TextEditingController();
+  final TextEditingController _confirmPasswordController = TextEditingController();
+
+  bool _obscureNewPass = true;
+  bool _obscureConfirmPass = true;
+  bool _isSavingUsername = false;
+  bool _isSendingEmailVerify = false;
+  bool _isUpdatingPassword = false;
+
+  // State Deteksi Update APK Server
   bool _isCheckingUpdate = false;
-  Map<String, dynamic>? _serverVersionInfo;
+  Map<String, dynamic>? _serverVersionData;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     final user = context.read<GameProvider>().user;
     _usernameController = TextEditingController(text: user?.username ?? '');
     _emailController = TextEditingController(text: user?.email ?? '');
-    _checkServerUpdate(silent: true);
-  }
 
-  Future<void> _checkServerUpdate({bool silent = false}) async {
-    if (!mounted) return;
-    setState(() => _isCheckingUpdate = true);
-    final info = await ApiService.getServerVersion();
-    if (!mounted) return;
-    setState(() {
-      _serverVersionInfo = info;
-      _isCheckingUpdate = false;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkServerVersion(silent: true);
     });
-    if (!silent && mounted) {
-      final serverVer = info?['version']?.toString() ?? ApiService.currentAppVersion;
-      final isNewer = serverVer != ApiService.currentAppVersion;
-      await context.read<GameProvider>().loadInitialData();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            isNewer
-                ? '🚀 Update Server v$serverVer terdeteksi & data pasar berhasil disinkronkan!'
-                : '✅ Aplikasi & Server sudah versi terbaru (v$serverVer • Build ${ApiService.currentBuildNumber})!',
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-          ),
-          backgroundColor: isNewer ? const Color(0xFFD97706) : const Color(0xFF059669),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
-  }
-
-  Widget _buildUpdateDetectorCard() {
-    final serverVer = _serverVersionInfo?['version']?.toString() ?? ApiService.currentAppVersion;
-    final serverBuild = _serverVersionInfo?['buildNumber'] ?? ApiService.currentBuildNumber;
-    final releaseNotes = _serverVersionInfo?['releaseNotes']?.toString() ??
-        'Ticker Saham 4-Huruf Resmi (Tanpa Angka), Perbaikan Nama PT, Efek Emas Chat Sultan 9 Naga & VIP, dan Deteksi Update Otomatis';
-    final totalCompanies = _serverVersionInfo?['totalCompanies'] ?? context.read<GameProvider>().companies.length;
-    final isUpdateAvailable = _serverVersionInfo != null &&
-        (serverVer != ApiService.currentAppVersion ||
-            (serverBuild is int && serverBuild > ApiService.currentBuildNumber));
-
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: isUpdateAvailable
-              ? [const Color(0xFF332204), const Color(0xFF0F172A)]
-              : [const Color(0xFF06281E), const Color(0xFF0F172A)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: isUpdateAvailable ? const Color(0xFFF59E0B) : const Color(0xFF10B981).withValues(alpha: 0.5),
-          width: isUpdateAvailable ? 1.5 : 1.0,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                isUpdateAvailable ? Icons.system_update_rounded : Icons.verified_rounded,
-                color: isUpdateAvailable ? const Color(0xFFFBBF24) : const Color(0xFF34D399),
-                size: 20,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  isUpdateAvailable
-                      ? '🚀 PEMBARUAN SERVER TERDETEKSI (v$serverVer)'
-                      : '📡 VERSI TERBARU AKTIF (v${ApiService.currentAppVersion} • Build ${ApiService.currentBuildNumber})',
-                  style: TextStyle(
-                    color: isUpdateAvailable ? const Color(0xFFFDE68A) : const Color(0xFF34D399),
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF0F172A),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  '$totalCompanies Emiten',
-                  style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 9.5, fontWeight: FontWeight.bold),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Catatan Update: $releaseNotes',
-            style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 10.5, height: 1.35),
-          ),
-          const SizedBox(height: 10),
-          SizedBox(
-            width: double.infinity,
-            height: 36,
-            child: ElevatedButton.icon(
-              onPressed: _isCheckingUpdate ? null : () => _checkServerUpdate(silent: false),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: isUpdateAvailable ? const Color(0xFFF59E0B) : const Color(0xFF10B981).withValues(alpha: 0.2),
-                foregroundColor: isUpdateAvailable ? const Color(0xFF0F172A) : const Color(0xFF34D399),
-                elevation: 0,
-                side: BorderSide(
-                  color: isUpdateAvailable ? const Color(0xFFFBBF24) : const Color(0xFF10B981).withValues(alpha: 0.5),
-                ),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-              icon: _isCheckingUpdate
-                  ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF34D399)))
-                  : const Icon(Icons.sync_rounded, size: 15),
-              label: Text(
-                _isCheckingUpdate ? 'MEMERIKSA VERSI SERVER...' : 'CEK UPDATE & SINKRONKAN SERVER',
-                style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w900),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   @override
@@ -161,103 +50,311 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     _tabController.dispose();
     _usernameController.dispose();
     _emailController.dispose();
+    _newPasswordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
-  Future<void> _handleSaveProfile() async {
-    final username = _usernameController.text.trim();
-    final email = _emailController.text.trim();
-    if (username.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Username tidak boleh kosong!'),
-          backgroundColor: Color(0xFFEF4444),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
+  Future<void> _checkServerVersion({bool silent = false}) async {
+    if (!mounted) return;
+    setState(() {
+      _isCheckingUpdate = true;
+    });
 
-    setState(() => _isSaving = true);
-    final provider = context.read<GameProvider>();
-    final res = await provider.updateUserProfile(username: username, email: email);
-    setState(() => _isSaving = false);
+    try {
+      final data = await ApiService.getServerVersion();
+      if (!mounted) return;
+      setState(() {
+        _serverVersionData = data;
+        _isCheckingUpdate = false;
+      });
 
-    if (mounted) {
-      if (res['success'] == true) {
+      if (!silent) {
+        final serverVer = data?['version']?.toString() ?? ApiService.currentAppVersion;
+        final serverBuild = (data?['buildNumber'] is num)
+            ? (data!['buildNumber'] as num).toInt()
+            : int.tryParse(data?['buildNumber']?.toString() ?? '') ?? ApiService.currentBuildNumber;
+
+        final bool hasNewer = _compareVersions(serverVer, serverBuild, ApiService.currentAppVersion, ApiService.currentBuildNumber);
+
+        ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
+            backgroundColor: hasNewer ? const Color(0xFFD97706) : const Color(0xFF059669),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 3),
             content: Row(
               children: [
-                const Icon(Icons.check_circle_rounded, color: Color(0xFF34D399), size: 20),
+                Icon(
+                  hasNewer ? Icons.system_update_alt_rounded : Icons.verified_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    res['message'] ?? 'Profil akun eksekutif berhasil diperbarui!',
+                    hasNewer
+                        ? 'Tersedia pembaruan sistem v$serverVer (Build $serverBuild)!'
+                        : 'Aplikasi Anda mutakhir (v${ApiService.currentAppVersion}) dan tersinkronisasi penuh dengan server.',
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
                   ),
                 ),
               ],
             ),
-            backgroundColor: const Color(0xFF065F46),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
         );
-      } else {
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isCheckingUpdate = false;
+      });
+      if (!silent) {
+        ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(res['error'] ?? res['message'] ?? 'Gagal memperbarui profil'),
             backgroundColor: const Color(0xFFDC2626),
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            content: Text('Gagal memeriksa versi server: $e', style: const TextStyle(fontSize: 12)),
           ),
         );
       }
     }
   }
 
-  void _confirmLogout(BuildContext context) {
+  bool _compareVersions(String sVer, int sBuild, String cVer, int cBuild) {
+    if (sBuild > cBuild) return true;
+    final sParts = sVer.split('.').map((e) => int.tryParse(e) ?? 0).toList();
+    final cParts = cVer.split('.').map((e) => int.tryParse(e) ?? 0).toList();
+    for (int i = 0; i < 3; i++) {
+      final s = i < sParts.length ? sParts[i] : 0;
+      final c = i < cParts.length ? cParts[i] : 0;
+      if (s > c) return true;
+      if (s < c) return false;
+    }
+    return false;
+  }
+
+  Future<void> _handleSaveUsername() async {
+    final newName = _usernameController.text.trim();
+    final currentEmail = _emailController.text.trim();
+    if (newName.isEmpty) {
+      _showToast('Username tidak boleh kosong!', isError: true);
+      return;
+    }
+    setState(() => _isSavingUsername = true);
+    final provider = context.read<GameProvider>();
+    final res = await provider.updateUserProfile(username: newName, email: currentEmail);
+    setState(() => _isSavingUsername = false);
+
+    if (res['success'] == true) {
+      _showToast('✅ Username berhasil diperbarui menjadi "$newName"');
+    } else {
+      _showToast(res['error']?.toString() ?? 'Gagal memperbarui username', isError: true);
+    }
+  }
+
+  Future<void> _handleVerifyEmail() async {
+    final email = _emailController.text.trim();
+    if (email.isEmpty || !email.contains('@')) {
+      _showToast('Silakan masukkan alamat email yang valid!', isError: true);
+      return;
+    }
+    setState(() => _isSendingEmailVerify = true);
+    final provider = context.read<GameProvider>();
+    final res = await provider.verifyUserEmail(email);
+    setState(() => _isSendingEmailVerify = false);
+
+    if (res['success'] == true) {
+      _showToast(res['message']?.toString() ?? '✅ Verifikasi email berhasil diverifikasi!');
+    } else {
+      _showToast(res['error']?.toString() ?? 'Gagal memverifikasi email.', isError: true);
+    }
+  }
+
+  Future<void> _handleUpdatePassword() async {
+    final pass = _newPasswordController.text;
+    final confirm = _confirmPasswordController.text;
+    final currentName = _usernameController.text.trim();
+    final currentEmail = _emailController.text.trim();
+
+    if (pass.isEmpty) {
+      _showToast('Kata sandi baru tidak boleh kosong!', isError: true);
+      return;
+    }
+    if (pass.length < 6) {
+      _showToast('Kata sandi baru minimal 6 karakter!', isError: true);
+      return;
+    }
+    if (pass != confirm) {
+      _showToast('Konfirmasi kata sandi tidak cocok!', isError: true);
+      return;
+    }
+
+    setState(() => _isUpdatingPassword = true);
+    final provider = context.read<GameProvider>();
+    final res = await provider.updateUserProfile(
+      username: currentName,
+      email: currentEmail,
+      newPassword: pass,
+    );
+    setState(() => _isUpdatingPassword = false);
+
+    if (res['success'] == true) {
+      _newPasswordController.clear();
+      _confirmPasswordController.clear();
+      _showToast('🔐 Kata sandi akun berhasil diperbarui secara aman.');
+    } else {
+      _showToast(res['error']?.toString() ?? 'Gagal memperbarui kata sandi', isError: true);
+    }
+  }
+
+  void _showToast(String message, {bool isError = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+        backgroundColor: isError ? const Color(0xFFDC2626) : const Color(0xFF059669),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  void _showHelpCenterDialog() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF0F172A),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF38BDF8).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.support_agent_rounded, color: Color(0xFF38BDF8), size: 24),
+                ),
+                const SizedBox(width: 12),
+                const Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Pusat Bantuan & Layanan IPMC',
+                      style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      'Konsultasi Regulasi Pasar Modal & Sengketa',
+                      style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            _buildHelpItem(
+              Icons.gavel_rounded,
+              'Mahkamah Arbitrase Niaga (PNAF)',
+              'Penyelesaian sengketa transaksi efek, wanprestasi akuisisi, dan kepailitan korporasi.',
+            ),
+            const SizedBox(height: 12),
+            _buildHelpItem(
+              Icons.account_balance_rounded,
+              'Otoritas Pengawasan Bursa CFX',
+              'Pelaporan manipulasi harga, permohonan pembukaan suspensi saham, & pendaftaran E-IPO.',
+            ),
+            const SizedBox(height: 12),
+            _buildHelpItem(
+              Icons.verified_user_rounded,
+              'Jaminan Kustodian Sentral',
+              'Perlindungan portofolio saham, dividen emiten Tbk, dan sertifikat notaris digital.',
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF1E293B),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('TUTUP LAYANAN BANTUAN', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHelpItem(IconData icon, String title, String desc) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: const Color(0xFFF59E0B), size: 18),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 2),
+              Text(desc, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, height: 1.3)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _confirmLogout() {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF0F172A),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: const BorderSide(color: Color(0xFFEF4444), width: 1.5),
+          borderRadius: BorderRadius.circular(18),
+          side: const BorderSide(color: Color(0xFF334155)),
         ),
         title: const Row(
           children: [
-            Icon(Icons.logout_rounded, color: Color(0xFFEF4444), size: 22),
-            SizedBox(width: 10),
-            Text(
-              'Konfirmasi Keluar',
-              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w900),
-            ),
+            Icon(Icons.power_settings_new_rounded, color: Color(0xFFEF4444), size: 22),
+            SizedBox(width: 8),
+            Text('Akhiri Sesi Konglomerat', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
           ],
         ),
         content: const Text(
-          'Apakah Anda yakin ingin keluar dari sesi permainan? Pastikan email Anda sudah tersimpan agar seluruh aset kepemilikan saham dan kas tetap aman.',
-          style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, height: 1.45),
+          'Apakah Anda yakin ingin keluar dari otoritas akun ini? Seluruh kepemilikan saham, anak PT, dan saldo kas Anda tersimpan aman di server bursa.',
+          style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, height: 1.4),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('BATAL', style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.bold)),
+            child: const Text('BATAL', style: TextStyle(color: Color(0xFF94A3B8), fontWeight: FontWeight.bold)),
           ),
           ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFDC2626),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
             onPressed: () {
               Navigator.pop(ctx);
-              Navigator.pop(context);
               context.read<GameProvider>().logout();
             },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFEF4444),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            child: const Text('YA, KELUAR', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12)),
+            child: const Text('KELUAR', style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -272,343 +369,111 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     if (user == null) {
       return const Scaffold(
         backgroundColor: Color(0xFF060913),
-        body: Center(child: CircularProgressIndicator(color: Color(0xFF10B981))),
+        body: Center(
+          child: CircularProgressIndicator(color: Color(0xFFF59E0B)),
+        ),
       );
     }
 
-    final isVip = user.isVip;
-    final hasEmail = user.email.isNotEmpty;
+    // Hitung peringkat dan status 9 Naga
+    int? myRank;
+    for (int i = 0; i < provider.leaderboard.length; i++) {
+      final row = provider.leaderboard[i];
+      final uid = (row['id'] ?? '').toString();
+      final uname = (row['username'] ?? '').toString().toLowerCase();
+      if (uid == user.id || uname == user.username.toLowerCase()) {
+        myRank = (row['rank'] is int) ? row['rank'] as int : (i + 1);
+        break;
+      }
+    }
+    final bool is9Naga = myRank != null && myRank <= 9;
+    final bool isTaipan = myRank != null && myRank > 9 && myRank <= 25;
+    final bool isVip = user.isVip;
 
     return Scaffold(
       backgroundColor: const Color(0xFF060913),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0A0F1D),
+        backgroundColor: const Color(0xFF0A0F1E),
         elevation: 0,
-        leading: Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Container(
-            decoration: BoxDecoration(
-              color: const Color(0xFF1E293B).withValues(alpha: 0.6),
-              shape: BoxShape.circle,
-            ),
-            child: IconButton(
-              icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 16),
-              onPressed: () => Navigator.pop(context),
-            ),
-          ),
-        ),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Ruang Eksekutif Konglomerat',
-              style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w900),
+            Row(
+              children: [
+                const Text(
+                  'PROFIL KONGLOMERAT',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, letterSpacing: 0.8, color: Colors.white),
+                ),
+                const SizedBox(width: 8),
+                if (is9Naga)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(colors: [Color(0xFFF59E0B), Color(0xFFB45309)]),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Text(
+                      '🐉 9 NAGA',
+                      style: TextStyle(color: Colors.white, fontSize: 8.5, fontWeight: FontWeight.w900),
+                    ),
+                  ),
+              ],
             ),
-            Text(
-              'Status: ${isVip ? "👑 VIP Sultan Investor" : "🔰 Konglomerat Reguler"} • CFX Suite',
-              style: TextStyle(
-                color: isVip ? const Color(0xFFFBBF24) : const Color(0xFF94A3B8),
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-              ),
+            const Text(
+              'Otoritas Akun & Ekosistem Finansial IPMC',
+              style: TextStyle(fontSize: 10, color: Color(0xFF94A3B8)),
             ),
           ],
         ),
         actions: [
+          // Tombol Sinkronisasi / Cek Server
           IconButton(
-            tooltip: 'Sinkronisasi Data Akun',
-            icon: const Icon(Icons.sync_rounded, color: Color(0xFF38BDF8), size: 20),
-            onPressed: () async {
-              await provider.loadInitialData();
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Data profil & kas berhasil disinkronkan dengan server bursa!'),
-                    backgroundColor: Color(0xFF0284C7),
-                    duration: Duration(seconds: 1),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-              }
+            tooltip: 'Periksa Pembaruan Sistem',
+            icon: _isCheckingUpdate
+                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF38BDF8)))
+                : const Icon(Icons.sync_rounded, color: Color(0xFF94A3B8), size: 20),
+            onPressed: () => _checkServerVersion(silent: false),
+          ),
+          // Tombol Salinan Regulasi Konstitusi Notaris
+          IconButton(
+            tooltip: 'Konstitusi & Regulasi IPMC',
+            icon: const Icon(Icons.menu_book_rounded, color: Color(0xFFF59E0B), size: 20),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const GameConstitutionScreen()),
+              );
             },
           ),
-          IconButton(
-            tooltip: 'Keluar Akun',
-            icon: const Icon(Icons.logout_rounded, color: Color(0xFFEF4444), size: 20),
-            onPressed: () => _confirmLogout(context),
-          ),
-          const SizedBox(width: 4),
+          const SizedBox(width: 8),
         ],
+        bottom: TabBar(
+          controller: _tabController,
+          indicatorColor: const Color(0xFFF59E0B),
+          indicatorWeight: 3,
+          labelColor: const Color(0xFFF59E0B),
+          unselectedLabelColor: const Color(0xFF64748B),
+          labelStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 0.5),
+          tabs: const [
+            Tab(text: 'PENGATURAN & AKUN'),
+            Tab(text: 'STATUS VIP & PRESTISE'),
+            Tab(text: 'HOLDING PT & REGULASI'),
+          ],
+        ),
       ),
       body: Column(
         children: [
-          // ==========================================
-          // LUXURY HERO PROFILE CARD
-          // ==========================================
-          Container(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: isVip
-                    ? [const Color(0xFF1A1608), const Color(0xFF0B0E17)]
-                    : [const Color(0xFF0D1527), const Color(0xFF060913)],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-              ),
-              border: Border(
-                bottom: BorderSide(
-                  color: isVip ? const Color(0xFFF59E0B).withValues(alpha: 0.3) : const Color(0xFF1E293B),
-                ),
-              ),
-            ),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    // Avatar with Dual Ring Luxury Border
-                    Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        Container(
-                          width: 62,
-                          height: 62,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: LinearGradient(
-                              colors: isVip
-                                  ? [const Color(0xFFF59E0B), const Color(0xFFD97706), const Color(0xFFFDE68A)]
-                                  : [const Color(0xFF0284C7), const Color(0xFF10B981)],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: (isVip ? const Color(0xFFF59E0B) : const Color(0xFF0284C7)).withValues(alpha: 0.35),
-                                blurRadius: 16,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          padding: const EdgeInsets.all(3),
-                          child: Container(
-                            decoration: const BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Color(0xFF0F172A),
-                            ),
-                            child: Center(
-                              child: Text(
-                                (user.username.isNotEmpty ? user.username[0] : 'K').toUpperCase(),
-                                style: TextStyle(
-                                  color: isVip ? const Color(0xFFFDE68A) : Colors.white,
-                                  fontSize: 26,
-                                  fontWeight: FontWeight.w900,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        if (isVip)
-                          Positioned(
-                            top: -6,
-                            right: -4,
-                            child: Container(
-                              padding: const EdgeInsets.all(4),
-                              decoration: const BoxDecoration(
-                                color: Color(0xFF0F172A),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(Icons.workspace_premium_rounded, color: Color(0xFFFBBF24), size: 18),
-                            ),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(width: 14),
+          // Header Profil Identitas Eksekutif
+          _buildExecutiveHeader(user, is9Naga, isTaipan, isVip, myRank),
 
-                    // User Identity & Badges
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Flexible(
-                                child: Text(
-                                  user.username,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w900,
-                                    letterSpacing: 0.3,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              // VIP or Standard Badge
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: isVip
-                                        ? [const Color(0xFFF59E0B), const Color(0xFFB45309)]
-                                        : [const Color(0xFF0284C7), const Color(0xFF0369A1)],
-                                  ),
-                                  borderRadius: BorderRadius.circular(8),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: (isVip ? const Color(0xFFF59E0B) : const Color(0xFF0284C7)).withValues(alpha: 0.3),
-                                      blurRadius: 8,
-                                    ),
-                                  ],
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      isVip ? Icons.stars_rounded : Icons.shield_rounded,
-                                      color: Colors.white,
-                                      size: 11,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      isVip ? 'VIP KONGLOMERAT' : 'STANDAR',
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.w900,
-                                        letterSpacing: 0.5,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          // Email & Security Indicator
-                          Row(
-                            children: [
-                              Icon(
-                                hasEmail ? Icons.verified_user_rounded : Icons.warning_amber_rounded,
-                                color: hasEmail ? const Color(0xFF34D399) : const Color(0xFFF59E0B),
-                                size: 13,
-                              ),
-                              const SizedBox(width: 5),
-                              Expanded(
-                                child: Text(
-                                  hasEmail ? user.email : 'Email belum dikaitkan (Wajib diisi)',
-                                  style: TextStyle(
-                                    color: hasEmail ? const Color(0xFF94A3B8) : const Color(0xFFF59E0B),
-                                    fontSize: 11,
-                                    fontWeight: hasEmail ? FontWeight.normal : FontWeight.bold,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            user.hasPt ? '🏢 ${user.ptName}' : '🏢 Investor Individu (Belum Berdiri PT)',
-                            style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 10.5, fontWeight: FontWeight.bold),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-
-                // Financial Quick Asset Row (3 Pillars of Wealth)
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildWealthPillar(
-                        label: 'KAS PRIBADI',
-                        value: CurrencyFormatter.formatCompact(user.balanceIb),
-                        color: const Color(0xFF38BDF8),
-                        icon: Icons.account_balance_wallet_rounded,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _buildWealthPillar(
-                        label: 'BRANKAS PT',
-                        value: CurrencyFormatter.formatCompact(user.companyBalanceIb),
-                        color: const Color(0xFF34D399),
-                        icon: Icons.business_rounded,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _buildWealthPillar(
-                        label: 'SKOR KREDIT',
-                        value: '${user.creditScore} • ${user.effectiveCreditTier}',
-                        color: const Color(0xFFFBBF24),
-                        icon: Icons.speed_rounded,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-
-          // ==========================================
-          // MODERN CAPSULE SEGMENTED TAB BAR
-          // ==========================================
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            color: const Color(0xFF0A0F1D),
-            child: Container(
-              height: 40,
-              padding: const EdgeInsets.all(3),
-              decoration: BoxDecoration(
-                color: const Color(0xFF0F172A),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFF1E293B)),
-              ),
-              child: TabBar(
-                controller: _tabController,
-                indicatorSize: TabBarIndicatorSize.tab,
-                indicator: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF0284C7), Color(0xFF0F766E)],
-                  ),
-                  borderRadius: BorderRadius.circular(9),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF0284C7).withValues(alpha: 0.35),
-                      blurRadius: 6,
-                    ),
-                  ],
-                ),
-                labelColor: Colors.white,
-                unselectedLabelColor: const Color(0xFF94A3B8),
-                labelStyle: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w900),
-                unselectedLabelStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
-                tabs: const [
-                  Tab(text: 'KREDENSIAL'),
-                  Tab(text: 'STATUS VIP'),
-                  Tab(text: 'HOLDING PT'),
-                  Tab(text: 'REGULASI'),
-                ],
-              ),
-            ),
-          ),
-
-          // ==========================================
-          // TAB VIEWS
-          // ==========================================
+          // Tab Body Konten
           Expanded(
             child: TabBarView(
               controller: _tabController,
               children: [
-                _buildCredentialsTab(context, user),
-                _buildVipVsStandardTab(context, user),
-                _buildHoldingTab(context, user, provider),
-                _buildRulesAndAboutTab(context),
+                _buildSettingsAndAccountTab(user),
+                _buildVipAndPrestigeTab(user, is9Naga, isVip),
+                _buildHoldingAndRegulationTab(user),
               ],
             ),
           ),
@@ -617,652 +482,143 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     );
   }
 
-  Widget _buildWealthPillar({
-    required String label,
-    required String value,
-    required Color color,
-    required IconData icon,
-  }) {
+  Widget _buildExecutiveHeader(UserModel user, bool is9Naga, bool isTaipan, bool isVip, int? rank) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      margin: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF0F172A).withValues(alpha: 0.9),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.25)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, color: color, size: 12),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Text(
-                  label,
-                  style: TextStyle(color: color.withValues(alpha: 0.8), fontSize: 8, fontWeight: FontWeight.w900),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 3),
-          Text(
-            value,
-            style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w900),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ----------------------------------------------------
-  // TAB 1: KREDENSIAL & KEAMANAN AKUN
-  // ----------------------------------------------------
-  Widget _buildCredentialsTab(BuildContext context, UserModel user) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Live Server Version & Update Detection Card
-          _buildUpdateDetectorCard(),
-          const SizedBox(height: 14),
-
-          // Security Shield Alert Banner
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  const Color(0xFF0C243B),
-                  const Color(0xFF0F172A),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.35)),
-            ),
-            child: const Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.shield_rounded, color: Color(0xFF38BDF8), size: 22),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Pencadangan Akun Konglomerat',
-                        style: TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w900),
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        'Pastikan alamat email Anda sudah diisi dengan benar. Email ini menjadi kunci pemulihan kepemilikan saham, anak PT, dan riwayat mutasi kas brankas Anda jika berpindah perangkat atau saat server bermigrasi.',
-                        style: TextStyle(color: Color(0xFFBAE6FD), fontSize: 10.5, height: 1.4),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 18),
-
-          // Form Edit Username
-          const Text(
-            'Nama Pengguna (Username Konglomerat)',
-            style: TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 6),
-          TextField(
-            controller: _usernameController,
-            style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
-            decoration: InputDecoration(
-              prefixIcon: const Icon(Icons.badge_rounded, color: Color(0xFF38BDF8), size: 18),
-              hintText: 'Masukkan nama pengguna...',
-              hintStyle: const TextStyle(color: Color(0xFF475569), fontSize: 11),
-              filled: true,
-              fillColor: const Color(0xFF0F172A),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF1E293B))),
-              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF1E293B))),
-              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF38BDF8), width: 1.5)),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Form Edit Email
-          const Text(
-            'Alamat Email Pemulihan & Notifikasi Resmi',
-            style: TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 6),
-          TextField(
-            controller: _emailController,
-            keyboardType: TextInputType.emailAddress,
-            style: const TextStyle(color: Colors.white, fontSize: 13),
-            decoration: InputDecoration(
-              prefixIcon: const Icon(Icons.alternate_email_rounded, color: Color(0xFF10B981), size: 18),
-              hintText: 'contoh: nama.konglomerat@federation.id',
-              hintStyle: const TextStyle(color: Color(0xFF475569), fontSize: 11),
-              filled: true,
-              fillColor: const Color(0xFF0F172A),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF1E293B))),
-              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF1E293B))),
-              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF10B981), width: 1.5)),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-            ),
-          ),
-          const SizedBox(height: 18),
-
-          // Tombol Simpan Perubahan
-          SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: ElevatedButton.icon(
-              onPressed: _isSaving ? null : _handleSaveProfile,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF0284C7),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                elevation: 4,
-              ),
-              icon: _isSaving
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                  : const Icon(Icons.save_rounded, size: 18),
-              label: Text(
-                _isSaving ? 'MENYIMPAN DATA...' : 'SIMPAN PERUBAHAN AKUN',
-                style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12.5, letterSpacing: 0.5),
-              ),
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          // Detail Kredensial Sistem
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: const Color(0xFF0F172A),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFF1E293B)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Row(
-                  children: [
-                    Icon(Icons.badge_rounded, color: Color(0xFF94A3B8), size: 16),
-                    SizedBox(width: 8),
-                    Text(
-                      'Identitas Digital Bursa CFX',
-                      style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w900),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                _buildInfoRow('ID Pengguna:', user.id, const Color(0xFF64748B)),
-                const Divider(color: Color(0xFF1E293B), height: 16),
-                _buildInfoRow('Hak Akses (Role):', user.effectiveRole, user.isVip ? const Color(0xFFFBBF24) : const Color(0xFF38BDF8)),
-                const Divider(color: Color(0xFF1E293B), height: 16),
-                _buildInfoRow('Tingkat Kredit (Tier):', user.effectiveCreditTier, const Color(0xFF34D399)),
-                const Divider(color: Color(0xFF1E293B), height: 16),
-                _buildInfoRow('Kepatuhan Pajak & Notaris:', 'Terdaftar Legal di CFX', const Color(0xFF34D399)),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ----------------------------------------------------
-  // TAB 2: PENJELASAN VIP VS STANDAR (USER CLARIFICATION)
-  // ----------------------------------------------------
-  Widget _buildVipVsStandardTab(BuildContext context, UserModel user) {
-    final isVip = user.isVip;
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Banner Status Saat Ini
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: isVip
-                    ? [const Color(0xFF78350F), const Color(0xFF1E1405)]
-                    : [const Color(0xFF0F2642), const Color(0xFF0B1220)],
-              ),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: isVip ? const Color(0xFFF59E0B) : const Color(0xFF38BDF8),
-                width: 1.5,
-              ),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: (isVip ? const Color(0xFFF59E0B) : const Color(0xFF38BDF8)).withValues(alpha: 0.2),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    isVip ? Icons.workspace_premium_rounded : Icons.shield_rounded,
-                    color: isVip ? const Color(0xFFFBBF24) : const Color(0xFF38BDF8),
-                    size: 28,
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        isVip ? 'AKUN ANDA: VIP SULTAN KONGLOMERAT' : 'AKUN ANDA: KONGLOMERAT STANDAR',
-                        style: TextStyle(
-                          color: isVip ? const Color(0xFFFDE68A) : Colors.white,
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        isVip
-                            ? 'Anda menikmati fasilitas prioritas tertinggi bursa, diskon biaya transaksi, dan keunggulan lelang mega-proyek.'
-                            : 'Tingkatkan status akun melalui Web Admin Console untuk membuka hak istimewa eksklusif VIP.',
-                        style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, height: 1.35),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 18),
-
-          const Text(
-            'Perbandingan Hak Istimewa & Fasilitas:',
-            style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w900),
-          ),
-          const SizedBox(height: 10),
-
-          // Matrix 1: Biaya Transaksi & Broker
-          _buildPrivilegeCard(
-            title: '1. Biaya Broker & Transaksi Bursa',
-            icon: Icons.percent_rounded,
-            color: const Color(0xFF38BDF8),
-            standardText: 'Standar: 0.25% - 0.50% per transaksi beli/jual saham sekunder.',
-            vipText: 'VIP: Diskon 80% (Hanya 0.05%), eksekusi orderbook instan tanpa hambatan antrean.',
-          ),
-          const SizedBox(height: 10),
-
-          // Matrix 2: Lelang Tender Pengadaan Mega-Proyek
-          _buildPrivilegeCard(
-            title: '2. Partisipasi Mega-Tender Negara',
-            icon: Icons.gavel_rounded,
-            color: const Color(0xFF10B981),
-            standardText: 'Standar: Membutuhkan skor fundamental ketat dan kurasi bertahap.',
-            vipText: 'VIP: Otomatis diundang ke Lelang Tertutup Strategis Nasional & evaluasi skor proposal lebih tinggi.',
-          ),
-          const SizedBox(height: 10),
-
-          // Matrix 3: Plafon Pinjaman Likuiditas Bank Sentral
-          _buildPrivilegeCard(
-            title: '3. Fasilitas Pembiayaan Bank Sentral',
-            icon: Icons.account_balance_rounded,
-            color: const Color(0xFFFBBF24),
-            standardText: 'Standar: Dibatasi sesuai credit tier normal (Maks Rp 10 Miliar).',
-            vipText: 'VIP: Plafon likuiditas sultan hingga 10x lipat dan suku bunga restrukturisasi istimewa.',
-          ),
-          const SizedBox(height: 10),
-
-          // Matrix 4: Tampilan Prestise & Status Publik
-          _buildPrivilegeCard(
-            title: '4. Lencana Prestise & Tampilan Publik',
-            icon: Icons.military_tech_rounded,
-            color: const Color(0xFFA855F7),
-            standardText: 'Standar: Lencana biru biasa pada daftar konglomerasi publik.',
-            vipText: 'VIP: Mahkota Emas bercahaya [VIP] di Web Admin & APK, serta border kartu emas eksklusif.',
-          ),
-          const SizedBox(height: 16),
-
-          // Cara Aktivasi VIP
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: const Color(0xFF0F172A),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFF1E293B)),
-            ),
-            child: const Row(
-              children: [
-                Icon(Icons.info_outline_rounded, color: Color(0xFF38BDF8), size: 20),
-                SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Catatan Otoritas: Administrator dapat mengubah status pemain menjadi VIP atau menaikkan Credit Tier (Standard/Bronze/Silver/Gold/Platinum) melalui menu "Pemain" di Web Admin Console.',
-                    style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, height: 1.35),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPrivilegeCard({
-    required String title,
-    required IconData icon,
-    required Color color,
-    required String standardText,
-    required String vipText,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0F172A),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFF1E293B)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, color: color, size: 18),
-              const SizedBox(width: 8),
-              Text(
-                title,
-                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: const Color(0xFF060913),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('🔰 ', style: TextStyle(fontSize: 11)),
-                Expanded(
-                  child: Text(
-                    standardText,
-                    style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, height: 1.3),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 6),
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1E1B0E),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.3)),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('👑 ', style: TextStyle(fontSize: 11)),
-                Expanded(
-                  child: Text(
-                    vipText,
-                    style: const TextStyle(color: Color(0xFFFDE68A), fontSize: 10.5, height: 1.3, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ----------------------------------------------------
-  // TAB 3: HOLDING & ANAK PERSEROAN
-  // ----------------------------------------------------
-  Widget _buildHoldingTab(BuildContext context, UserModel user, GameProvider provider) {
-    final conglomerate = provider.conglomerate;
-    double totalHoldingsCash = user.balanceIb + user.companyBalanceIb;
-    for (final c in conglomerate) {
-      if (c['id'] != 'primary' && c['companyBalance'] != null) {
-        totalHoldingsCash += ((c['companyBalance'] as num?)?.toDouble() ?? 0.0);
-      }
-    }
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF0F172A), Color(0xFF070B14)],
-              ),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.4)),
-            ),
-            child: Column(
-              children: [
-                _buildInfoRow('Konglomerat Utama:', user.username, Colors.white),
-                const Divider(color: Color(0xFF1E293B), height: 16),
-                _buildInfoRow('PT Induk Perseroan:', user.hasPt ? 'PT. ${user.ptName}' : 'Belum Berdiri', const Color(0xFF38BDF8)),
-                const Divider(color: Color(0xFF1E293B), height: 16),
-                _buildInfoRow('Sektor Industri Utama:', user.sector.isNotEmpty ? user.sector : 'Keuangan & Investasi', const Color(0xFFFBBF24)),
-                const Divider(color: Color(0xFF1E293B), height: 16),
-                _buildInfoRow('Jumlah Entitas Holding:', '${conglomerate.length} Perseroan', const Color(0xFF34D399)),
-                const Divider(color: Color(0xFF1E293B), height: 16),
-                _buildInfoRow('Total Likuiditas Holding:', CurrencyFormatter.formatFull(totalHoldingsCash), const Color(0xFF34D399)),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: const Color(0xFF0C243B),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.3)),
-            ),
-            child: const Row(
-              children: [
-                Icon(Icons.public_rounded, color: Color(0xFF38BDF8), size: 22),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Fundamental finansial holding dan solvabilitas perseroan dievaluasi secara otomatis oleh Komite Pengadaan Proyek Strategis Nasional.',
-                    style: TextStyle(color: Color(0xFFBAE6FD), fontSize: 10.5, height: 1.4),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ----------------------------------------------------
-  // TAB 4: REGULASI & TENTANG SISTEM
-  // ----------------------------------------------------
-  Widget _buildRulesAndAboutTab(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Konstitusi Pasar Modal & Perlindungan Investor:',
-            style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w900),
-          ),
-          const SizedBox(height: 10),
-          _buildRuleCard(
-            icon: Icons.gavel_rounded,
-            title: 'Undang-Undang Anti-Monopoli',
-            desc: 'Kepemilikan saham bursa di atas 50% memicu pengawasan KPPU. Dilarang keras melakukan kartel harga dan manipulasi pasar sekunder.',
-          ),
-          const SizedBox(height: 10),
-          _buildRuleCard(
-            icon: Icons.account_balance_rounded,
-            title: 'Ketentuan Fasilitas Bank Sentral',
-            desc: 'Kredit macet lebih dari 3 siklus akan berakibat pada pembekuan rekening perseroan oleh Kurator Pengadilan Niaga.',
-          ),
-          const SizedBox(height: 10),
-          _buildRuleCard(
-            icon: Icons.shield_rounded,
-            title: 'Sita Jaminan & Larangan Tender',
-            desc: 'Perseroan yang dalam status SITAAN Negara dilarang keras berpartisipasi dalam lelang mega-proyek pemerintah hingga kewajiban utang diselesaikan.',
-          ),
-          const SizedBox(height: 14),
-
-          SizedBox(
-            width: double.infinity,
-            height: 44,
-            child: OutlinedButton.icon(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const GameConstitutionScreen()),
-                );
-              },
-              style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFF38BDF8),
-                side: const BorderSide(color: Color(0xFF38BDF8)),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              icon: const Icon(Icons.menu_book_rounded, size: 16),
-              label: const Text('BACA BUKU KONSTITUSI LENGKAP', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900)),
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          // About System Specs
-          Center(
-            child: Column(
-              children: [
-                Container(
-                  width: 64,
-                  height: 64,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: const Color(0xFFF59E0B), width: 2),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFFF59E0B).withValues(alpha: 0.35),
-                        blurRadius: 16,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
-                    child: Image.asset(
-                      'assets/logo.png',
-                      fit: BoxFit.cover,
-                      errorBuilder: (ctx, err, stack) => Container(
-                        color: const Color(0xFF0F172A),
-                        child: const Icon(Icons.corporate_fare_rounded, color: Color(0xFFFBBF24), size: 36),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                const Text(
-                  'CAPITAL FEDERASI (CFX)',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 1.2,
-                  ),
-                ),
-                const Text(
-                  'Bursa Saham Realistis & Simulasi Konglomerasi Finansial',
-                  style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-
-          _buildUpdateDetectorCard(),
-          const SizedBox(height: 12),
-
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: const Color(0xFF0F172A),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFF1E293B)),
-            ),
-            child: Column(
-              children: [
-                _buildInfoRow('Versi Mobile APK:', ApiService.currentApkDisplayVersion, const Color(0xFF34D399)),
-                const Divider(color: Color(0xFF1E293B), height: 14),
-                _buildInfoRow('Versi Server Backend:', _serverVersionInfo?['backendVersion']?.toString() ?? 'v1.5.0-CFX Production', const Color(0xFF38BDF8)),
-                const Divider(color: Color(0xFF1E293B), height: 14),
-                _buildInfoRow('Simulasi Pasar Modal:', 'Realistic Engine (${context.read<GameProvider>().companies.length} Emiten • 4-Huruf)', const Color(0xFFFBBF24)),
-                const Divider(color: Color(0xFF1E293B), height: 14),
-                _buildInfoRow('Status Sinkronisasi:', 'Online • Multi-thread SQLite & MariaDB', const Color(0xFF34D399)),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-
-          // Logout Button
-          SizedBox(
-            width: double.infinity,
-            height: 46,
-            child: OutlinedButton.icon(
-              onPressed: () => _confirmLogout(context),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFFEF4444),
-                side: const BorderSide(color: Color(0xFFEF4444)),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              icon: const Icon(Icons.logout_rounded, size: 18),
-              label: const Text('KELUAR DARI SESI PERMAINAN', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12)),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRuleCard({required IconData icon, required String title, required String desc}) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0F172A),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFF1E293B)),
+        gradient: LinearGradient(
+          colors: is9Naga
+              ? [const Color(0xFF2B1F06), const Color(0xFF141109), const Color(0xFF0F172A)]
+              : [const Color(0xFF0F172A), const Color(0xFF1E293B)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: is9Naga
+              ? const Color(0xFFF59E0B).withValues(alpha: 0.6)
+              : (isVip ? const Color(0xFFA855F7).withValues(alpha: 0.5) : const Color(0xFF334155)),
+          width: is9Naga ? 1.5 : 1.0,
+        ),
+        boxShadow: is9Naga
+            ? [
+                BoxShadow(
+                  color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                  blurRadius: 14,
+                  offset: const Offset(0, 4),
+                )
+              ]
+            : null,
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: const Color(0xFF38BDF8), size: 20),
-          const SizedBox(width: 10),
+          // Avatar Konglomerat
+          Container(
+            width: 54,
+            height: 54,
+            decoration: BoxDecoration(
+              gradient: is9Naga
+                  ? const LinearGradient(colors: [Color(0xFFF59E0B), Color(0xFFB45309)])
+                  : (isVip
+                      ? const LinearGradient(colors: [Color(0xFFA855F7), Color(0xFFEC4899)])
+                      : const LinearGradient(colors: [Color(0xFF38BDF8), Color(0xFF1E293B)])),
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.3),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                )
+              ],
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              is9Naga
+                  ? '🐉'
+                  : (isVip ? '💎' : (user.username.isNotEmpty ? user.username[0].toUpperCase() : 'C')),
+              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
+            ),
+          ),
+          const SizedBox(width: 14),
+
+          // Identitas & Badge
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: [
+                    Text(
+                      user.username,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
+                        color: is9Naga ? const Color(0xFFFDE68A) : Colors.white,
+                      ),
+                    ),
+                    if (is9Naga)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF59E0B),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          'Peringkat #${rank ?? 1} 9 NAGA',
+                          style: const TextStyle(color: Colors.black, fontSize: 8.5, fontWeight: FontWeight.w900),
+                        ),
+                      )
+                    else if (isTaipan)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF38BDF8).withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: const Color(0xFF38BDF8)),
+                        ),
+                        child: Text(
+                          'TAIPAN #${rank ?? 10}',
+                          style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 8.5, fontWeight: FontWeight.w900),
+                        ),
+                      ),
+                    if (isVip)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(colors: [Color(0xFFA855F7), Color(0xFFEC4899)]),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text(
+                          'VIP PRESTISE',
+                          style: TextStyle(color: Colors.white, fontSize: 8.5, fontWeight: FontWeight.w900),
+                        ),
+                      ),
+                  ],
+                ),
                 const SizedBox(height: 3),
-                Text(desc, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, height: 1.35)),
+                Text(
+                  user.email.isNotEmpty ? user.email : 'Alamat email belum didaftarkan',
+                  style: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    const Icon(Icons.account_balance_wallet_rounded, size: 13, color: Color(0xFF34D399)),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Kas Pribadi: ${CurrencyFormatter.formatFull(user.balanceIb)}',
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF34D399),
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -1271,24 +627,647 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     );
   }
 
-  Widget _buildInfoRow(String label, String value, Color valColor) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  // ===========================================================================
+  // TAB 1: PENGATURAN & AKUN (TIDAK ADA KONTEN DOUBLE, 1 LOGOUT RESMI DI BAWAH)
+  // ===========================================================================
+  Widget _buildSettingsAndAccountTab(UserModel user) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
       children: [
-        Expanded(
-          flex: 4,
-          child: Text(label, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11)),
+        // Kartu Deteksi Pembaruan Versi Server (Tunggal & Tidak Dobel)
+        _buildSingleUpdateCard(),
+
+        const SizedBox(height: 14),
+
+        // Bagian Ubah Username
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0F172A),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFF1E293B)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.badge_rounded, color: Color(0xFF38BDF8), size: 18),
+                  SizedBox(width: 8),
+                  Text(
+                    'Identitas Konglomerat (Username)',
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Nama ini terdaftar resmi di Papan Peringkat Konglomerat 9 Naga & obrolan bursa global.',
+                style: TextStyle(color: Color(0xFF64748B), fontSize: 10.5),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _usernameController,
+                style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                decoration: InputDecoration(
+                  filled: true,
+                  fillColor: const Color(0xFF060913),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                  prefixIcon: const Icon(Icons.person_rounded, color: Color(0xFF64748B), size: 18),
+                  hintText: 'Masukkan nama konglomerat baru',
+                  hintStyle: const TextStyle(color: Color(0xFF475569), fontSize: 12),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Align(
+                alignment: Alignment.centerRight,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF38BDF8),
+                    foregroundColor: const Color(0xFF060913),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  onPressed: _isSavingUsername ? null : _handleSaveUsername,
+                  icon: _isSavingUsername
+                      ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                      : const Icon(Icons.save_rounded, size: 16),
+                  label: const Text('SIMPAN NAMA', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11)),
+                ),
+              ),
+            ],
+          ),
         ),
-        const SizedBox(width: 8),
-        Expanded(
-          flex: 5,
+
+        const SizedBox(height: 14),
+
+        // Bagian Email & Verifikasi
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0F172A),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFF1E293B)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.mark_email_read_rounded, color: Color(0xFF10B981), size: 18),
+                      SizedBox(width: 8),
+                      Text(
+                        'Email & Pemulihan Aset',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.4)),
+                    ),
+                    child: Text(
+                      user.email.isNotEmpty ? 'TERDAFTAR' : 'BELUM DIISI',
+                      style: const TextStyle(color: Color(0xFF34D399), fontSize: 8.5, fontWeight: FontWeight.w900),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Digunakan untuk pemulihan hak kepemilikan perseroan, obligasi, dan aset kas jika berpindah perangkat.',
+                style: TextStyle(color: Color(0xFF64748B), fontSize: 10.5),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _emailController,
+                style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                keyboardType: TextInputType.emailAddress,
+                decoration: InputDecoration(
+                  filled: true,
+                  fillColor: const Color(0xFF060913),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                  prefixIcon: const Icon(Icons.email_outlined, color: Color(0xFF64748B), size: 18),
+                  hintText: 'nama@domain.com',
+                  hintStyle: const TextStyle(color: Color(0xFF475569), fontSize: 12),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Align(
+                alignment: Alignment.centerRight,
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF34D399),
+                    side: const BorderSide(color: Color(0xFF059669)),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  onPressed: _isSendingEmailVerify ? null : _handleVerifyEmail,
+                  icon: _isSendingEmailVerify
+                      ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF34D399)))
+                      : const Icon(Icons.verified_rounded, size: 16),
+                  label: const Text('VERIFIKASI EMAIL SEKARANG', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11)),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 14),
+
+        // Bagian Ganti Password Akun
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0F172A),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFF1E293B)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.lock_reset_rounded, color: Color(0xFFF59E0B), size: 18),
+                  SizedBox(width: 8),
+                  Text(
+                    'Perbarui Kata Sandi Otoritas',
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Amankan hak kendali konglomerasi dengan kata sandi kuat minimal 6 karakter kombinasi.',
+                style: TextStyle(color: Color(0xFF64748B), fontSize: 10.5),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _newPasswordController,
+                obscureText: _obscureNewPass,
+                style: const TextStyle(color: Colors.white, fontSize: 13),
+                decoration: InputDecoration(
+                  filled: true,
+                  fillColor: const Color(0xFF060913),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                  prefixIcon: const Icon(Icons.vpn_key_rounded, color: Color(0xFF64748B), size: 18),
+                  suffixIcon: IconButton(
+                    icon: Icon(_obscureNewPass ? Icons.visibility_off : Icons.visibility, color: const Color(0xFF64748B), size: 18),
+                    onPressed: () => setState(() => _obscureNewPass = !_obscureNewPass),
+                  ),
+                  hintText: 'Kata Sandi Baru',
+                  hintStyle: const TextStyle(color: Color(0xFF475569), fontSize: 12),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _confirmPasswordController,
+                obscureText: _obscureConfirmPass,
+                style: const TextStyle(color: Colors.white, fontSize: 13),
+                decoration: InputDecoration(
+                  filled: true,
+                  fillColor: const Color(0xFF060913),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                  prefixIcon: const Icon(Icons.check_circle_outline_rounded, color: Color(0xFF64748B), size: 18),
+                  suffixIcon: IconButton(
+                    icon: Icon(_obscureConfirmPass ? Icons.visibility_off : Icons.visibility, color: const Color(0xFF64748B), size: 18),
+                    onPressed: () => setState(() => _obscureConfirmPass = !_obscureConfirmPass),
+                  ),
+                  hintText: 'Ulangi Kata Sandi Baru',
+                  hintStyle: const TextStyle(color: Color(0xFF475569), fontSize: 12),
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFF59E0B),
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(vertical: 11),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: _isUpdatingPassword ? null : _handleUpdatePassword,
+                  icon: _isUpdatingPassword
+                      ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                      : const Icon(Icons.lock_outline_rounded, size: 16),
+                  label: const Text('PERBARUI KATA SANDI', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11.5)),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 14),
+
+        // Tombol Pusat Bantuan & Layanan IPMC
+        Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF0F172A),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFF1E293B)),
+          ),
+          child: ListTile(
+            leading: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF38BDF8).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.help_center_rounded, color: Color(0xFF38BDF8), size: 20),
+            ),
+            title: const Text('Pusat Bantuan & Regulasi IPMC', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+            subtitle: const Text('Konsultasi arbitrase, bursa efek, dan hukum perseroan', style: TextStyle(color: Color(0xFF64748B), fontSize: 10.5)),
+            trailing: const Icon(Icons.chevron_right_rounded, color: Color(0xFF64748B)),
+            onTap: _showHelpCenterDialog,
+          ),
+        ),
+
+        const SizedBox(height: 24),
+
+        // SATU-SATUNYA TOMBOL KELUAR RESMI DI BAWAH PENGATURAN
+        OutlinedButton.icon(
+          style: OutlinedButton.styleFrom(
+            foregroundColor: const Color(0xFFEF4444),
+            side: BorderSide(color: const Color(0xFFEF4444).withValues(alpha: 0.6)),
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            backgroundColor: const Color(0xFFEF4444).withValues(alpha: 0.05),
+          ),
+          onPressed: _confirmLogout,
+          icon: const Icon(Icons.power_settings_new_rounded, size: 18),
+          label: const Text(
+            'AKHIRI SESI & KELUAR DARI AKUN',
+            style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12, letterSpacing: 0.5),
+          ),
+        ),
+
+        const SizedBox(height: 16),
+        const Center(
           child: Text(
-            value,
-            textAlign: TextAlign.end,
-            style: TextStyle(color: valColor, fontSize: 11, fontWeight: FontWeight.bold),
+            'Capital Federation (CFX) • Pasar Modal Resmi Republik Federasi\nArsitektur Basis Data Terlindungi & Mutakhir',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Color(0xFF475569), fontSize: 10, height: 1.4),
           ),
         ),
       ],
+    );
+  }
+
+  // Kartu Deteksi Update Tunggal
+  Widget _buildSingleUpdateCard() {
+    final serverVer = _serverVersionData?['version']?.toString() ?? ApiService.currentAppVersion;
+    final serverBuild = (_serverVersionData?['buildNumber'] is num)
+        ? (_serverVersionData?['buildNumber'] as num).toInt()
+        : int.tryParse(_serverVersionData?['buildNumber']?.toString() ?? '') ?? ApiService.currentBuildNumber;
+
+    final bool hasNewer = _compareVersions(serverVer, serverBuild, ApiService.currentAppVersion, ApiService.currentBuildNumber);
+    final notes = _serverVersionData?['releaseNotes']?.toString() ??
+        'Ticker Saham 4-Huruf Resmi (Tanpa Angka), Perbaikan Nama PT, Efek Emas Chat Sultan 9 Naga & VIP, dan Deteksi Update Otomatis';
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0A0F1E),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: hasNewer ? const Color(0xFFF59E0B) : const Color(0xFF10B981).withValues(alpha: 0.4),
+          width: hasNewer ? 1.5 : 1.0,
+        ),
+        boxShadow: hasNewer
+            ? [
+                BoxShadow(
+                  color: const Color(0xFFF59E0B).withValues(alpha: 0.12),
+                  blurRadius: 10,
+                  offset: const Offset(0, 3),
+                )
+              ]
+            : null,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    hasNewer ? Icons.new_releases_rounded : Icons.check_circle_rounded,
+                    color: hasNewer ? const Color(0xFFF59E0B) : const Color(0xFF10B981),
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    hasNewer ? 'PEMBARUAN SISTEM TERSEDIA' : 'STATUS APLIKASI MUTAKHIR',
+                    style: TextStyle(
+                      color: hasNewer ? const Color(0xFFFDE68A) : const Color(0xFF34D399),
+                      fontWeight: FontWeight.w900,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E293B),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  'v${ApiService.currentAppVersion} (Build ${ApiService.currentBuildNumber})',
+                  style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 9.5, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            hasNewer
+                ? 'Server pusat telah merilis versi v$serverVer (Build $serverBuild). Silakan unduh paket rilis resmi di website bursa.'
+                : 'Aplikasi terinstal sudah sinkron dengan versi rilis resmi server Capital Federation.',
+            style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11, height: 1.35),
+          ),
+          if (hasNewer) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFF060913),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFF334155)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Catatan Rilis Pembaruan:', style: TextStyle(color: Color(0xFFF59E0B), fontSize: 10.5, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 3),
+                  Text(notes, style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 10.5, height: 1.3)),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // TAB 2: STATUS VIP & PRESTISE 9 NAGA
+  // ===========================================================================
+  Widget _buildVipAndPrestigeTab(UserModel user, bool is9Naga, bool isVip) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      children: [
+        // Kartu Hak Istimewa 9 Naga
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF2B1F06), Color(0xFF141109), Color(0xFF0F172A)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.6), width: 1.3),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
+                children: [
+                  Text('🐉', style: TextStyle(fontSize: 20)),
+                  SizedBox(width: 8),
+                  Text(
+                    'Hak Istimewa Sultan 9 Naga',
+                    style: TextStyle(color: Color(0xFFFDE68A), fontWeight: FontWeight.w900, fontSize: 14),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Top 9 Konglomerat dengan Nilai Kekayaan Bersih tertinggi di Republik Federasi memiliki pengaruh dominan terhadap pasar modal.',
+                style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 11, height: 1.35),
+              ),
+              const SizedBox(height: 12),
+              _buildPerkRow(Icons.stars_rounded, 'Balon Chat Emas Berpendar di Obrolan Global Bursa', const Color(0xFFF59E0B)),
+              _buildPerkRow(Icons.gavel_rounded, 'Prioritas Hak Suara dalam Lelang Aset Sitaan & Tender Negara', const Color(0xFFF59E0B)),
+              _buildPerkRow(Icons.trending_up_rounded, 'Pengaruh Terbesar dalam Valuasi Indeks Gabungan CFX', const Color(0xFFF59E0B)),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 14),
+
+        // Kartu Keanggotaan VIP Prestise
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0F172A),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isVip ? const Color(0xFFA855F7) : const Color(0xFF1E293B),
+              width: isVip ? 1.4 : 1.0,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.diamond_rounded, color: Color(0xFFA855F7), size: 20),
+                      SizedBox(width: 8),
+                      Text(
+                        'Lisensi VIP Eksklusif',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                      ),
+                    ],
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      gradient: isVip
+                          ? const LinearGradient(colors: [Color(0xFFA855F7), Color(0xFFEC4899)])
+                          : null,
+                      color: isVip ? null : const Color(0xFF1E293B),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      isVip ? '💎 VIP AKTIF' : 'REGULER',
+                      style: TextStyle(
+                        color: isVip ? Colors.white : const Color(0xFF94A3B8),
+                        fontWeight: FontWeight.w900,
+                        fontSize: 9.5,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Tingkatkan reputasi akun dan nikmati pembebasan biaya administrasi transaksi bursa efek seumur hidup.',
+                style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, height: 1.35),
+              ),
+              const SizedBox(height: 14),
+              _buildPerkRow(Icons.discount_rounded, 'Bebas Bea Meterai & Komisi Broker Saham 0%', const Color(0xFFA855F7)),
+              _buildPerkRow(Icons.mark_chat_read_rounded, 'Badge Ungu Berlian di Komunitas Bursa', const Color(0xFFA855F7)),
+              _buildPerkRow(Icons.analytics_rounded, 'Akses Penuh Laporan Arus Kas Konsolidasi Holding', const Color(0xFFA855F7)),
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF060913),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFF334155)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline_rounded, color: Color(0xFF38BDF8), size: 18),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        isVip
+                            ? 'Akun Anda telah diakui resmi sebagai VIP Konglomerat oleh Otoritas Pasar Modal IPMC.'
+                            : 'Status keanggotaan VIP dan peningkatan Credit Tier disahkan langsung oleh Administrator Otoritas IPMC.',
+                        style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11, height: 1.35),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPerkRow(IconData icon, String text, Color iconColor) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 15, color: iconColor),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(text, style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 11.5)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // TAB 3: HOLDING PT & REGULASI IPMC
+  // ===========================================================================
+  Widget _buildHoldingAndRegulationTab(UserModel user) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      children: [
+        // Kartu Holding PT Induk
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0F172A),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFF1E293B)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.business_rounded, color: Color(0xFF38BDF8), size: 18),
+                  SizedBox(width: 8),
+                  Text('Holding Korporasi Perseroan Terbatas', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                ],
+              ),
+              const SizedBox(height: 12),
+              _buildHoldingInfoRow('Status Badan Hukum:', user.hasPt ? 'Perseroan Terbatas (PT) Terdaftar' : 'Belum Berdiri', const Color(0xFF38BDF8)),
+              _buildHoldingInfoRow('Entitas Induk PT:', user.hasPt ? 'PT. ${user.ptName}' : 'Belum Ada', Colors.white),
+              _buildHoldingInfoRow('Kode Saham Bursa:', user.hasPt ? (user.ptSymbol.isNotEmpty ? user.ptSymbol : '-') : '-', const Color(0xFFF59E0B)),
+              _buildHoldingInfoRow('Kas Holding PT:', CurrencyFormatter.formatFull(user.companyBalanceIb), const Color(0xFF34D399)),
+              _buildHoldingInfoRow('Valuasi Modal Disetor:', CurrencyFormatter.formatFull(user.companyBalanceIb * 1.5), const Color(0xFFFDE68A)),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 14),
+
+        // Kartu Konstitusi & Kepastian Hukum
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0F172A),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFF1E293B)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.account_balance_rounded, color: Color(0xFFF59E0B), size: 18),
+                  SizedBox(width: 8),
+                  Text('Kepastian Hukum & Konstitusi Notaris', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                ],
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Semua aktivitas korporasi, pembagian dividen, penerbitan emisi IPO, pengalihan kendali akuisisi, dan putusan pailit diatur oleh Undang-Undang Otoritas Pasar Modal IPMC Republik Federasi.',
+                style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, height: 1.4),
+              ),
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFFF59E0B),
+                    side: const BorderSide(color: Color(0xFFF59E0B)),
+                    padding: const EdgeInsets.symmetric(vertical: 11),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const GameConstitutionScreen()),
+                    );
+                  },
+                  icon: const Icon(Icons.menu_book_rounded, size: 16),
+                  label: const Text('BACA LEMBARAN NEGARA & REGULASI', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11.5)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHoldingInfoRow(String label, String value, Color valueColor) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(color: Color(0xFF64748B), fontSize: 11)),
+          Text(value, style: TextStyle(color: valueColor, fontSize: 11.5, fontWeight: FontWeight.bold)),
+        ],
+      ),
     );
   }
 }

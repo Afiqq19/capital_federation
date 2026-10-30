@@ -18,6 +18,7 @@ mobile/ios/Pods/
 backend/data/*.db
 backend/data/*.db-shm
 backend/data/*.db-wal
+backend/data/releases/
 backend/*.sqlite
 backend/*.sqlite3
 *.db

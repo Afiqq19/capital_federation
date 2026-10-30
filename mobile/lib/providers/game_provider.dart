@@ -1053,19 +1053,32 @@ class GameProvider extends ChangeNotifier {
     return res;
   }
 
-  // Update profil pemain (username & email)
+  // Update profil pemain (username, email, & password)
   Future<Map<String, dynamic>> updateUserProfile({
     required String username,
     required String email,
+    String? newPassword,
   }) async {
     if (_user == null) return {'success': false, 'error': 'Silakan login terlebih dahulu'};
     final res = await ApiService.updateProfile(
       userId: _user!.id,
       username: username,
       email: email,
+      newPassword: newPassword,
     );
     if (res['success'] == true && res['user'] != null) {
       _user = UserModel.fromJson(res['user']);
+      notifyListeners();
+    }
+    return res;
+  }
+
+  // Verifikasi Email
+  Future<Map<String, dynamic>> verifyUserEmail(String email) async {
+    if (_user == null) return {'success': false, 'error': 'Silakan login terlebih dahulu'};
+    final res = await ApiService.sendEmailVerification(userId: _user!.id, email: email);
+    if (res['success'] == true) {
+      _user = _user!.copyWith(email: email);
       notifyListeners();
     }
     return res;

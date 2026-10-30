@@ -28,11 +28,13 @@ class _LeaderboardTabState extends State<LeaderboardTab> with SingleTickerProvid
   }
 
   String _formatCleanPt(String rawPt) {
-    final trimmed = rawPt.trim();
+    var trimmed = rawPt.trim();
     if (trimmed.isEmpty) return '';
     if (trimmed == 'Investor Ritel' || trimmed == 'Otoritas Moneter & Bursa') return trimmed;
-    final stripped = trimmed.replaceFirst(RegExp(r'^(PT\.?\s*)+', caseSensitive: false), '').trim();
-    return stripped.isEmpty ? '' : 'PT. $stripped';
+    while (trimmed.toUpperCase().startsWith('PT.') || trimmed.toUpperCase().startsWith('PT ')) {
+      trimmed = trimmed.replaceFirst(RegExp(r'^PT\.?\s*', caseSensitive: false), '').trim();
+    }
+    return trimmed.isEmpty ? '' : 'PT. $trimmed';
   }
 
   @override

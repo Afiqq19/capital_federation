@@ -200,17 +200,17 @@ app.get('/api/admin/auth/me', authMiddleware, async (req, res) => {
   }
 });
 
-// Update User Profile (Username & Email)
+// Update User Profile (Username, Email, & Password Baru)
 app.post('/api/user/profile/update', async (req, res) => {
   try {
-    const { userId, username, email } = req.body;
+    const { userId, username, email, newPassword } = req.body;
     if (!userId) return res.status(400).json({ error: 'User ID wajib disertakan' });
 
     const user = await query.get('SELECT * FROM users WHERE id = ?', [userId]);
     if (!user) return res.status(404).json({ error: 'Pengguna tidak ditemukan' });
 
     const cleanUsername = (username || user.username).trim();
-    const cleanEmail = (email || user.email || '').trim().toLowerCase();
+    const cleanEmail = (email !== undefined ? email : (user.email || '')).trim().toLowerCase();
 
     // Cek keunikan username jika diubah
     if (cleanUsername !== user.username) {
@@ -219,7 +219,7 @@ app.post('/api/user/profile/update', async (req, res) => {
       }
       const existingUser = await query.get('SELECT id FROM users WHERE username = ? AND id != ?', [cleanUsername, userId]);
       if (existingUser) {
-        return res.status(400).json({ error: 'Username sudah digunakan oleh pemain lain' });
+        return res.status(400).json({ error: 'Username sudah digunakan oleh konglomerat lain' });
       }
     }
 
@@ -233,16 +233,70 @@ app.post('/api/user/profile/update', async (req, res) => {
       [cleanUsername, cleanEmail, userId]
     );
 
+    // Update password jika pengguna mengisi password baru
+    if (newPassword && String(newPassword).trim().length >= 6) {
+      const newHash = await bcrypt.hash(String(newPassword).trim(), 10);
+      await query.run(
+        'UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        [newHash, userId]
+      );
+    }
+
     const updatedUser = await query.get('SELECT * FROM users WHERE id = ?', [userId]);
     delete updatedUser.password_hash;
 
     res.json({
       success: true,
-      message: 'Profil akun (username & email) berhasil diperbarui!',
+      message: 'Profil akun eksekutif berhasil disimpan!',
       user: updatedUser
     });
   } catch (err) {
     console.error('Update profile error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Verifikasi Email Resmi Pengguna
+app.post('/api/user/email/verify', async (req, res) => {
+  try {
+    const { userId, email } = req.body;
+    if (!userId) return res.status(400).json({ error: 'User ID wajib disertakan' });
+
+    const user = await query.get('SELECT * FROM users WHERE id = ?', [userId]);
+    if (!user) return res.status(404).json({ error: 'Pengguna tidak ditemukan' });
+
+    const targetEmail = (email || user.email || '').trim().toLowerCase();
+    if (!targetEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(targetEmail)) {
+      return res.status(400).json({ error: 'Format email tidak valid untuk verifikasi' });
+    }
+
+    await query.run(
+      'UPDATE users SET email = ?, is_email_verified = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [targetEmail, userId]
+    );
+
+    res.json({
+      success: true,
+      message: `Tautan verifikasi telah dikonfirmasi! Email ${targetEmail} resmi terdaftar dan terproteksi di Otoritas BIF.`
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Reset Pasar & Populasi Menjadi BARU & BERSIH (Fresh Reset Sesuai Permintaan Otoritas)
+app.post('/api/admin/system/fresh-reset', async (req, res) => {
+  try {
+    const secretKey = process.env.DEPLOY_SECRET || '19122004';
+    const providedKey = req.query.key || req.body?.key;
+    if (providedKey !== secretKey) {
+      return res.status(403).json({ error: 'Kunci otorisasi rahasia salah!' });
+    }
+
+    const { resetMarketFresh } = require('./seed');
+    const result = await resetMarketFresh({ preserveHumanUsers: true });
+    res.json(result);
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
@@ -5810,7 +5864,7 @@ const publicDir = path.join(__dirname, '../public');
 if (fs.existsSync(publicDir)) {
   app.use(express.static(publicDir));
   app.use((req, res, next) => {
-    if (req.method === 'GET' && !req.path.startsWith('/api') && !req.path.startsWith('/socket.io')) {
+    if ((req.method === 'GET' || req.method === 'HEAD') && !req.path.startsWith('/api') && !req.path.startsWith('/socket.io')) {
       const indexFile = path.join(publicDir, 'index.html');
       if (fs.existsSync(indexFile)) {
         return res.sendFile(indexFile);

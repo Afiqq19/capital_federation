@@ -1404,6 +1404,7 @@ class ApiService {
     required String userId,
     required String username,
     required String email,
+    String? newPassword,
   }) async {
     try {
       final response = await http.post(
@@ -1413,11 +1414,32 @@ class ApiService {
           'userId': userId,
           'username': username,
           'email': email,
+          if (newPassword != null && newPassword.isNotEmpty) 'newPassword': newPassword,
         }),
       ).timeout(const Duration(seconds: 6));
       return jsonDecode(response.body);
     } catch (e) {
       return {'error': 'Gagal memperbarui profil: $e'};
+    }
+  }
+
+  // Verifikasi Alamat Email
+  static Future<Map<String, dynamic>> sendEmailVerification({
+    required String userId,
+    required String email,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/user/email/verify'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'userId': userId,
+          'email': email,
+        }),
+      ).timeout(const Duration(seconds: 6));
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'error': 'Gagal memproses verifikasi email: $e'};
     }
   }
 }

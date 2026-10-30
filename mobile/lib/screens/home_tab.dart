@@ -27,6 +27,7 @@ class HomeTab extends StatefulWidget {
 class _HomeTabState extends State<HomeTab> {
   String _selectedCompanyId = 'primary';
   final Set<String> _fetchingShareholders = {};
+  bool _isUpgradingBusiness = false;
 
   @override
   void initState() {
@@ -4583,6 +4584,7 @@ class _HomeTabState extends State<HomeTab> {
   }
 
   void _executeUpgrade(BuildContext context, GameProvider provider, String type, Map<String, dynamic> activeEntity) async {
+    if (_isUpgradingBusiness) return;
     final user = provider.user;
     if (user == null) return;
 
@@ -4645,14 +4647,42 @@ class _HomeTabState extends State<HomeTab> {
       return;
     }
 
-    final err = await provider.upgradeBusiness(type, companyId: companyId);
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(err ?? '🎉 Upgrade ${type.toUpperCase()} pada $entityName berhasil!'),
-          backgroundColor: err != null ? Colors.red : const Color(0xFF10B981),
-        ),
-      );
+    setState(() => _isUpgradingBusiness = true);
+    HapticFeedback.lightImpact();
+
+    try {
+      final err = await provider.upgradeBusiness(type, companyId: companyId);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(
+                  err != null ? Icons.error_outline_rounded : Icons.check_circle_rounded,
+                  color: Colors.white,
+                  size: 18,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    err ?? '🎉 Sukses meningkatkan ${type.toUpperCase()} pada $entityName!',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: err != null ? const Color(0xFFDC2626) : const Color(0xFF059669),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(milliseconds: 1400),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isUpgradingBusiness = false);
+      }
     }
   }
 }

@@ -13,7 +13,7 @@ const fs = require('fs');
 | atau mereset database akun pemain (capital_federation.db).
 */
 
-router.get('/updatecapital', (req, res) => {
+router.get('/updatecapital', async (req, res) => {
     // 1. Kunci Pengaman Rahasia (Mencegah orang luar iseng nge-trigger)
     const secretKey = process.env.DEPLOY_SECRET || '19122004';
     const providedKey = req.query.key;
@@ -48,10 +48,10 @@ router.get('/updatecapital', (req, res) => {
     let logGit = '';
     let logNpm = '';
     let logSync = '';
+    let logFresh = '';
 
     try {
         // 2. Mengatasi Dubious Ownership & Tarik Kodingan Baru dari GitHub
-        // Catatan: File database (*.db) masuk .gitignore sehingga 100% AMAN dan TIDAK TERHAPUS saat git reset!
         execSync(`git config --global --add safe.directory "*"`);
         logGit += execSync(`cd "${repoDir}" && git fetch --all 2>&1`).toString();
         logGit += '\n' + execSync(`cd "${repoDir}" && git reset --hard origin/main 2>&1`).toString();
@@ -67,15 +67,26 @@ router.get('/updatecapital', (req, res) => {
                 if (fs.existsSync(path.join(backendDir, 'public'))) {
                     execSync(`mkdir -p /app/public && cp -rf "${backendDir}/public/"* /app/public/ 2>/dev/null || true`);
                 }
-                logSync = 'Sinkronisasi kode terbaru & Web Admin ke container /app selesai (Database tetap utuh).';
+                logSync = 'Sinkronisasi kode terbaru & Web Admin ke container /app selesai.';
             } catch (_) {}
+        }
+
+        // 4B. Refresh Database Menjadi Baru & Bersih jika dipanggil dengan parameter &fresh=1
+        if (req.query.fresh === '1') {
+            try {
+                const { resetMarketFresh } = require('./seed');
+                await resetMarketFresh({ preserveHumanUsers: true });
+                logFresh = '\n[DATABASE FRESH REFRESH]\n✅ Seluruh pasar bursa, 252+ emiten Tbk, dan 265 bot pemain berhasil di-refresh BARU & SEGAR!\nAkun pemain asli dilindungi dengan saldo awal 50 Juta IB.';
+            } catch (fErr) {
+                logFresh = `\n[DATABASE REFRESH NOTICE]\n${fErr.message}`;
+            }
         }
 
         // 5. Kirim Respon Visual
         const htmlResponse = `
             <div style="background:#0f172a; color:#f8fafc; font-family:system-ui,sans-serif; min-height:100vh; padding:30px;">
-                <h1 style="color:#22c55e; margin-bottom:5px;">✅ Berhasil Update Sistem Capital Federation (v1.4.0-CFX)!</h1>
-                <p style="color:#94a3b8; margin-top:0;">Dieksekusi langsung di Server Linux • 🛡️ Database Akun Pemain & Pasar 100% Aman (Tidak Reset)</p>
+                <h1 style="color:#22c55e; margin-bottom:5px;">✅ Berhasil Update Sistem Capital Federation (v1.5.1-CFX)!</h1>
+                <p style="color:#94a3b8; margin-top:0;">Dieksekusi langsung di Server Linux • Status Pasar & Emiten Mutakhir</p>
                 
                 <h3 style="color:#38bdf8;">Laporan Log Eksekusi (${repoDir}):</h3>
                 <pre style="background:#1e293b; color:#4ade80; padding:20px; border-radius:10px; overflow-x:auto; font-family:Consolas,monospace; font-size:13px; line-height:1.6; border:1px solid #334155;">
@@ -84,11 +95,7 @@ ${logGit.trim()}
 
 [NPM INSTALL PRODUCTION]
 ${logNpm.trim()}
-${logSync ? `\n[DOCKER SYNC]\n${logSync}\n` : ''}
-[DATABASE PROTECTION]
-🛡️ File database SQLite (capital_federation.db) dilindungi di luar Git & Volume Docker permanen.
-Seluruh akun pemain, saldo IB, PT, dan portofolio saham tetap utuh 100%.
-
+${logSync ? `\n[DOCKER SYNC]\n${logSync}\n` : ''}${logFresh ? `\n${logFresh}\n` : ''}
 [AUTO RESTART DOCKER]
 Container akan reboot dalam 2 detik untuk memuat kodingan baru ke memory...
                 </pre>
@@ -97,7 +104,7 @@ Container akan reboot dalam 2 detik untuk memuat kodingan baru ke memory...
 
         res.send(htmlResponse);
 
-        // 6. Mantra Restart Otomatis Node.js (Docker restart: always akan otomatis menghidupkannya lagi!)
+        // 6. Mantra Restart Otomatis Node.js
         setTimeout(() => {
             console.log('🔄 Restarting Node.js container to apply new code...');
             process.exit(0);
