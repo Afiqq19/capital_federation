@@ -5082,7 +5082,7 @@ function getActiveApkFilePath() {
 app.get('/api/version', async (req, res) => {
   try {
     const compCount = await query.get('SELECT COUNT(*) as count FROM companies');
-    const userCount = await query.get('SELECT COUNT(*) as count FROM users WHERE is_admin = 0');
+    const userCount = await query.get("SELECT COUNT(*) as count FROM users WHERE role != 'ADMIN'");
     const apkCfg = await getApkSettingsMap();
     const activeApk = getActiveApkFilePath();
     let fileSizeMb = apkCfg.apk_file_size_mb || '24.7 MB';

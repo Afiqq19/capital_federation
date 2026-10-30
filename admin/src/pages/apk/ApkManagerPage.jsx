@@ -32,12 +32,14 @@ export default function ApkManagerPage({ showToast }) {
     try {
       const res = await request('/api/version');
       setApkInfo(res);
-      setVersion(res.apkVersion || res.version || '1.5.0');
+      setVersion(res.version || '1.5.0');
       setBuildNumber(res.buildNumber || 5);
       setMinAndroid(res.minAndroid || 'Android 10.0 (API 29 / Q)');
       setExternalUrl(res.externalUrl || '');
       if (Array.isArray(res.releaseNotes)) {
         setReleaseNotesText(res.releaseNotes.join('\n'));
+      } else if (typeof res.releaseNotes === 'string') {
+        setReleaseNotesText(res.releaseNotes);
       }
     } catch (e) {
       if (toastFn) toastFn('Gagal memuat info rilis APK: ' + e.message, 'error');
@@ -242,17 +244,17 @@ export default function ApkManagerPage({ showToast }) {
         <div style={{ background: '#0f172a', border: '1px solid rgba(148,163,184,0.14)', borderRadius: 14, padding: 18 }}>
           <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700, marginBottom: 6 }}>VERSI RILIS AKTIF</div>
           <div style={{ fontSize: 24, fontWeight: 800, color: '#38bdf8', fontFamily: 'JetBrains Mono, monospace' }}>
-            v{apkInfo?.apkVersion || apkInfo?.version || '1.5.0'}
+            v{apkInfo?.version || '1.5.0'}
           </div>
           <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>
-            Build #{apkInfo?.buildNumber || 5} • {apkInfo?.releaseDate || '-'}
+            Build #{apkInfo?.buildNumber || 5} • Production Release
           </div>
         </div>
 
         <div style={{ background: '#0f172a', border: '1px solid rgba(148,163,184,0.14)', borderRadius: 14, padding: 18 }}>
           <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700, marginBottom: 6 }}>UKURAN FILE APK SERVER</div>
           <div style={{ fontSize: 24, fontWeight: 800, color: '#10b981', fontFamily: 'JetBrains Mono, monospace' }}>
-            {apkInfo?.fileSizeMb || 24.7} MB
+            {String(apkInfo?.fileSizeMb || '24.7 MB').includes('MB') ? apkInfo.fileSizeMb : `${apkInfo.fileSizeMb} MB`}
           </div>
           <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>
             {apkInfo?.hasHostedApk ? 'Tersimpan permanen di /app/data/releases' : 'Menunggu upload APK'}
