@@ -323,7 +323,7 @@ export default function DashboardPage({ onNavigate }) {
               icon={TrendingUp}
               tone="var(--gold)"
               action={
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
                   <div className="flex rounded-lg bg-slate-900 p-0.5 border border-slate-800 text-[11px] font-mono">
                     <button
                       onClick={() => setMoversTab('ALL')}

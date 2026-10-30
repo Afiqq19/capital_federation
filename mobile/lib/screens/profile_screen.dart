@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/user.dart';
 import '../providers/game_provider.dart';
 import '../services/api_service.dart';
@@ -1277,6 +1278,56 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                   const SizedBox(height: 3),
                   Text(notes, style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 10.5, height: 1.3)),
                 ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              height: 44,
+              child: ElevatedButton.icon(
+                onPressed: () async {
+                  HapticFeedback.mediumImpact();
+                  final uri = Uri.parse('https://capitalfederation.xie.my.id/api/download/apk');
+                  if (await canLaunchUrl(uri)) {
+                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  }
+                },
+                icon: const Icon(Icons.download_rounded, size: 18),
+                label: Text(
+                  '⚡ UNDUH & UPDATE SEKARANG (v$serverVer)',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFF59E0B),
+                  foregroundColor: const Color(0xFF1E1502),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  elevation: 4,
+                ),
+              ),
+            ),
+          ] else ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              height: 38,
+              child: OutlinedButton.icon(
+                onPressed: () async {
+                  HapticFeedback.lightImpact();
+                  final uri = Uri.parse('https://capitalfederation.xie.my.id');
+                  if (await canLaunchUrl(uri)) {
+                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  }
+                },
+                icon: const Icon(Icons.language_rounded, size: 16),
+                label: const Text(
+                  'KUNJUNGI WEBSITE RESMI BURSA',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF38BDF8),
+                  side: const BorderSide(color: Color(0xFF1E293B)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
               ),
             ),
           ],

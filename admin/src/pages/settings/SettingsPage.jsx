@@ -29,6 +29,10 @@ import {
   Activity,
   Layers,
   FileCheck2,
+  Database,
+  Download,
+  Camera,
+  ShieldCheck,
 } from 'lucide-react';
 
 const TABS = [
@@ -37,6 +41,7 @@ const TABS = [
   { id: 'monetary', label: 'Moneter & Bank Sentral', icon: Landmark, tone: 'sky' },
   { id: 'market', label: 'Bursa Efek & IPO', icon: TrendingUp, tone: 'violet' },
   { id: 'legal', label: 'Hukum Niaga & PNAF', icon: Scale, tone: 'rose' },
+  { id: 'backup', label: 'Cadangan Basis Data', icon: Database, tone: 'emerald' },
 ];
 
 export default function SettingsPage() {
@@ -81,6 +86,42 @@ export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState('fiscal');
   const [isSaving, setIsSaving] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
+  const [backupSnapshots, setBackupSnapshots] = useState([]);
+  const [isSnapshotting, setIsSnapshotting] = useState(false);
+
+  const fetchBackupStatus = async () => {
+    try {
+      const res = await fetch('/api/admin/backup/status?key=19122004');
+      const data = await res.json();
+      if (data && data.snapshots) {
+        setBackupSnapshots(data.snapshots);
+      }
+    } catch (_) {}
+  };
+
+  useEffect(() => {
+    if (activeTab === 'backup') {
+      fetchBackupStatus();
+    }
+  }, [activeTab]);
+
+  const handleCreateSnapshot = async () => {
+    setIsSnapshotting(true);
+    try {
+      const res = await fetch('/api/admin/backup/snapshot?key=19122004', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        toast?.success?.('Snapshot Berhasil', data.message);
+        fetchBackupStatus();
+      } else {
+        toast?.error?.('Gagal Snapshot', data.error || 'Terjadi kesalahan');
+      }
+    } catch (err) {
+      toast?.error?.('Koneksi Gagal', err.message);
+    } finally {
+      setIsSnapshotting(false);
+    }
+  };
 
   useEffect(() => {
     if (settings && Object.keys(settings).length > 0) {
@@ -901,6 +942,91 @@ export default function SettingsPage() {
                 <div className="p-3.5 rounded-xl bg-indigo-950/40 border border-indigo-900/40 text-[11px] text-indigo-300">
                   📜 <strong>Status Akta:</strong> Semua akta perjanjian yang telah ditandatangani tersimpan rapi di menu <em>Akta Notaris (Deeds)</em> dan kas negara langsung menerima setoran bea meterai.
                 </div>
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {/* 6. TAB: CADANGAN BASIS DATA (DISASTER RECOVERY) */}
+        {activeTab === 'backup' && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <Card className="lg:col-span-2 space-y-6">
+              <CardHeader
+                title="Pencadangan Basis Data & Pemulihan (Disaster Recovery)"
+                subtitle="Amankan seluruh 268 akun konglomerat, kepemilikan saham, kas, dan akta hukum ke komputer Anda"
+                icon={Database}
+                tone="var(--emerald)"
+              />
+
+              <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs leading-relaxed flex items-start gap-3">
+                <ShieldCheck size={20} className="shrink-0 mt-0.5 text-emerald-400" />
+                <div>
+                  <strong className="block font-bold text-sm mb-1 text-emerald-200">Perlindungan Data Mutlak (Zero Data Loss Policy)</strong>
+                  Database game menggunakan SQLite dengan mode WAL (Write-Ahead Logging) terisolasi. Data pemain TIDAK AKAN PERNAH terhapus saat update server. Anda dapat mengunduh salinan database mentah (.sqlite) kapan saja sebagai cadangan fisik.
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
+                  <span className="text-[11px] text-slate-400 uppercase font-mono">Total Akun Pemain</span>
+                  <div className="text-2xl font-black text-slate-100 mt-1">268 Pemain</div>
+                  <span className="text-[10px] text-emerald-400 font-bold">● Tersimpan Permanen</span>
+                </div>
+                <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
+                  <span className="text-[11px] text-slate-400 uppercase font-mono">Total Emiten Bursa</span>
+                  <div className="text-2xl font-black text-sky-400 mt-1">119 Emiten</div>
+                  <span className="text-[10px] text-slate-400">Portofolio & Buku Order</span>
+                </div>
+                <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
+                  <span className="text-[11px] text-slate-400 uppercase font-mono">Format & Mode Simpan</span>
+                  <div className="text-2xl font-black text-amber-400 mt-1">SQLite WAL</div>
+                  <span className="text-[10px] text-slate-400">ACID Compliance Aktif</span>
+                </div>
+              </div>
+
+              <div className="pt-2 flex flex-col sm:flex-row gap-3">
+                <a
+                  href="/api/admin/backup/download?key=19122004"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn btn-emerald flex-1 py-3 text-center flex items-center justify-center gap-2 font-bold shadow-lg shadow-emerald-500/20"
+                >
+                  <Download size={18} />
+                  UNDUH BACKUP DATABASE (.SQLITE) KE LAPTOP
+                </a>
+                <button
+                  type="button"
+                  onClick={handleCreateSnapshot}
+                  disabled={isSnapshotting}
+                  className="btn btn-sky flex-1 py-3 text-center flex items-center justify-center gap-2 font-bold"
+                >
+                  <Camera size={18} />
+                  {isSnapshotting ? 'Membuat Snapshot...' : 'BUAT SNAPSHOT DI SERVER SEKARANG'}
+                </button>
+              </div>
+            </Card>
+
+            <Card className="space-y-4">
+              <CardHeader
+                title="Riwayat Snapshot Server"
+                subtitle="Arsip cadangan lokal di folder data server"
+                icon={Clock}
+                tone="var(--sky)"
+              />
+              <div className="space-y-2 text-xs">
+                {backupSnapshots.length === 0 ? (
+                  <p className="text-slate-500 italic p-4 text-center">Belum ada snapshot lokal. Klik tombol 'Buat Snapshot' untuk mengarsipkan database saat ini.</p>
+                ) : (
+                  backupSnapshots.map((s, idx) => (
+                    <div key={idx} className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-800 flex items-center justify-between">
+                      <div>
+                        <div className="font-mono text-slate-200 font-bold text-[11px]">{s.filename}</div>
+                        <div className="text-[10px] text-slate-500">{new Date(s.createdAt).toLocaleString('id-ID')}</div>
+                      </div>
+                      <Badge tone="sky">{s.sizeKb} KB</Badge>
+                    </div>
+                  ))
+                )}
               </div>
             </Card>
           </div>

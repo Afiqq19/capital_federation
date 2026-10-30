@@ -95,8 +95,8 @@ export default function UsersPage() {
           icon={Users}
           tone="var(--violet)"
           action={
-            <div className="flex items-center gap-2">
-              <div className="w-56">
+            <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto">
+              <div className="w-full sm:w-56">
                 <SearchInput
                   value={search}
                   onChange={setSearch}
@@ -107,7 +107,7 @@ export default function UsersPage() {
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="select text-xs py-1.5 px-3 bg-slate-900 border-slate-800 rounded-xl"
+                className="select text-xs py-1.5 px-3 bg-slate-900 border-slate-800 rounded-xl w-full sm:w-auto"
               >
                 <option value="ALL">Semua Akun</option>
                 <option value="ACTIVE">Aktif</option>
