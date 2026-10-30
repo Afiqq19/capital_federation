@@ -5592,15 +5592,16 @@ if (!fs.existsSync(releasesDir)) {
   fs.mkdirSync(releasesDir, { recursive: true });
 }
 const hostedApkPath = path.join(releasesDir, 'Capital-Federation-CFX.apk');
+const bundledPublicApkPath = path.join(__dirname, '../public/downloads/Capital-Federation-CFX.apk');
 const localBuiltApkPath = path.join(__dirname, '../../mobile/build/app/outputs/flutter-apk/app-release.apk');
 
 async function getApkSettingsMap() {
   const defaults = {
-    apk_version: '1.5.0',
-    apk_build_number: '5',
+    apk_version: '1.5.1',
+    apk_build_number: '6',
     apk_min_android: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
-    apk_file_size_mb: '24.7 MB',
-    apk_release_notes: 'Ticker Saham 4-Huruf Resmi (Tanpa Angka), Perbaikan Nama PT, Efek Emas Chat Sultan 9 Naga & VIP, Perbaikan Bookbuilding E-IPO, dan Deteksi Update Otomatis',
+    apk_file_size_mb: '24.8 MB',
+    apk_release_notes: '252 Emiten Tbk. Terkoneksi 1-ke-1 dengan 265 Bot Peringkat, Setoran Pajak Bot ke Kas Negara, Bursa Akuisisi M&A Modern dengan RUPS Persetujuan Pendiri, & Lelang Sitaan Bank Sentral BCF',
     apk_external_url: '',
     apk_download_count: '148',
     apk_sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
@@ -5612,6 +5613,12 @@ async function getApkSettingsMap() {
       if (r.key && r.value !== undefined && r.value !== null) {
         defaults[r.key] = String(r.value);
       }
+    }
+    if (parseInt(defaults.apk_build_number || '0', 10) < 6) {
+      defaults.apk_version = '1.5.1';
+      defaults.apk_build_number = '6';
+      defaults.apk_file_size_mb = '24.8 MB';
+      defaults.apk_release_notes = '252 Emiten Tbk. Terkoneksi 1-ke-1 dengan 265 Bot Peringkat, Setoran Pajak Bot ke Kas Negara, Bursa Akuisisi M&A Modern dengan RUPS Persetujuan Pendiri, & Lelang Sitaan Bank Sentral BCF';
     }
   } catch (_) {}
   return defaults;
@@ -5625,9 +5632,10 @@ async function saveApkSetting(key, value) {
 }
 
 function getActiveApkFilePath() {
-  if (fs.existsSync(hostedApkPath)) return hostedApkPath;
-  if (fs.existsSync(localBuiltApkPath)) return localBuiltApkPath;
-  return null;
+  const candidates = [hostedApkPath, bundledPublicApkPath, localBuiltApkPath].filter((p) => fs.existsSync(p));
+  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
+  return candidates[0];
 }
 
 // Endpoint Info Versi Sistem (Mobile APK, Web Admin, Website Download & Backend Server)
