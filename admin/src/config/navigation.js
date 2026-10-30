@@ -13,6 +13,7 @@ import {
   Coins,
   Flame,
   Award,
+  Smartphone,
 } from 'lucide-react';
 
 /**
@@ -25,6 +26,7 @@ export const NAV_GROUPS = [
     items: [
       { id: 'dashboard', label: 'Ikhtisar Pasar', title: 'Ikhtisar Moneter & Pasar', subtitle: 'Ringkasan kondisi bursa, bank sentral, dan konglomerat', icon: Activity, accent: '#f5b942' },
       { id: 'macro', label: 'Krisis Makro & Berita', title: 'Krisis Makro & Siaran Berita', subtitle: 'Picu guncangan ekonomi & siarkan berita ke seluruh pemain', icon: Zap, accent: '#fbbf24' },
+      { id: 'apk', label: 'Manajemen Rilis APK', title: 'Manajemen Rilis APK & Portal Download', subtitle: 'Upload file APK terbaru, atur versi update otomatis & pantau unduhan pemain', icon: Smartphone, accent: '#10b981' },
     ],
   },
   {

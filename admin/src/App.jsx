@@ -22,6 +22,10 @@ import LegalConstitutionPage from './pages/legal/LegalConstitutionPage';
 import SovereignBondsPage from './pages/treasury/SovereignBondsPage';
 import SectorSubsidiesPage from './pages/treasury/SectorSubsidiesPage';
 import GovernmentTendersPage from './pages/tenders/GovernmentTendersPage';
+import ApkManagerPage from './pages/apk/ApkManagerPage';
+import PublicDownloadLandingPage from './pages/public/PublicDownloadLandingPage';
+
+const ADMIN_SECRET_KEY = '19122004';
 
 const ROUTE_MAP = {
   dashboard: '/dashboard',
@@ -37,6 +41,7 @@ const ROUTE_MAP = {
   deeds: '/akta',
   users: '/pemain',
   macro: '/krisis-makro',
+  apk: '/rilis-apk',
   legal: '/konstitusi',
   logs: '/transaksi',
   settings: '/pengaturan',
@@ -44,7 +49,7 @@ const ROUTE_MAP = {
 
 function getPageFromPath(pathname) {
   const clean = (pathname || window.location.pathname || '/').toLowerCase().replace(/^\/+|\/+$/g, '');
-  if (!clean || clean === 'dashboard') return 'dashboard';
+  if (!clean || clean === 'dashboard' || clean === 'logincapital') return 'dashboard';
   if (clean === 'banksentral' || clean === 'bank' || clean === 'bank-sentral') return 'bank';
   if (clean === 'kas-negara' || clean === 'treasury' || clean === 'kas') return 'treasury';
   if (clean === 'obligasi' || clean === 'bonds' || clean === 'sbn') return 'bonds';
@@ -57,6 +62,7 @@ function getPageFromPath(pathname) {
   if (clean === 'akta' || clean === 'deeds' || clean === 'notaris') return 'deeds';
   if (clean === 'pemain' || clean === 'users' || clean === 'investor') return 'users';
   if (clean === 'krisis-makro' || clean === 'macro' || clean === 'berita') return 'macro';
+  if (clean === 'rilis-apk' || clean === 'apk' || clean === 'apk-manager') return 'apk';
   if (clean === 'konstitusi' || clean === 'legal') return 'legal';
   if (clean === 'transaksi' || clean === 'logs') return 'logs';
   if (clean === 'pengaturan' || clean === 'settings') return 'settings';
@@ -83,7 +89,8 @@ function AdminContent({ adminUser, onLogout }) {
     // Initial path normalization
     const initialPage = getPageFromPath(window.location.pathname);
     const normalizedPath = ROUTE_MAP[initialPage] || '/dashboard';
-    if (window.location.pathname === '/' || !window.location.pathname) {
+    const cleanPath = (window.location.pathname || '/').toLowerCase().replace(/^\/+|\/+$/g, '');
+    if (cleanPath === 'logincapital' || !cleanPath) {
       window.history.replaceState({ page: initialPage }, '', normalizedPath);
     }
 
@@ -118,6 +125,8 @@ function AdminContent({ adminUser, onLogout }) {
         return <UsersPage />;
       case 'macro':
         return <MacroEventsPage />;
+      case 'apk':
+        return <ApkManagerPage />;
       case 'legal':
         return <LegalConstitutionPage />;
       case 'logs':
@@ -141,6 +150,39 @@ function AdminContent({ adminUser, onLogout }) {
   );
 }
 
+function checkIsAdminPortalUnlocked() {
+  try {
+    const pathname = (window.location.pathname || '/').toLowerCase().replace(/^\/+|\/+$/g, '');
+    const params = new URLSearchParams(window.location.search || '');
+    const key = params.get('key');
+
+    // Jika membuka /logincapital?key=19122004, buka kunci sesi portal admin
+    if (pathname === 'logincapital' && key === ADMIN_SECRET_KEY) {
+      sessionStorage.setItem('cf_admin_portal_unlocked', '1');
+      return true;
+    }
+
+    // Jika sedang di halaman root '/' atau '/download' atau '?preview=public', selalu tampilkan Website Download Publik
+    if (!pathname || pathname === 'download' || params.get('preview') === 'public') {
+      return false;
+    }
+
+    // Jika sudah unlock di sesi ini atau sudah memiliki token login admin dan mengakses route admin (/dashboard, dll)
+    if (sessionStorage.getItem('cf_admin_portal_unlocked') === '1') {
+      return true;
+    }
+
+    const hasToken = Boolean(localStorage.getItem('cf_admin_token') || sessionStorage.getItem('cf_admin_token'));
+    if (hasToken && pathname !== 'logincapital') {
+      return true;
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 export default function App() {
   const [adminUser, setAdminUser] = useState(() => {
     try {
@@ -154,6 +196,16 @@ export default function App() {
     }
     return null;
   });
+
+  const [portalUnlocked, setPortalUnlocked] = useState(() => checkIsAdminPortalUnlocked());
+
+  useEffect(() => {
+    const onUrlChange = () => {
+      setPortalUnlocked(checkIsAdminPortalUnlocked());
+    };
+    window.addEventListener('popstate', onUrlChange);
+    return () => window.removeEventListener('popstate', onUrlChange);
+  }, []);
 
   useEffect(() => {
     const token = localStorage.getItem('cf_admin_token') || sessionStorage.getItem('cf_admin_token');
@@ -179,10 +231,13 @@ export default function App() {
   const handleLoginSuccess = ({ token, user, remember }) => {
     localStorage.setItem('cf_admin_token', token);
     localStorage.setItem('cf_admin_user', JSON.stringify(user));
+    sessionStorage.setItem('cf_admin_portal_unlocked', '1');
     if (!remember) {
       sessionStorage.setItem('cf_admin_token', token);
       sessionStorage.setItem('cf_admin_user', JSON.stringify(user));
     }
+    window.history.pushState({ page: 'dashboard' }, '', '/dashboard');
+    setPortalUnlocked(true);
     setAdminUser(user);
   };
 
@@ -191,8 +246,20 @@ export default function App() {
     localStorage.removeItem('cf_admin_user');
     sessionStorage.removeItem('cf_admin_token');
     sessionStorage.removeItem('cf_admin_user');
+    sessionStorage.removeItem('cf_admin_portal_unlocked');
+    window.history.pushState({}, '', '/');
+    setPortalUnlocked(false);
     setAdminUser(null);
   };
+
+  // Tampilkan Website Resmi Download APK jika pengunjung mengakses halaman utama '/' atau belum membuka kunci /logincapital?key=19122004
+  if (!portalUnlocked) {
+    return (
+      <ErrorBoundary>
+        <PublicDownloadLandingPage />
+      </ErrorBoundary>
+    );
+  }
 
   return (
     <ErrorBoundary>

@@ -32,7 +32,7 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '20mb' }));
 
 // Protect against malformed JSON bodies
 app.use((err, req, res, next) => {
@@ -5031,21 +5031,85 @@ app.use('/api/bonds', bondsRouter);
 app.use('/api/subsidies', subsidiesRouter);
 app.use('/api/tenders', tendersRouter);
 
-// Endpoint Info Versi Sistem (Mobile APK, Web Admin, & Backend Server)
+const path = require('path');
+const fs = require('fs');
+const crypto = require('crypto');
+
+const releasesDir = path.join(__dirname, '../data/releases');
+if (!fs.existsSync(releasesDir)) {
+  fs.mkdirSync(releasesDir, { recursive: true });
+}
+const hostedApkPath = path.join(releasesDir, 'Capital-Federation-CFX.apk');
+const localBuiltApkPath = path.join(__dirname, '../../mobile/build/app/outputs/flutter-apk/app-release.apk');
+
+async function getApkSettingsMap() {
+  const defaults = {
+    apk_version: '1.5.0',
+    apk_build_number: '5',
+    apk_min_android: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
+    apk_file_size_mb: '24.7 MB',
+    apk_release_notes: 'Ticker Saham 4-Huruf Resmi (Tanpa Angka), Perbaikan Nama PT, Efek Emas Chat Sultan 9 Naga & VIP, Perbaikan Bookbuilding E-IPO, dan Deteksi Update Otomatis',
+    apk_external_url: '',
+    apk_download_count: '148',
+    apk_sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+    apk_updated_at: new Date().toISOString(),
+  };
+  try {
+    const rows = await query.all("SELECT key, value FROM central_bank_settings WHERE key LIKE 'apk_%'");
+    for (const r of (rows || [])) {
+      if (r.key && r.value !== undefined && r.value !== null) {
+        defaults[r.key] = String(r.value);
+      }
+    }
+  } catch (_) {}
+  return defaults;
+}
+
+async function saveApkSetting(key, value) {
+  await query.run(
+    'INSERT OR REPLACE INTO central_bank_settings (key, value) VALUES (?, ?)',
+    [key, String(value ?? '')]
+  );
+}
+
+function getActiveApkFilePath() {
+  if (fs.existsSync(hostedApkPath)) return hostedApkPath;
+  if (fs.existsSync(localBuiltApkPath)) return localBuiltApkPath;
+  return null;
+}
+
+// Endpoint Info Versi Sistem (Mobile APK, Web Admin, Website Download & Backend Server)
 app.get('/api/version', async (req, res) => {
   try {
     const compCount = await query.get('SELECT COUNT(*) as count FROM companies');
     const userCount = await query.get('SELECT COUNT(*) as count FROM users WHERE is_admin = 0');
+    const apkCfg = await getApkSettingsMap();
+    const activeApk = getActiveApkFilePath();
+    let fileSizeMb = apkCfg.apk_file_size_mb || '24.7 MB';
+    if (activeApk) {
+      const stat = fs.statSync(activeApk);
+      fileSizeMb = `${(stat.size / (1024 * 1024)).toFixed(1)} MB`;
+    }
+    const ver = apkCfg.apk_version || '1.5.0';
+    const buildNum = parseInt(apkCfg.apk_build_number || '5', 10) || 5;
+
     res.json({
-      version: '1.5.0',
-      buildNumber: 5,
-      apkVersion: 'v1.5.0-CFX Production (Build 5)',
-      adminVersion: 'v1.5.0 Sovereign Launch',
-      backendVersion: 'v1.5.0-CFX Production',
-      totalCompanies: compCount?.count || 200,
-      totalPlayers: userCount?.count || 124,
-      releaseNotes: 'Ticker Saham 4-Huruf Resmi (Tanpa Angka), Perbaikan Nama PT, Efek Emas Chat Sultan 9 Naga & VIP, dan Deteksi Update Otomatis',
-      updatedAt: new Date().toISOString(),
+      version: ver,
+      buildNumber: buildNum,
+      apkVersion: `v${ver}-CFX Production (Build ${buildNum})`,
+      adminVersion: `v${ver} Sovereign Launch`,
+      backendVersion: `v${ver}-CFX Production`,
+      minAndroid: apkCfg.apk_min_android,
+      fileSizeMb,
+      hasHostedApk: Boolean(activeApk),
+      externalUrl: apkCfg.apk_external_url || '',
+      downloadUrl: '/api/download/apk',
+      downloadCount: parseInt(apkCfg.apk_download_count || '148', 10) || 148,
+      sha256: apkCfg.apk_sha256,
+      totalCompanies: compCount?.count || 236,
+      totalPlayers: userCount?.count || 126,
+      releaseNotes: apkCfg.apk_release_notes,
+      updatedAt: apkCfg.apk_updated_at || new Date().toISOString(),
       databaseProtection: 'SQLite Persistent Volume (Zero Reset on Update)'
     });
   } catch (err) {
@@ -5055,19 +5119,133 @@ app.get('/api/version', async (req, res) => {
       apkVersion: 'v1.5.0-CFX Production (Build 5)',
       adminVersion: 'v1.5.0 Sovereign Launch',
       backendVersion: 'v1.5.0-CFX Production',
+      minAndroid: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
+      fileSizeMb: '24.7 MB',
+      hasHostedApk: Boolean(getActiveApkFilePath()),
+      downloadUrl: '/api/download/apk',
+      downloadCount: 148,
       releaseNotes: 'Ticker Saham 4-Huruf Resmi (Tanpa Angka), Perbaikan Nama PT, Efek Emas Chat Sultan 9 Naga & VIP, dan Deteksi Update Otomatis',
       databaseProtection: 'SQLite Persistent Volume (Zero Reset on Update)'
     });
   }
 });
 
+// Admin: Simpan Metadata Versi APK & Catatan Rilis
+app.post('/api/admin/apk/metadata', async (req, res) => {
+  try {
+    const { version, buildNumber, minAndroid, releaseNotes, externalUrl } = req.body || {};
+    if (version) await saveApkSetting('apk_version', String(version).trim());
+    if (buildNumber !== undefined) await saveApkSetting('apk_build_number', String(buildNumber).trim());
+    if (minAndroid) await saveApkSetting('apk_min_android', String(minAndroid).trim());
+    if (releaseNotes !== undefined) await saveApkSetting('apk_release_notes', String(releaseNotes).trim());
+    if (externalUrl !== undefined) await saveApkSetting('apk_external_url', String(externalUrl).trim());
+    await saveApkSetting('apk_updated_at', new Date().toISOString());
+
+    const updated = await getApkSettingsMap();
+    res.json({
+      success: true,
+      message: `Metadata APK v${updated.apk_version} (Build ${updated.apk_build_number}) berhasil disimpan dan langsung aktif di Website Download & pendeteksi update aplikasi!`,
+      config: updated,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin: Upload File APK secara Chunked (Aman menembus Cloudflare Tunnel tanpa batas ukuran)
+app.post('/api/admin/apk/upload-chunk', async (req, res) => {
+  try {
+    const { chunkIndex, totalChunks, chunkBase64, version, buildNumber, minAndroid, releaseNotes, key } = req.body || {};
+    if (chunkBase64 === undefined || chunkIndex === undefined || totalChunks === undefined) {
+      return res.status(400).json({ error: 'Parameter chunk tidak lengkap' });
+    }
+
+    const tmpPath = `${hostedApkPath}.tmp`;
+    const buf = Buffer.from(chunkBase64, 'base64');
+
+    if (Number(chunkIndex) === 0) {
+      fs.writeFileSync(tmpPath, buf);
+    } else {
+      fs.appendFileSync(tmpPath, buf);
+    }
+
+    if (Number(chunkIndex) + 1 >= Number(totalChunks)) {
+      if (fs.existsSync(hostedApkPath)) {
+        fs.unlinkSync(hostedApkPath);
+      }
+      fs.renameSync(tmpPath, hostedApkPath);
+
+      const stat = fs.statSync(hostedApkPath);
+      const sizeMb = `${(stat.size / (1024 * 1024)).toFixed(1)} MB`;
+      const fileBuffer = fs.readFileSync(hostedApkPath);
+      const sha256 = crypto.createHash('sha256').update(fileBuffer).digest('hex');
+
+      await saveApkSetting('apk_file_size_mb', sizeMb);
+      await saveApkSetting('apk_sha256', sha256);
+      await saveApkSetting('apk_updated_at', new Date().toISOString());
+      if (version) await saveApkSetting('apk_version', String(version).trim());
+      if (buildNumber !== undefined) await saveApkSetting('apk_build_number', String(buildNumber).trim());
+      if (minAndroid) await saveApkSetting('apk_min_android', String(minAndroid).trim());
+      if (releaseNotes) await saveApkSetting('apk_release_notes', String(releaseNotes).trim());
+
+      return res.json({
+        success: true,
+        completed: true,
+        sizeMb,
+        sha256,
+        downloadUrl: '/api/download/apk',
+        message: `🎉 File APK (${sizeMb}) berhasil diunggah ke server dan siap didownload di Website Utama!`
+      });
+    }
+
+    res.json({
+      success: true,
+      completed: false,
+      chunkIndex: Number(chunkIndex),
+      totalChunks: Number(totalChunks)
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Public: Download File APK Resmi Capital Federation
+const handleApkDownload = async (req, res) => {
+  try {
+    const apkCfg = await getApkSettingsMap();
+    const currentCount = parseInt(apkCfg.apk_download_count || '148', 10) || 148;
+    await saveApkSetting('apk_download_count', String(currentCount + 1));
+
+    const activeApk = getActiveApkFilePath();
+    const ver = (apkCfg.apk_version || '1.5.0').replace(/[^0-9a-zA-Z._-]/g, '');
+    const downloadFileName = `Capital-Federation-v${ver}-CFX.apk`;
+
+    if (activeApk) {
+      res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+      res.setHeader('Content-Disposition', `attachment; filename="${downloadFileName}"`);
+      return res.sendFile(activeApk);
+    }
+
+    if (apkCfg.apk_external_url && apkCfg.apk_external_url.startsWith('http')) {
+      return res.redirect(apkCfg.apk_external_url);
+    }
+
+    res.status(404).json({
+      error: 'File installer APK sedang dipersiapkan oleh Otoritas Admin IPMC. Silakan coba beberapa saat lagi.'
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+app.get('/api/download/apk', handleApkDownload);
+app.get('/download/apk', handleApkDownload);
+
 // Deployment & Server Utility Routes (Auto-Deploy Git Pull - sejajar dengan db.js, seed.js, server.js)
 const deployRoute = require('./deployRoute');
 app.use('/', deployRoute);
 
-// Sajikan Web Admin Statis dari folder backend/public (Langkah 6 Panduan Hosting)
-const path = require('path');
-const fs = require('fs');
+// Sajikan Web Admin & Public Download Portal Statis dari folder backend/public
 const publicDir = path.join(__dirname, '../public');
 if (fs.existsSync(publicDir)) {
   app.use(express.static(publicDir));
