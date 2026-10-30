@@ -170,7 +170,7 @@ class CompanyModel {
     final ipoStat = json['ipo_status']?.toString() ?? json['ipoStatus']?.toString();
     final bool preIpo = listStatus == 'PRE_IPO' || json['status'] == 'PRE_IPO' || json['is_pre_ipo'] == true;
 
-    final base = (json['base_price'] ?? json['basePrice'] ?? json['current_price'] ?? 0.0).toDouble();
+    final base = (json['prev_close'] ?? json['prevClose'] ?? json['base_price'] ?? json['basePrice'] ?? json['current_price'] ?? 0.0).toDouble();
     final curr = preIpo ? base : (json['current_price'] ?? json['currentPrice'] ?? base).toDouble();
     double changePct = 0.0;
     if (preIpo) {

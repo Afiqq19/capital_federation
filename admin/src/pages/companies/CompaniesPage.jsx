@@ -21,6 +21,8 @@ import {
   Landmark,
   User,
   ShieldAlert,
+  Trash2,
+  RefreshCw,
 } from 'lucide-react';
 
 const BOT_STATUSES = [
@@ -43,6 +45,25 @@ export default function CompaniesPage() {
   const [seizeReasonPreset, setSeizeReasonPreset] = useState('Gagal bayar kredit sindikasi BIF & Eksekusi PNAF');
   const [seizeCustomReason, setSeizeCustomReason] = useState('');
   const [submittingSeize, setSubmittingSeize] = useState(false);
+
+  // Modal State: Hapus Perusahaan Permanen
+  const [deleteModalCompany, setDeleteModalCompany] = useState(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleConfirmDeleteCompany = async () => {
+    if (!deleteModalCompany || deleteConfirmText !== 'HAPUS') return;
+    try {
+      setIsDeleting(true);
+      await actions.deleteCompany(deleteModalCompany.id);
+      setDeleteModalCompany(null);
+      setDeleteConfirmText('');
+    } catch (err) {
+      notify?.({ message: 'Gagal menghapus emiten: ' + err.message, tone: 'rose' });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const handleOpenSeize = (company) => {
     setSeizeModalCompany(company);
@@ -153,41 +174,54 @@ export default function CompaniesPage() {
           icon={Building2}
           tone="var(--sky)"
           action={
-            <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
-              <div className="w-full sm:w-56">
-                <SearchInput
-                  value={search}
-                  onChange={setSearch}
-                  placeholder="Cari simbol, nama, konglomerat..."
-                />
-              </div>
-
-              <select
-                value={sectorFilter}
-                onChange={(e) => setSectorFilter(e.target.value)}
-                className="select text-xs py-1.5 px-3 bg-slate-900 border-slate-800 rounded-xl w-full sm:w-auto"
-              >
-                <option value="ALL">Semua Sektor</option>
-                {sectors.map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
-
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="select text-xs py-1.5 px-3 bg-slate-900 border-slate-800 rounded-xl"
-              >
-                <option value="ALL">Semua Status Pengawasan</option>
-                <option value="NORMAL">Normal</option>
-                <option value="UMA">Radar UMA</option>
-                <option value="SUSPENDED">Disuspensi</option>
-                <option value="SEIZED">Disita Negara (PNAF)</option>
-                <option value="BUMF">BUMF Federasi</option>
-              </select>
-            </div>
+            <Button
+              variant="amber"
+              size="xs"
+              icon={RefreshCw}
+              onClick={() => actions.rolloverMarket()}
+              title="Buka Sesi Perdagangan Baru (Reset Batas ARA/ARB)"
+            >
+              Buka Sesi Baru Bursa
+            </Button>
           }
         />
+
+        {/* Responsive Search & Filter Controls (Mobile-Friendly, Never Overlaps!) */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-4 pb-2 border-b border-slate-800/60">
+          <div className="w-full sm:max-w-xs">
+            <SearchInput
+              value={search}
+              onChange={setSearch}
+              placeholder="Cari simbol, nama, konglomerat..."
+            />
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap w-full sm:w-auto">
+            <select
+              value={sectorFilter}
+              onChange={(e) => setSectorFilter(e.target.value)}
+              className="select text-xs py-2 px-3 bg-slate-900 border-slate-800 rounded-xl w-full sm:w-auto text-slate-200"
+            >
+              <option value="ALL">Semua Sektor ({sectors.length})</option>
+              {sectors.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="select text-xs py-2 px-3 bg-slate-900 border-slate-800 rounded-xl w-full sm:w-auto text-slate-200"
+            >
+              <option value="ALL">Semua Status Pengawasan</option>
+              <option value="NORMAL">Normal</option>
+              <option value="UMA">Radar UMA</option>
+              <option value="SUSPENDED">Disuspensi</option>
+              <option value="SEIZED">Disita Negara (PNAF)</option>
+              <option value="BUMF">BUMF Federasi</option>
+            </select>
+          </div>
+        </div>
 
         {filtered.length === 0 ? (
           <EmptyState
@@ -375,6 +409,20 @@ export default function CompaniesPage() {
                               Beri UMA
                             </Button>
                           )}
+
+                          {/* Hapus Perusahaan Permanen */}
+                          <Button
+                            variant="rose"
+                            size="xs"
+                            icon={Trash2}
+                            onClick={() => {
+                              setDeleteModalCompany(c);
+                              setDeleteConfirmText('');
+                            }}
+                            title="Hapus perusahaan dan seluruh saham investor permanen"
+                          >
+                            Hapus PT
+                          </Button>
                         </div>
                       </td>
                     </tr>
@@ -454,6 +502,68 @@ export default function CompaniesPage() {
             </div>
           </form>
         )}
+      </Modal>
+
+      {/* Modal: Hapus Perusahaan Permanen (Wajib Ketik HAPUS) */}
+      <Modal
+        open={Boolean(deleteModalCompany)}
+        onClose={() => {
+          setDeleteModalCompany(null);
+          setDeleteConfirmText('');
+        }}
+        title="⚠️ Konfirmasi Hapus Perusahaan Permanen"
+      >
+        <div className="space-y-4 text-xs text-slate-300">
+          <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 space-y-1.5">
+            <p className="font-bold text-sm text-rose-200">
+              Tindakan ini tidak dapat dibatalkan!
+            </p>
+            <p>
+              Menghapus emiten <strong className="text-white font-mono">{deleteModalCompany?.symbol} ({deleteModalCompany?.name})</strong> akan:
+            </p>
+            <ul className="list-disc list-inside space-y-1 text-slate-300">
+              <li>Menghapus seluruh saham yang dipegang investor/pemain dari portofolio bursa.</li>
+              <li>Membatalkan seluruh antrean limit order bursa yang aktif.</li>
+              <li>Menghapus seluruh riwayat pergerakan harga dan catatan IPO.</li>
+              <li>Jika emiten ini PT Utama pemain, entitas akan dialihkan ke anak perusahaan atau di-reset.</li>
+            </ul>
+          </div>
+
+          <div className="space-y-2">
+            <label className="block text-slate-400">
+              Ketik kata <strong className="text-rose-400 font-mono">HAPUS</strong> untuk mengonfirmasi:
+            </label>
+            <input
+              type="text"
+              value={deleteConfirmText}
+              onChange={(e) => setDeleteConfirmText(e.target.value)}
+              placeholder="Ketik HAPUS di sini..."
+              className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-slate-100 font-mono text-sm focus:outline-none focus:border-rose-500"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setDeleteModalCompany(null);
+                setDeleteConfirmText('');
+              }}
+            >
+              Batal
+            </Button>
+            <Button
+              variant="rose"
+              size="sm"
+              icon={Trash2}
+              disabled={deleteConfirmText !== 'HAPUS' || isDeleting}
+              onClick={handleConfirmDeleteCompany}
+            >
+              {isDeleting ? 'Menghapus...' : 'Ya, Hapus Perusahaan'}
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

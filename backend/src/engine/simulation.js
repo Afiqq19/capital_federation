@@ -330,7 +330,9 @@ class MarketSimulationEngine {
 
         // Auto Rejection Limits: -35% (ARB Simetris) to +25% / +35% (ARA)
         const isLockedAra = comp.status === 'ARA';
-        const normalAraPct = refPrice <= 200 ? 0.35 : (refPrice <= 5000 ? 0.25 : 0.20);
+        // Plafon ARA: Saham berfundamental SEHAT / skor tinggi diberi ruang apresiasi hingga +25% s/d +35%
+        const isHealthy = comp.status === 'HEALTHY' || (comp.fundamental_score && comp.fundamental_score >= 75);
+        const normalAraPct = refPrice <= 200 ? 0.35 : (refPrice <= 5000 ? 0.25 : (isHealthy ? 0.25 : 0.20));
         const araLimitPct = isLockedAra ? (refPrice <= 200 ? 0.70 : (refPrice <= 5000 ? 0.50 : 0.40)) : normalAraPct;
         
         const minAllowed = Math.max(50, Math.round(refPrice * 0.65)); // ARB Simetris -35%
@@ -587,6 +589,12 @@ class MarketSimulationEngine {
         await this.simulateIpoAbsorption();
       }
 
+      // Auto Session Rollover: Setiap 900 ticks (~1 jam) pergantian sesi perdagangan bursa
+      // Harga penutupan sesi menjadi prev_close acuan baru, membuka ruang ARA/ARB baru bagi seluruh saham!
+      if (this.tickCount % 900 === 0) {
+        await this.rolloverDailySession();
+      }
+
     } catch (err) {
       console.error('Market Simulation Tick Error:', err);
     }
@@ -810,6 +818,58 @@ class MarketSimulationEngine {
       }
     } catch (err) {
       console.error('Error simulating IPO absorption:', err);
+    }
+  }
+
+  // Rollover Sesi Baru Perdagangan Bursa Efek (Daily Session Rollover)
+  // Menyegarkan harga penutupan kemarin (prev_close) ke harga saat ini, membuka ruang ARA/ARB baru
+  async rolloverDailySession(manualTrigger = false) {
+    try {
+      console.log('🔄 [Bursa] Menjalankan Rollover Sesi Baru Perdagangan Bursa...');
+      const companies = await query.all('SELECT id, name, symbol, current_price, status FROM companies WHERE status != "SUSPENDED"');
+      for (const comp of companies) {
+        const newRef = comp.current_price > 0 ? comp.current_price : 1000;
+        await query.run(
+          `UPDATE companies 
+           SET prev_close = ?, 
+               daily_high = ?, 
+               daily_low = ?, 
+               status = CASE WHEN status IN ('ARA', 'ARB') THEN 'HEALTHY' ELSE status END 
+           WHERE id = ?`,
+          [newRef, newRef, newRef, comp.id]
+        );
+      }
+      
+      // Update IPMC composite base
+      if (this.ipmcPoints > 0) {
+        this.ipmcBase = this.ipmcPoints;
+        this.ipmcOpen = this.ipmcPoints;
+        this.ipmcHigh = this.ipmcPoints;
+        this.ipmcLow = this.ipmcPoints;
+        this.ipmcChangePts = 0;
+        this.ipmcChangePct = 0;
+      }
+
+      const newsItem = {
+        id: uuidv4(),
+        title: '🔔 LONCENG BURSA: Sesi Perdagangan Baru Resmi Dibuka!',
+        content: `Otoritas Moneter & Bursa Efek Federasi resmi membuka sesi perdagangan baru. Seluruh batas Auto Rejection (ARA/ARB) telah disetel ulang dengan acuan harga penutupan sesi sebelumnya. Saham berfundamental unggul memiliki ruang apresiasi baru!`,
+        affected_sector: 'ALL',
+        sentiment: 'BULLISH',
+        published_at: new Date().toISOString()
+      };
+      await query.run(
+        'INSERT INTO news (id, title, content, affected_sector, sentiment, published_at) VALUES (?, ?, ?, ?, ?, ?)',
+        [newsItem.id, newsItem.title, newsItem.content, newsItem.affected_sector, newsItem.sentiment, newsItem.published_at]
+      );
+      this.io.emit('market:news_broadcast', newsItem);
+      this.io.emit('market:session_rollover', { message: 'Sesi baru bursa telah dibuka!', timestamp: new Date().toISOString() });
+      this.io.emit('market:overview', this.getMarketOverview());
+      console.log(`✅ [Bursa] Rollover Sesi Baru Selesai untuk ${companies.length} emiten.`);
+      return { success: true, count: companies.length };
+    } catch (err) {
+      console.error('❌ [Bursa] Gagal rollover sesi baru:', err);
+      return { success: false, error: err.message };
     }
   }
 

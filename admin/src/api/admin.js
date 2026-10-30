@@ -26,6 +26,8 @@ export const adminApi = {
   clearUma: (companyId) => request('/api/admin/uma/clear', { method: 'POST', body: { companyId } }),
   suspend: (companyId, until, reason) => request('/api/admin/suspension/apply', { method: 'POST', body: { companyId, until, reason } }),
   liftSuspension: (companyId) => request('/api/admin/suspension/lift', { method: 'POST', body: { companyId } }),
+  rolloverMarket: () => request('/api/admin/market/rollover', { method: 'POST' }),
+  deleteCompany: (companyId) => request(`/api/admin/companies/${companyId}`, { method: 'DELETE' }),
 
   // ---- Pemain ----
   toggleBan: (userId) => request(`/api/admin/users/${userId}/ban`, { method: 'POST' }),

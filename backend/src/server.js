@@ -1067,21 +1067,64 @@ async function getCompanyShareholders(companyId, ownerUser, compData) {
   if (rows && rows.length > 0) {
     const isPrimary = (companyId === 'primary' || compData?.owner_id === ownerUser?.id);
     const founderSold = compData?.founder_shares_sold || ownerUser?.founder_shares_sold || 0;
+    const isIpoComp = compData?.is_ipo === 1 || ownerUser?.is_ipo === 1 || (compData?.name && /\bTbk\.?\b/i.test(compData.name));
+    const totalShares = compData?.total_shares || 10000000;
     const expectedFounderPct = isPrimary
-      ? Math.max(0, 100.0 - ((compData?.is_ipo || ownerUser?.is_ipo) ? (30.0 + founderSold) : founderSold))
+      ? Math.max(0, 100.0 - (isIpoComp ? (30.0 + founderSold) : founderSold))
       : (compData?.ownership_pct || 100.0);
 
+    let pubRow = rows.find(r => r.holder_type === 'PUBLIC');
     const founderRow = rows.find(r => r.holder_type === 'FOUNDER' || (ownerUser && r.user_id === ownerUser.id));
+
+    // Jika emiten berstatus Tbk./IPO, pastikan porsi Publik Ritel selalu ada dan tidak 0!
+    if (isIpoComp && (!pubRow || pubRow.shares_count <= 0 || pubRow.percentage <= 0)) {
+      const floatPct = compData?.circulating_shares > 0 
+        ? Math.max(10.0, parseFloat(((compData.circulating_shares / totalShares) * 100.0).toFixed(1)))
+        : 20.0;
+      const publicShares = Math.round(totalShares * (floatPct / 100.0));
+
+      if (!pubRow) {
+        const newPubId = uuidv4();
+        pubRow = {
+          id: newPubId,
+          company_id: companyId,
+          holder_name: 'Publik Ritel (Bursa Efek)',
+          holder_type: 'PUBLIC',
+          shares_count: publicShares,
+          percentage: floatPct,
+          user_id: null
+        };
+        rows.push(pubRow);
+        await query.run(
+          'INSERT INTO company_shareholders (id, company_id, holder_name, holder_type, shares_count, percentage) VALUES (?, ?, ?, ?, ?, ?)',
+          [newPubId, companyId, pubRow.holder_name, pubRow.holder_type, pubRow.shares_count, pubRow.percentage]
+        );
+      } else {
+        pubRow.shares_count = publicShares;
+        pubRow.percentage = floatPct;
+        await query.run('UPDATE company_shareholders SET shares_count = ?, percentage = ? WHERE id = ?', [pubRow.shares_count, pubRow.percentage, pubRow.id]);
+      }
+
+      if (founderRow && founderRow.percentage > (100.0 - floatPct)) {
+        founderRow.percentage = parseFloat((100.0 - floatPct).toFixed(1));
+        founderRow.shares_count = Math.round(totalShares * (founderRow.percentage / 100.0));
+        await query.run('UPDATE company_shareholders SET percentage = ?, shares_count = ? WHERE id = ?', [founderRow.percentage, founderRow.shares_count, founderRow.id]);
+      }
+
+      try {
+        await query.run('UPDATE companies SET circulating_shares = ? WHERE id = ? AND (circulating_shares IS NULL OR circulating_shares <= 0)', [publicShares, companyId]);
+      } catch (_) {}
+    }
+
     if (founderRow && Math.abs(founderRow.percentage - expectedFounderPct) > 0.05) {
       const diff = parseFloat((founderRow.percentage - expectedFounderPct).toFixed(1));
       founderRow.percentage = parseFloat(expectedFounderPct.toFixed(1));
-      founderRow.shares_count = Math.round((compData?.total_shares || 10000000) * (expectedFounderPct / 100.0));
+      founderRow.shares_count = Math.round(totalShares * (expectedFounderPct / 100.0));
       await query.run('UPDATE company_shareholders SET percentage = ?, shares_count = ? WHERE id = ?', [founderRow.percentage, founderRow.shares_count, founderRow.id]);
 
-      const pubRow = rows.find(r => r.holder_type === 'PUBLIC');
       if (pubRow) {
         pubRow.percentage = parseFloat((pubRow.percentage + diff).toFixed(1));
-        pubRow.shares_count = Math.round((compData?.total_shares || 10000000) * (pubRow.percentage / 100.0));
+        pubRow.shares_count = Math.round(totalShares * (pubRow.percentage / 100.0));
         await query.run('UPDATE company_shareholders SET percentage = ?, shares_count = ? WHERE id = ?', [pubRow.percentage, pubRow.shares_count, pubRow.id]);
       }
     }
@@ -5326,7 +5369,7 @@ app.get('/api/admin/users', async (req, res) => {
       delete u.password_hash;
 
       // 1. Perusahaan-perusahaan yang dimiliki (PT Utama & Anak Perusahaan / Hasil Akuisisi)
-      const companiesOwned = await query.all(
+      let companiesOwned = await query.all(
         `SELECT id, symbol, name, sector, is_ipo, status, current_price, company_balance_ib, total_shares, circulating_shares,
                 is_acquired, founder_name, founded_at
          FROM companies 
@@ -5334,6 +5377,47 @@ app.get('/api/admin/users', async (req, res) => {
          ORDER BY current_price * total_shares DESC`,
         [u.id]
       );
+
+      // Sinkronisasi & Penandaan Eksplisit: PT Utama vs Anak Usaha
+      if (u.has_pt && (!companiesOwned || companiesOwned.length === 0)) {
+        const cleanPtName = formatCorporateName(u.pt_name || `${u.username} Maju`, u.is_ipo === 1);
+        companiesOwned = [{
+          id: 'primary-' + u.id,
+          symbol: u.pt_symbol || 'PT',
+          name: cleanPtName,
+          sector: u.sector || 'Strategis',
+          is_ipo: u.is_ipo === 1,
+          status: 'HEALTHY',
+          current_price: 1000.0,
+          company_balance_ib: u.company_balance_ib || 0,
+          total_shares: 10000000,
+          circulating_shares: u.is_ipo === 1 ? 2000000 : 0,
+          is_acquired: 0,
+          is_primary: true,
+          entity_type: 'PT_UTAMA',
+          founder_name: `${u.username} (Pendiri Utama)`
+        }];
+      } else if (companiesOwned && companiesOwned.length > 0) {
+        let foundPrimary = false;
+        companiesOwned = companiesOwned.map((comp, idx) => {
+          const cleanUserPt = (u.pt_name || '').replace(/^PT\.?\s*/i, '').replace(/\s+Tbk\.?$/i, '').trim().toLowerCase();
+          const cleanCompName = (comp.name || '').replace(/^PT\.?\s*/i, '').replace(/\s+Tbk\.?$/i, '').trim().toLowerCase();
+          const isMatch = cleanUserPt && cleanCompName.includes(cleanUserPt);
+          const isPrimary = !comp.is_acquired && (isMatch || (!foundPrimary && idx === 0));
+          if (isPrimary) foundPrimary = true;
+          return {
+            ...comp,
+            is_primary: isPrimary,
+            entity_type: isPrimary ? 'PT_UTAMA' : (comp.is_acquired ? 'AKUISISI' : 'ANAK_PERUSAHAAN')
+          };
+        });
+
+        // Sinkronkan u.pt_name dengan PT Utama agar data selalu konsisten
+        const primaryComp = companiesOwned.find(c => c.is_primary);
+        if (primaryComp && primaryComp.name) {
+          u.pt_name = primaryComp.name;
+        }
+      }
 
       // 2. Rincian Aset Portofolio Saham yang Dimiliki di Bursa
       const stockPortfolios = await query.all(
@@ -5473,6 +5557,99 @@ app.get('/api/admin/companies', async (req, res) => {
     `);
     res.json(list);
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin: Buka Sesi Baru Bursa (Rollover Sesi Harian Bursa)
+app.post('/api/admin/market/rollover', async (req, res) => {
+  try {
+    const result = await simulationEngine.rolloverDailySession(true);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin: Hapus Perusahaan Permanen (Cascading Delete Seluruh Portofolio, Saham Pemain, & Order)
+app.delete('/api/admin/companies/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const comp = await query.get('SELECT * FROM companies WHERE id = ?', [id]);
+    if (!comp) {
+      return res.status(404).json({ error: 'Perusahaan / Emiten tidak ditemukan' });
+    }
+
+    console.log(`🗑️ [Admin] Menghapus perusahaan ${comp.name} (${comp.symbol}) secara cascading...`);
+
+    // 1. Hapus kepemilikan di portofolio pemain bursa
+    await query.run('DELETE FROM portfolios WHERE company_id = ?', [id]);
+
+    // 2. Hapus antrean limit order bursa
+    await query.run('DELETE FROM market_orders WHERE company_id = ?', [id]);
+
+    // 3. Hapus histori harga candle
+    await query.run('DELETE FROM price_history WHERE company_id = ?', [id]);
+
+    // 4. Hapus struktur pemegang saham (cap table)
+    await query.run('DELETE FROM company_shareholders WHERE company_id = ?', [id]);
+
+    // 5. Hapus pencatatan IPO dan pesanan E-IPO
+    await query.run('DELETE FROM ipo_offerings WHERE company_id = ?', [id]);
+    await query.run('DELETE FROM ipo_orders WHERE company_id = ?', [id]);
+
+    // 6. Hapus lelang tender proyek, private deals & proposal akuisisi
+    await query.run('DELETE FROM tender_bids WHERE company_id = ?', [id]);
+    await query.run('DELETE FROM private_deals WHERE company_id = ?', [id]);
+    await query.run('DELETE FROM deal_deeds WHERE company_id = ?', [id]);
+    await query.run('DELETE FROM acquisition_proposals WHERE target_company_id = ? OR acquirer_company_id = ?', [id, id]);
+    try {
+      await query.run('DELETE FROM auction_items WHERE company_id = ?', [id]);
+    } catch (_) {}
+
+    // 7. Penanganan Pemilik (Owner): Jika ini adalah PT Utama pemain
+    if (comp.owner_id) {
+      const owner = await query.get('SELECT id, username, pt_name, has_pt FROM users WHERE id = ?', [comp.owner_id]);
+      if (owner && owner.has_pt) {
+        // Cek apakah owner masih memiliki anak perusahaan lain
+        const otherComp = await query.get(
+          'SELECT id, name, symbol, sector FROM companies WHERE owner_id = ? AND id != ? ORDER BY current_price * total_shares DESC LIMIT 1',
+          [comp.owner_id, id]
+        );
+        if (otherComp) {
+          // Promosikan anak perusahaan menjadi PT Utama
+          await query.run(
+            'UPDATE users SET pt_name = ?, pt_symbol = ?, sector = ? WHERE id = ?',
+            [otherComp.name, otherComp.symbol, otherComp.sector, comp.owner_id]
+          );
+          console.log(`👑 [Succession] PT Utama dialihkan ke anak perusahaan: ${otherComp.name}`);
+        } else {
+          // Tidak ada perusahaan tersisa, reset has_pt ke 0
+          await query.run(
+            'UPDATE users SET has_pt = 0, pt_name = "", pt_symbol = "", is_ipo = 0 WHERE id = ?',
+            [comp.owner_id]
+          );
+          console.log(`👤 [Reset] User ${owner.username} tidak lagi memiliki entitas perseroan.`);
+        }
+      }
+    }
+
+    // 8. Hapus dari tabel companies
+    await query.run('DELETE FROM companies WHERE id = ?', [id]);
+
+    // 9. Siarkan event ke websocket & admin
+    io.emit('company:deleted', { companyId: id, symbol: comp.symbol, name: comp.name });
+    io.emit('market:company_deleted', { companyId: id });
+    io.emit('market:overview', simulationEngine.getMarketOverview());
+
+    console.log(`✅ [Admin] Perusahaan ${comp.name} (${comp.symbol}) berhasil dihapus permanen.`);
+    res.json({
+      success: true,
+      message: `Emiten ${comp.name} (${comp.symbol}) berhasil dihapus tuntas dari bursa dan seluruh portofolio investor.`,
+      companyId: id
+    });
+  } catch (err) {
+    console.error('❌ [Admin] Gagal menghapus perusahaan:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -6012,14 +6189,14 @@ const localBuiltApkPath = path.join(__dirname, '../../mobile/build/app/outputs/f
 
 async function getApkSettingsMap() {
   const defaults = {
-    apk_version: '1.5.9',
-    apk_build_number: '13',
+    apk_version: '1.6.0',
+    apk_build_number: '14',
     apk_min_android: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
     apk_file_size_mb: '25.0 MB',
-    apk_release_notes: 'Ekspansi Kasta 12 NAGA Federasi, Penskalaan Realistis Riset R&D & Tenaga Kerja Konglomerat, Pemutakhiran 1.000++ Pengguna & Emiten Saham, Pencegahan Input Tbk. Notaris, serta Manajemen Hapus Akun Terkonfirmasi di IPMC Terminal.',
+    apk_release_notes: 'Sistem Rollover Sesi Baru Bursa & Multi-Sesi ARA/ARB, Kontrol Hapus Perusahaan Terkonfirmasi di Terminal Admin, Sinkronisasi PT Utama & Anak Perusahaan, Alokasi Saham Publik Ritel Tbk., dan Pencegahan Dobel Posting Warta.',
     apk_external_url: '',
-    apk_download_count: '215',
-    apk_sha256: 'a063050909de6876837f05f3dba5aed608e7cc2d5ec47b9a2ed0ab0ea4438d08',
+    apk_download_count: '248',
+    apk_sha256: '53b6f1498986e965af400d3b2d6a326d42f149ecf7f9a315eac7692dae32276e',
     apk_updated_at: new Date().toISOString(),
   };
   try {
@@ -6029,11 +6206,11 @@ async function getApkSettingsMap() {
         defaults[r.key] = String(r.value);
       }
     }
-    if (parseInt(defaults.apk_build_number || '0', 10) < 13) {
-      defaults.apk_version = '1.5.9';
-      defaults.apk_build_number = '13';
+    if (parseInt(defaults.apk_build_number || '0', 10) < 14) {
+      defaults.apk_version = '1.6.0';
+      defaults.apk_build_number = '14';
       defaults.apk_file_size_mb = '25.0 MB';
-      defaults.apk_release_notes = 'Ekspansi Kasta 12 NAGA Federasi, Penskalaan Realistis Riset R&D & Tenaga Kerja Konglomerat, Pemutakhiran 1.000++ Pengguna & Emiten Saham, Pencegahan Input Tbk. Notaris, serta Manajemen Hapus Akun Terkonfirmasi di IPMC Terminal.';
+      defaults.apk_release_notes = 'Sistem Rollover Sesi Baru Bursa & Multi-Sesi ARA/ARB, Kontrol Hapus Perusahaan Terkonfirmasi di Terminal Admin, Sinkronisasi PT Utama & Anak Perusahaan, Alokasi Saham Publik Ritel Tbk., dan Pencegahan Dobel Posting Warta.';
     }
   } catch (_) {}
   return defaults;

@@ -101,8 +101,8 @@ export default function UserDetailsModal({ open, onClose, user, onEdit }) {
                     <span className="font-bold text-slate-200 flex items-center gap-1">
                       <span className="font-mono text-amber-400">{c.symbol}</span> - {c.name}
                     </span>
-                    <Badge tone={c.is_acquired ? 'amber' : 'sky'}>
-                      {c.is_acquired ? 'AKUISISI' : 'FOUNDER'}
+                    <Badge tone={c.entity_type === 'PT_UTAMA' ? 'emerald' : (c.entity_type === 'AKUISISI' ? 'amber' : 'sky')}>
+                      {c.entity_type === 'PT_UTAMA' ? '👑 PT UTAMA (HOLDING)' : (c.entity_type === 'AKUISISI' ? '🤝 AKUISISI' : '🏢 ANAK USAHA')}
                     </Badge>
                   </div>
                   <div className="flex justify-between text-[11px] text-slate-400">

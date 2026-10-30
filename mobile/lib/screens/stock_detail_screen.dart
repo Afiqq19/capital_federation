@@ -1565,12 +1565,15 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
     final double highPrice = candlePoints.isNotEmpty ? candlePoints.map((cp) => cp.high).reduce(max) : c.currentPrice * 1.05;
     final double lowPrice = candlePoints.isNotEmpty ? candlePoints.map((cp) => cp.low).reduce(min) : c.currentPrice * 0.95;
 
-    // Ketentuan Sirkuit Pemutus Simetris Bursa Federasi IPMC:
-    // • ARA: +35.00% (Listing IPO: +50.0%)
-    // • ARB: -35.00%
-    final double araPct = c.isIpo ? 50.0 : 35.0;
-    final double araPrice = (c.basePrice * (1 + (araPct / 100.0))).roundToDouble();
-    final double arbPrice = (c.basePrice * 0.65).roundToDouble(); // ARB Simetris -35%
+    // Ketentuan Batas Auto Rejection Bursa Federasi IPMC (Mengacu pada Regulasi BEI):
+    // • Harga <= 200: ARA +35%
+    // • Harga 200 - 5.000: ARA +25%
+    // • Harga > 5.000: ARA +20% s/d +25% (Saham Fundamental Sehat)
+    // • ARB Simetris: -35.00%
+    final double ref = c.basePrice > 0 ? c.basePrice : c.currentPrice;
+    final double araPct = ref <= 200 ? 35.0 : (ref <= 5000 ? 25.0 : (c.status == 'HEALTHY' || c.fundamentalScore >= 75 ? 25.0 : 20.0));
+    final double araPrice = (ref * (1 + (araPct / 100.0))).roundToDouble();
+    final double arbPrice = (ref * 0.65).roundToDouble(); // ARB Simetris -35%
     final double avgPrice = ((highPrice + lowPrice + c.currentPrice) / 3).roundToDouble();
     final double totalLotVolume = (c.totalShares * 0.0386 / 100).roundToDouble();
     final double totalTradeValue = totalLotVolume * avgPrice * 100;

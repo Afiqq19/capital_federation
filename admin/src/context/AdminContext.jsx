@@ -227,6 +227,16 @@ export function AdminProvider({ children }) {
           const r = await adminApi.convertBumn(companyId);
           return { message: r.message || 'Status kepemilikan BUMF Federasi berhasil diperbarui' };
         }, { refresh: [refreshCompanies, refreshOverview] }),
+      deleteCompany: (companyId) =>
+        run(async () => {
+          const r = await adminApi.deleteCompany(companyId);
+          return { message: r.message || 'Perusahaan dan seluruh saham investor berhasil dihapus permanen' };
+        }, { refresh: [refreshCompanies, refreshOverview, refreshUsers] }),
+      rolloverMarket: () =>
+        run(async () => {
+          const r = await adminApi.rolloverMarket();
+          return { message: 'Sesi baru bursa berhasil dibuka! Seluruh batas ARA/ARB telah di-rollover.' };
+        }, { refresh: [refreshCompanies, refreshOverview] }),
       saveSettings: (values) =>
         run(async () => {
           await adminApi.saveSettings(values);

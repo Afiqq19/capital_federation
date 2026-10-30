@@ -3,6 +3,8 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const { query } = require('../db');
 
+const dealCooldownMap = new Map();
+
 module.exports = function(io) {
   // 0. Daftar Kandidat Konglomerat untuk Transaksi P2P
   router.get('/candidates', async (req, res) => {
@@ -40,6 +42,13 @@ module.exports = function(io) {
       if (!price || price <= 0) {
         return res.status(400).json({ error: 'Harga saham per lembar tidak valid' });
       }
+
+      // Anti-spam debounce cooldown (4 detik) agar tidak terjadi dobel posting / dobel warta berita
+      const nowTs = Date.now();
+      if (sellerUserId && dealCooldownMap.has(sellerUserId) && (nowTs - dealCooldownMap.get(sellerUserId) < 4000)) {
+        return res.status(429).json({ error: 'Permintaan penawaran saham Anda sedang diproses notaris. Mohon tunggu beberapa detik!' });
+      }
+      if (sellerUserId) dealCooldownMap.set(sellerUserId, nowTs);
 
       const seller = await query.get('SELECT * FROM users WHERE id = ?', [sellerUserId]);
       if (!seller) return res.status(404).json({ error: 'Penjual tidak ditemukan' });
@@ -520,6 +529,41 @@ module.exports = function(io) {
               tradingTaxRate: 0.0015,
               io
             });
+          } else {
+            // Jika bot sedang tidak mencukupi, Konsorsium Publik Ritel Bursa menyerap saham (Secondary Public Offering)
+            console.log(`🌐 [Bursa Global] Konsorsium Publik Ritel menyerap ${pctToBuy}% saham penawaran pasar ${comp.symbol} milik @${seller.username}!`);
+            const netSellerProceeds = totalPrice - feeTax;
+            await query.run('UPDATE users SET balance_ib = balance_ib + ? WHERE id = ?', [netSellerProceeds, seller.id]);
+            
+            // Kurangi kepemilikan penjual
+            const sellerSh = await query.get('SELECT * FROM company_shareholders WHERE company_id = ? AND user_id = ?', [comp.id, seller.id]);
+            if (sellerSh) {
+              const newPct = Math.max(0, parseFloat((sellerSh.percentage - pctToBuy).toFixed(1)));
+              if (newPct <= 0) {
+                await query.run('DELETE FROM company_shareholders WHERE id = ?', [sellerSh.id]);
+              } else {
+                await query.run('UPDATE company_shareholders SET percentage = ?, shares_count = shares_count - ? WHERE id = ?', [newPct, sharesTransferred, sellerSh.id]);
+              }
+            }
+
+            // Tambahkan porsi ke Publik Ritel di Cap Table
+            const pubSh = await query.get('SELECT * FROM company_shareholders WHERE company_id = ? AND holder_type = "PUBLIC"', [comp.id]);
+            if (pubSh) {
+              const newPubPct = parseFloat((pubSh.percentage + pctToBuy).toFixed(1));
+              await query.run('UPDATE company_shareholders SET percentage = ?, shares_count = shares_count + ? WHERE id = ?', [newPubPct, sharesTransferred, pubSh.id]);
+            } else {
+              await query.run(
+                'INSERT INTO company_shareholders (id, company_id, holder_name, holder_type, shares_count, percentage) VALUES (?, ?, "Publik Ritel (Bursa Efek)", "PUBLIC", ?, ?)',
+                [uuidv4(), comp.id, sharesTransferred, pctToBuy]
+              );
+            }
+
+            await query.run('UPDATE companies SET circulating_shares = circulating_shares + ? WHERE id = ?', [sharesTransferred, comp.id]);
+            await query.run('UPDATE private_deals SET status = "COMPLETED", percentage_remaining = 0 WHERE id = ?', [deal.id]);
+
+            // Broadcast ke mobile app & admin
+            io.emit('deal:completed', { dealId: deal.id, companyId: comp.id, symbol: comp.symbol, buyerName: 'Publik Ritel Bursa' });
+            io.emit('user:balance_updated', { userId: seller.id, newBalance: seller.balance_ib + netSellerProceeds });
           }
         }
       } catch (err) {
