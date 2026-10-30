@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/user.dart';
 import '../providers/game_provider.dart';
+import '../services/api_service.dart';
 import '../utils/formatters.dart';
 import 'game_constitution_screen.dart';
 
@@ -17,6 +18,8 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
   late TextEditingController _usernameController;
   late TextEditingController _emailController;
   bool _isSaving = false;
+  bool _isCheckingUpdate = false;
+  Map<String, dynamic>? _serverVersionInfo;
 
   @override
   void initState() {
@@ -25,6 +28,132 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     final user = context.read<GameProvider>().user;
     _usernameController = TextEditingController(text: user?.username ?? '');
     _emailController = TextEditingController(text: user?.email ?? '');
+    _checkServerUpdate(silent: true);
+  }
+
+  Future<void> _checkServerUpdate({bool silent = false}) async {
+    if (!mounted) return;
+    setState(() => _isCheckingUpdate = true);
+    final info = await ApiService.getServerVersion();
+    if (!mounted) return;
+    setState(() {
+      _serverVersionInfo = info;
+      _isCheckingUpdate = false;
+    });
+    if (!silent && mounted) {
+      final serverVer = info?['version']?.toString() ?? ApiService.currentAppVersion;
+      final isNewer = serverVer != ApiService.currentAppVersion;
+      await context.read<GameProvider>().loadInitialData();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isNewer
+                ? '🚀 Update Server v$serverVer terdeteksi & data pasar berhasil disinkronkan!'
+                : '✅ Aplikasi & Server sudah versi terbaru (v$serverVer • Build ${ApiService.currentBuildNumber})!',
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+          ),
+          backgroundColor: isNewer ? const Color(0xFFD97706) : const Color(0xFF059669),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Widget _buildUpdateDetectorCard() {
+    final serverVer = _serverVersionInfo?['version']?.toString() ?? ApiService.currentAppVersion;
+    final serverBuild = _serverVersionInfo?['buildNumber'] ?? ApiService.currentBuildNumber;
+    final releaseNotes = _serverVersionInfo?['releaseNotes']?.toString() ??
+        'Ticker Saham 4-Huruf Resmi (Tanpa Angka), Perbaikan Nama PT, Efek Emas Chat Sultan 9 Naga & VIP, dan Deteksi Update Otomatis';
+    final totalCompanies = _serverVersionInfo?['totalCompanies'] ?? context.read<GameProvider>().companies.length;
+    final isUpdateAvailable = _serverVersionInfo != null &&
+        (serverVer != ApiService.currentAppVersion ||
+            (serverBuild is int && serverBuild > ApiService.currentBuildNumber));
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: isUpdateAvailable
+              ? [const Color(0xFF332204), const Color(0xFF0F172A)]
+              : [const Color(0xFF06281E), const Color(0xFF0F172A)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isUpdateAvailable ? const Color(0xFFF59E0B) : const Color(0xFF10B981).withValues(alpha: 0.5),
+          width: isUpdateAvailable ? 1.5 : 1.0,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                isUpdateAvailable ? Icons.system_update_rounded : Icons.verified_rounded,
+                color: isUpdateAvailable ? const Color(0xFFFBBF24) : const Color(0xFF34D399),
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  isUpdateAvailable
+                      ? '🚀 PEMBARUAN SERVER TERDETEKSI (v$serverVer)'
+                      : '📡 VERSI TERBARU AKTIF (v${ApiService.currentAppVersion} • Build ${ApiService.currentBuildNumber})',
+                  style: TextStyle(
+                    color: isUpdateAvailable ? const Color(0xFFFDE68A) : const Color(0xFF34D399),
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0F172A),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  '$totalCompanies Emiten',
+                  style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 9.5, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Catatan Update: $releaseNotes',
+            style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 10.5, height: 1.35),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            height: 36,
+            child: ElevatedButton.icon(
+              onPressed: _isCheckingUpdate ? null : () => _checkServerUpdate(silent: false),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isUpdateAvailable ? const Color(0xFFF59E0B) : const Color(0xFF10B981).withValues(alpha: 0.2),
+                foregroundColor: isUpdateAvailable ? const Color(0xFF0F172A) : const Color(0xFF34D399),
+                elevation: 0,
+                side: BorderSide(
+                  color: isUpdateAvailable ? const Color(0xFFFBBF24) : const Color(0xFF10B981).withValues(alpha: 0.5),
+                ),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              icon: _isCheckingUpdate
+                  ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF34D399)))
+                  : const Icon(Icons.sync_rounded, size: 15),
+              label: Text(
+                _isCheckingUpdate ? 'MEMERIKSA VERSI SERVER...' : 'CEK UPDATE & SINKRONKAN SERVER',
+                style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w900),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -537,6 +666,10 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Live Server Version & Update Detection Card
+          _buildUpdateDetectorCard(),
+          const SizedBox(height: 14),
+
           // Security Shield Alert Banner
           Container(
             padding: const EdgeInsets.all(14),
@@ -926,7 +1059,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
               children: [
                 _buildInfoRow('Konglomerat Utama:', user.username, Colors.white),
                 const Divider(color: Color(0xFF1E293B), height: 16),
-                _buildInfoRow('PT Induk Perseroan:', user.hasPt ? user.ptName : 'Belum Berdiri', const Color(0xFF38BDF8)),
+                _buildInfoRow('PT Induk Perseroan:', user.hasPt ? 'PT. ${user.ptName}' : 'Belum Berdiri', const Color(0xFF38BDF8)),
                 const Divider(color: Color(0xFF1E293B), height: 16),
                 _buildInfoRow('Sektor Industri Utama:', user.sector.isNotEmpty ? user.sector : 'Keuangan & Investasi', const Color(0xFFFBBF24)),
                 const Divider(color: Color(0xFF1E293B), height: 16),
@@ -1066,6 +1199,9 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
           ),
           const SizedBox(height: 14),
 
+          _buildUpdateDetectorCard(),
+          const SizedBox(height: 12),
+
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
@@ -1075,13 +1211,13 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
             ),
             child: Column(
               children: [
-                _buildInfoRow('Versi Mobile APK:', 'v1.4.0-CFX Production (Build 4)', const Color(0xFF34D399)),
+                _buildInfoRow('Versi Mobile APK:', ApiService.currentApkDisplayVersion, const Color(0xFF34D399)),
                 const Divider(color: Color(0xFF1E293B), height: 14),
-                _buildInfoRow('Versi Web Admin:', 'v1.4.0 Sovereign Launch', const Color(0xFF38BDF8)),
+                _buildInfoRow('Versi Server Backend:', _serverVersionInfo?['backendVersion']?.toString() ?? 'v1.5.0-CFX Production', const Color(0xFF38BDF8)),
                 const Divider(color: Color(0xFF1E293B), height: 14),
-                _buildInfoRow('Simulasi Pasar Modal:', 'Realistic Engine (107 Emiten)', const Color(0xFFFBBF24)),
+                _buildInfoRow('Simulasi Pasar Modal:', 'Realistic Engine (${context.read<GameProvider>().companies.length} Emiten • 4-Huruf)', const Color(0xFFFBBF24)),
                 const Divider(color: Color(0xFF1E293B), height: 14),
-                _buildInfoRow('Status Sinkronisasi:', 'Online • Multi-thread SQLite', const Color(0xFF34D399)),
+                _buildInfoRow('Status Sinkronisasi:', 'Online • Multi-thread SQLite & MariaDB', const Color(0xFF34D399)),
               ],
             ),
           ),

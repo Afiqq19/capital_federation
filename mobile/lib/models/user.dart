@@ -68,13 +68,15 @@ class UserModel {
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
+    final rawPt = (json['pt_name'] ?? json['ptName'] ?? '').toString().trim();
+    final cleanPt = rawPt.replaceFirst(RegExp(r'^(PT\.?\s*)+', caseSensitive: false), '').trim();
     return UserModel(
       id: json['id'] ?? '',
       username: json['username'] ?? '',
       email: json['email'] ?? '',
       emailVerified: json['email_verified'] == 1 || json['email_verified'] == true || json['emailVerified'] == true,
       hasPt: json['has_pt'] == 1 || json['has_pt'] == true || json['hasPt'] == true,
-      ptName: json['pt_name'] ?? json['ptName'] ?? '',
+      ptName: cleanPt,
       sector: json['sector'] ?? '',
       balanceIb: (json['balance_ib'] ?? json['balanceIb'] ?? 10000000.0).toDouble(),
       companyBalanceIb: (json['company_balance_ib'] ?? json['companyBalanceIb'] ?? 0.0).toDouble(),

@@ -34,7 +34,14 @@ class ChatMessageModel {
   final String ptName;
   final String text;
   final String badge;
+  final int? rank;
+  final bool isVip;
   final DateTime createdAt;
+
+  bool get is9Naga => badge.toUpperCase().contains('9 NAGA') || (rank != null && rank! >= 1 && rank! <= 9);
+  bool get isTaipan => badge.toUpperCase().contains('TAIPAN') || (rank != null && rank! > 9 && rank! <= 25);
+  bool get isBankSentral => badge.toUpperCase().contains('BANK SENTRAL') || badge.toUpperCase().contains('OTORITAS');
+  bool get hasVipBadge => isVip || badge.toUpperCase().contains('VIP');
 
   ChatMessageModel({
     required this.id,
@@ -43,17 +50,27 @@ class ChatMessageModel {
     required this.ptName,
     required this.text,
     this.badge = 'REGULER',
+    this.rank,
+    this.isVip = false,
     required this.createdAt,
   });
 
   factory ChatMessageModel.fromJson(Map<String, dynamic> json) {
+    final rawPt = (json['pt_name'] ?? json['ptName'] ?? '').toString().trim();
+    final cleanPt = rawPt.replaceFirst(RegExp(r'^(PT\.?\s*)+', caseSensitive: false), '').trim();
+    final formattedPt = cleanPt.isNotEmpty && cleanPt != 'Investor Ritel' && cleanPt != 'Otoritas Moneter & Bursa'
+        ? 'PT. $cleanPt'
+        : cleanPt;
+    final badgeStr = (json['badge'] ?? 'REGULER').toString();
     return ChatMessageModel(
       id: json['id'] ?? '',
       userId: json['user_id'] ?? json['userId'] ?? '',
       username: json['username'] ?? 'Taipan',
-      ptName: json['pt_name'] ?? json['ptName'] ?? '',
+      ptName: formattedPt,
       text: json['text'] ?? '',
-      badge: json['badge'] ?? 'REGULER',
+      badge: badgeStr,
+      rank: json['rank'] is int ? json['rank'] as int : int.tryParse('${json['rank'] ?? ''}'),
+      isVip: json['isVip'] == true || json['is_vip'] == true || badgeStr.toUpperCase().contains('VIP'),
       createdAt: DateTime.tryParse(json['created_at'] ?? json['createdAt'] ?? '') ?? DateTime.now(),
     );
   }

@@ -1,121 +1,135 @@
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const { query, initDb } = require('./db');
-const { ADDITIONAL_COMPANIES, BOT_ROSTER } = require('./botData');
+const { deriveCleanTicker, ADDITIONAL_COMPANIES, BOT_ROSTER } = require('./botData');
 
-const COMPANY_NAMES = [
+const RAW_COMPANY_NAMES = [
   // Teknologi (20)
-  { symbol: 'TECH01', name: 'PT Nusantara Cloud System', sector: 'Teknologi', basePrice: 4200, status: 'HEALTHY' },
-  { symbol: 'TECH02', name: 'PT Quantum Data Solusi', sector: 'Teknologi', basePrice: 8500, status: 'HEALTHY' },
-  { symbol: 'TECH03', name: 'PT Algoritma AI Raya', sector: 'Teknologi', basePrice: 12400, status: 'HEALTHY' },
-  { symbol: 'TECH04', name: 'PT Siber Proteksi Aman', sector: 'Teknologi', basePrice: 3100, status: 'HEALTHY' },
-  { symbol: 'TECH05', name: 'PT Mikro Chip Nusantara', sector: 'Teknologi', basePrice: 15200, status: 'HEALTHY' },
-  { symbol: 'TECH06', name: 'PT PayKilat Solusi Digital', sector: 'Teknologi', basePrice: 6300, status: 'HEALTHY' },
-  { symbol: 'TECH07', name: 'PT Sarana Telematika Inti', sector: 'Teknologi', basePrice: 5100, status: 'HEALTHY' },
-  { symbol: 'TECH08', name: 'PT Logika Otomasi Industri', sector: 'Teknologi', basePrice: 1800, status: 'CRITICAL' },
-  { symbol: 'TECH09', name: 'PT Satelit Angkasa Cyber', sector: 'Teknologi', basePrice: 9700, status: 'HEALTHY' },
-  { symbol: 'TECH10', name: 'PT Metaverse Dunia Baru', sector: 'Teknologi', basePrice: 650, status: 'CRITICAL' },
-  { symbol: 'TECH11', name: 'PT Solusi Fiber Optik Optima', sector: 'Teknologi', basePrice: 3400, status: 'HEALTHY' },
-  { symbol: 'TECH12', name: 'PT Robotika Solusi Cepat', sector: 'Teknologi', basePrice: 7200, status: 'HEALTHY' },
-  { symbol: 'TECH13', name: 'PT Solusi Server Indonesia', sector: 'Teknologi', basePrice: 4900, status: 'HEALTHY' },
-  { symbol: 'TECH14', name: 'PT Kripto Ledgers Indonesia', sector: 'Teknologi', basePrice: 850, status: 'CRITICAL' },
-  { symbol: 'TECH15', name: 'PT Geo Spasial Cerdas', sector: 'Teknologi', basePrice: 3900, status: 'HEALTHY' },
-  { symbol: 'TECH16', name: 'PT Finnet Payment Integrasi', sector: 'Teknologi', basePrice: 6800, status: 'HEALTHY' },
-  { symbol: 'TECH17', name: 'PT Neural Network Mandiri', sector: 'Teknologi', basePrice: 8800, status: 'HEALTHY' },
-  { symbol: 'TECH18', name: 'PT Edukasi Digital Prestasi', sector: 'Teknologi', basePrice: 2100, status: 'HEALTHY' },
-  { symbol: 'TECH19', name: 'PT Agritech Agro Solusi', sector: 'Teknologi', basePrice: 720, status: 'CRITICAL' },
-  { symbol: 'TECH20', name: 'PT Gameverse Studio Kreatif', sector: 'Teknologi', basePrice: 4600, status: 'HEALTHY' },
+  { name: 'PT. Nusantara Cloud System', sector: 'Teknologi', basePrice: 4200, status: 'HEALTHY' },
+  { name: 'PT. Quantum Data Solusi', sector: 'Teknologi', basePrice: 8500, status: 'HEALTHY' },
+  { name: 'PT. Algoritma Cerdas Raya', sector: 'Teknologi', basePrice: 12400, status: 'HEALTHY' },
+  { name: 'PT. Siber Proteksi Aman', sector: 'Teknologi', basePrice: 3100, status: 'HEALTHY' },
+  { name: 'PT. Mikro Chip Nusantara', sector: 'Teknologi', basePrice: 15200, status: 'HEALTHY' },
+  { name: 'PT. PayKilat Solusi Digital', sector: 'Teknologi', basePrice: 6300, status: 'HEALTHY' },
+  { name: 'PT. Sarana Telematika Inti', sector: 'Teknologi', basePrice: 5100, status: 'HEALTHY' },
+  { name: 'PT. Logika Otomasi Industri', sector: 'Teknologi', basePrice: 1800, status: 'CRITICAL' },
+  { name: 'PT. Satelit Angkasa Cyber', sector: 'Teknologi', basePrice: 9700, status: 'HEALTHY' },
+  { name: 'PT. Metaverse Dunia Baru', sector: 'Teknologi', basePrice: 650, status: 'CRITICAL' },
+  { name: 'PT. Solusi Fiber Optik Optima', sector: 'Teknologi', basePrice: 3400, status: 'HEALTHY' },
+  { name: 'PT. Robotika Solusi Cepat', sector: 'Teknologi', basePrice: 7200, status: 'HEALTHY' },
+  { name: 'PT. Solusi Server Nusantara', sector: 'Teknologi', basePrice: 4900, status: 'HEALTHY' },
+  { name: 'PT. Kripto Ledgers Mandiri', sector: 'Teknologi', basePrice: 850, status: 'CRITICAL' },
+  { name: 'PT. Geo Spasial Cerdas', sector: 'Teknologi', basePrice: 3900, status: 'HEALTHY' },
+  { name: 'PT. Finnet Payment Integrasi', sector: 'Teknologi', basePrice: 6800, status: 'HEALTHY' },
+  { name: 'PT. Neural Network Mandiri', sector: 'Teknologi', basePrice: 8800, status: 'HEALTHY' },
+  { name: 'PT. Edukasi Digital Prestasi', sector: 'Teknologi', basePrice: 2100, status: 'HEALTHY' },
+  { name: 'PT. Agritech Agro Solusi', sector: 'Teknologi', basePrice: 720, status: 'CRITICAL' },
+  { name: 'PT. Gameverse Studio Kreatif', sector: 'Teknologi', basePrice: 4600, status: 'HEALTHY' },
 
   // Properti (20)
-  { symbol: 'PROP01', name: 'PT Griya Metropolitan Raya', sector: 'Properti', basePrice: 5400, status: 'HEALTHY' },
-  { symbol: 'PROP02', name: 'PT Menara Inti Graha', sector: 'Properti', basePrice: 7800, status: 'HEALTHY' },
-  { symbol: 'PROP03', name: 'PT Kawasan Hunian Sentosa', sector: 'Properti', basePrice: 3200, status: 'HEALTHY' },
-  { symbol: 'PROP04', name: 'PT Bumi Land Lestari', sector: 'Properti', basePrice: 6100, status: 'HEALTHY' },
-  { symbol: 'PROP05', name: 'PT Mega Tower Kencana', sector: 'Properti', basePrice: 11200, status: 'HEALTHY' },
-  { symbol: 'PROP06', name: 'PT Real Estate Mandiri Makmur', sector: 'Properti', basePrice: 4300, status: 'HEALTHY' },
-  { symbol: 'PROP07', name: 'PT Kota Mandiri Hijau', sector: 'Properti', basePrice: 5900, status: 'HEALTHY' },
-  { symbol: 'PROP08', name: 'PT Apartemen Modern Living', sector: 'Properti', basePrice: 940, status: 'CRITICAL' },
-  { symbol: 'PROP09', name: 'PT Sentra Logistik Properti', sector: 'Properti', basePrice: 8200, status: 'HEALTHY' },
-  { symbol: 'PROP10', name: 'PT Wisata Resort Tropika', sector: 'Properti', basePrice: 620, status: 'CRITICAL' },
-  { symbol: 'PROP11', name: 'PT Mall Kencana Graha', sector: 'Properti', basePrice: 6700, status: 'HEALTHY' },
-  { symbol: 'PROP12', name: 'PT Graha Rekayasa Konstruksi', sector: 'Properti', basePrice: 3800, status: 'HEALTHY' },
-  { symbol: 'PROP13', name: 'PT Cipta Lahan Gemilang', sector: 'Properti', basePrice: 4100, status: 'HEALTHY' },
-  { symbol: 'PROP14', name: 'PT Condominium Mewah Inti', sector: 'Properti', basePrice: 880, status: 'CRITICAL' },
-  { symbol: 'PROP15', name: 'PT Villa Eksklusif Sejahtera', sector: 'Properti', basePrice: 2900, status: 'HEALTHY' },
-  { symbol: 'PROP16', name: 'PT Pusat Grosir Perdagangan', sector: 'Properti', basePrice: 5300, status: 'HEALTHY' },
-  { symbol: 'PROP17', name: 'PT Dermaga Maritim Realty', sector: 'Properti', basePrice: 7400, status: 'HEALTHY' },
-  { symbol: 'PROP18', name: 'PT Perumahan Rakyat Subsidi', sector: 'Properti', basePrice: 2400, status: 'HEALTHY' },
-  { symbol: 'PROP19', name: 'PT Kota Industri Karawang', sector: 'Properti', basePrice: 8900, status: 'HEALTHY' },
-  { symbol: 'PROP20', name: 'PT Perkantoran Sudirman Prima', sector: 'Properti', basePrice: 13500, status: 'HEALTHY' },
+  { name: 'PT. Griya Metropolitan Raya', sector: 'Properti', basePrice: 5400, status: 'HEALTHY' },
+  { name: 'PT. Menara Inti Graha', sector: 'Properti', basePrice: 7800, status: 'HEALTHY' },
+  { name: 'PT. Kawasan Hunian Sentosa', sector: 'Properti', basePrice: 3200, status: 'HEALTHY' },
+  { name: 'PT. Bumi Land Lestari', sector: 'Properti', basePrice: 6100, status: 'HEALTHY' },
+  { name: 'PT. Mega Tower Kencana', sector: 'Properti', basePrice: 11200, status: 'HEALTHY' },
+  { name: 'PT. Real Estate Mandiri Makmur', sector: 'Properti', basePrice: 4300, status: 'HEALTHY' },
+  { name: 'PT. Kota Mandiri Hijau', sector: 'Properti', basePrice: 5900, status: 'HEALTHY' },
+  { name: 'PT. Apartemen Modern Living', sector: 'Properti', basePrice: 940, status: 'CRITICAL' },
+  { name: 'PT. Sentra Logistik Properti', sector: 'Properti', basePrice: 8200, status: 'HEALTHY' },
+  { name: 'PT. Wisata Resort Tropika', sector: 'Properti', basePrice: 620, status: 'CRITICAL' },
+  { name: 'PT. Mall Kencana Graha', sector: 'Properti', basePrice: 6700, status: 'HEALTHY' },
+  { name: 'PT. Graha Rekayasa Konstruksi', sector: 'Properti', basePrice: 3800, status: 'HEALTHY' },
+  { name: 'PT. Cipta Lahan Gemilang', sector: 'Properti', basePrice: 4100, status: 'HEALTHY' },
+  { name: 'PT. Condominium Mewah Inti', sector: 'Properti', basePrice: 880, status: 'CRITICAL' },
+  { name: 'PT. Villa Eksklusif Sejahtera', sector: 'Properti', basePrice: 2900, status: 'HEALTHY' },
+  { name: 'PT. Pusat Grosir Perdagangan', sector: 'Properti', basePrice: 5300, status: 'HEALTHY' },
+  { name: 'PT. Dermaga Maritim Realty', sector: 'Properti', basePrice: 7400, status: 'HEALTHY' },
+  { name: 'PT. Perumahan Rakyat Subsidi', sector: 'Properti', basePrice: 2400, status: 'HEALTHY' },
+  { name: 'PT. Kawasan Industri Terpadu', sector: 'Properti', basePrice: 8900, status: 'HEALTHY' },
+  { name: 'PT. Perkantoran Sentral Prima', sector: 'Properti', basePrice: 13500, status: 'HEALTHY' },
 
   // Keuangan (20)
-  { symbol: 'FIN01', name: 'PT Bank Central Nusantara', sector: 'Keuangan', basePrice: 9800, status: 'HEALTHY' },
-  { symbol: 'FIN02', name: 'PT Bank Artha Makmur Tbk', sector: 'Keuangan', basePrice: 14200, status: 'HEALTHY' },
-  { symbol: 'FIN03', name: 'PT Asuransi Jiwa Pratama', sector: 'Keuangan', basePrice: 4100, status: 'HEALTHY' },
-  { symbol: 'FIN04', name: 'PT Modal Ventura Mandiri', sector: 'Keuangan', basePrice: 7600, status: 'HEALTHY' },
-  { symbol: 'FIN05', name: 'PT Sekuritas Finansial Indo', sector: 'Keuangan', basePrice: 5500, status: 'HEALTHY' },
-  { symbol: 'FIN06', name: 'PT Multi Finance Sejahtera', sector: 'Keuangan', basePrice: 3300, status: 'HEALTHY' },
-  { symbol: 'FIN07', name: 'PT Pegadaian Emas Mulia', sector: 'Keuangan', basePrice: 6200, status: 'HEALTHY' },
-  { symbol: 'FIN08', name: 'PT Pinjaman Mikro Digital', sector: 'Keuangan', basePrice: 980, status: 'CRITICAL' },
-  { symbol: 'FIN09', name: 'PT Reksadana Prestasi Utama', sector: 'Keuangan', basePrice: 8400, status: 'HEALTHY' },
-  { symbol: 'FIN10', name: 'PT Koperasi Simpan Mandiri', sector: 'Keuangan', basePrice: 450, status: 'CRITICAL' },
-  { symbol: 'FIN11', name: 'PT Finansial Syariah Kencana', sector: 'Keuangan', basePrice: 5100, status: 'HEALTHY' },
-  { symbol: 'FIN12', name: 'PT Pembiayaan Kendaraan Prima', sector: 'Keuangan', basePrice: 4700, status: 'HEALTHY' },
-  { symbol: 'FIN13', name: 'PT Asuransi Kerugian Bahari', sector: 'Keuangan', basePrice: 3600, status: 'HEALTHY' },
-  { symbol: 'FIN14', name: 'PT Leasing Logistik Terpadu', sector: 'Keuangan', basePrice: 790, status: 'CRITICAL' },
-  { symbol: 'FIN15', name: 'PT Bank Pembangunan Daerah Indo', sector: 'Keuangan', basePrice: 6900, status: 'HEALTHY' },
-  { symbol: 'FIN16', name: 'PT Global Asset Management', sector: 'Keuangan', basePrice: 11500, status: 'HEALTHY' },
-  { symbol: 'FIN17', name: 'PT Pialang Berjangka Komoditi', sector: 'Keuangan', basePrice: 4400, status: 'HEALTHY' },
-  { symbol: 'FIN18', name: 'PT Penjaminan Infrastruktur', sector: 'Keuangan', basePrice: 8100, status: 'HEALTHY' },
-  { symbol: 'FIN19', name: 'PT Dompet Mikro Digital Pay', sector: 'Keuangan', basePrice: 1100, status: 'CRITICAL' },
-  { symbol: 'FIN20', name: 'PT Tabungan Pensiun Hari Tua', sector: 'Keuangan', basePrice: 9300, status: 'HEALTHY' },
+  { name: 'PT. Bank Central Nusantara', sector: 'Keuangan', basePrice: 9800, status: 'HEALTHY' },
+  { name: 'PT. Bank Artha Makmur Tbk', sector: 'Keuangan', basePrice: 14200, status: 'HEALTHY' },
+  { name: 'PT. Asuransi Jiwa Pratama', sector: 'Keuangan', basePrice: 4100, status: 'HEALTHY' },
+  { name: 'PT. Modal Ventura Mandiri', sector: 'Keuangan', basePrice: 7600, status: 'HEALTHY' },
+  { name: 'PT. Sekuritas Finansial Prima', sector: 'Keuangan', basePrice: 5500, status: 'HEALTHY' },
+  { name: 'PT. Multi Finance Sejahtera', sector: 'Keuangan', basePrice: 3300, status: 'HEALTHY' },
+  { name: 'PT. Pegadaian Emas Mulia', sector: 'Keuangan', basePrice: 6200, status: 'HEALTHY' },
+  { name: 'PT. Pinjaman Mikro Digital', sector: 'Keuangan', basePrice: 980, status: 'CRITICAL' },
+  { name: 'PT. Reksadana Prestasi Utama', sector: 'Keuangan', basePrice: 8400, status: 'HEALTHY' },
+  { name: 'PT. Koperasi Simpan Mandiri', sector: 'Keuangan', basePrice: 450, status: 'CRITICAL' },
+  { name: 'PT. Finansial Syariah Kencana', sector: 'Keuangan', basePrice: 5100, status: 'HEALTHY' },
+  { name: 'PT. Pembiayaan Kendaraan Prima', sector: 'Keuangan', basePrice: 4700, status: 'HEALTHY' },
+  { name: 'PT. Asuransi Kerugian Bahari', sector: 'Keuangan', basePrice: 3600, status: 'HEALTHY' },
+  { name: 'PT. Leasing Logistik Terpadu', sector: 'Keuangan', basePrice: 790, status: 'CRITICAL' },
+  { name: 'PT. Bank Pembangunan Daerah', sector: 'Keuangan', basePrice: 6900, status: 'HEALTHY' },
+  { name: 'PT. Global Asset Management', sector: 'Keuangan', basePrice: 11500, status: 'HEALTHY' },
+  { name: 'PT. Pialang Berjangka Komoditi', sector: 'Keuangan', basePrice: 4400, status: 'HEALTHY' },
+  { name: 'PT. Penjaminan Infrastruktur', sector: 'Keuangan', basePrice: 8100, status: 'HEALTHY' },
+  { name: 'PT. Dompet Mikro Digital Pay', sector: 'Keuangan', basePrice: 1100, status: 'CRITICAL' },
+  { name: 'PT. Tabungan Pensiun Hari Tua', sector: 'Keuangan', basePrice: 9300, status: 'HEALTHY' },
 
   // F&B (15)
-  { symbol: 'FOOD01', name: 'PT Indoboga Kuliner Lestari', sector: 'F&B', basePrice: 8900, status: 'HEALTHY' },
-  { symbol: 'FOOD02', name: 'PT Rasa Rempah Nusantara', sector: 'F&B', basePrice: 4500, status: 'HEALTHY' },
-  { symbol: 'FOOD03', name: 'PT Kopi Sangrai Khatulistiwa', sector: 'F&B', basePrice: 6200, status: 'HEALTHY' },
-  { symbol: 'FOOD04', name: 'PT Sari Susu Segar Murni', sector: 'F&B', basePrice: 7100, status: 'HEALTHY' },
-  { symbol: 'FOOD05', name: 'PT Roti Manis Kencana', sector: 'F&B', basePrice: 3800, status: 'HEALTHY' },
-  { symbol: 'FOOD06', name: 'PT Air Minum Pegunungan Alam', sector: 'F&B', basePrice: 9400, status: 'HEALTHY' },
-  { symbol: 'FOOD07', name: 'PT Mi Instan Mega Rasa', sector: 'F&B', basePrice: 13200, status: 'HEALTHY' },
-  { symbol: 'FOOD08', name: 'PT Minuman Boba Kekinian', sector: 'F&B', basePrice: 550, status: 'CRITICAL' },
-  { symbol: 'FOOD09', name: 'PT Restoran Cepat Saji Mantap', sector: 'F&B', basePrice: 5600, status: 'HEALTHY' },
-  { symbol: 'FOOD10', name: 'PT Pengolahan Daging Olahan', sector: 'F&B', basePrice: 4200, status: 'HEALTHY' },
-  { symbol: 'FOOD11', name: 'PT Snack Renyah Gurih', sector: 'F&B', basePrice: 3100, status: 'HEALTHY' },
-  { symbol: 'FOOD12', name: 'PT Teh Segar Melati Prima', sector: 'F&B', basePrice: 5000, status: 'HEALTHY' },
-  { symbol: 'FOOD13', name: 'PT Katering Boga Sehat', sector: 'F&B', basePrice: 700, status: 'CRITICAL' },
-  { symbol: 'FOOD14', name: 'PT Es Krim Gelato Bahagia', sector: 'F&B', basePrice: 2800, status: 'HEALTHY' },
-  { symbol: 'FOOD15', name: 'PT Perkebunan Cokelat Megah', sector: 'F&B', basePrice: 6600, status: 'HEALTHY' },
+  { name: 'PT. Nusantara Boga Kuliner', sector: 'F&B', basePrice: 8900, status: 'HEALTHY' },
+  { name: 'PT. Rasa Rempah Nusantara', sector: 'F&B', basePrice: 4500, status: 'HEALTHY' },
+  { name: 'PT. Kopi Sangrai Khatulistiwa', sector: 'F&B', basePrice: 6200, status: 'HEALTHY' },
+  { name: 'PT. Sari Susu Segar Murni', sector: 'F&B', basePrice: 7100, status: 'HEALTHY' },
+  { name: 'PT. Roti Manis Kencana', sector: 'F&B', basePrice: 3800, status: 'HEALTHY' },
+  { name: 'PT. Air Minum Pegunungan Alam', sector: 'F&B', basePrice: 9400, status: 'HEALTHY' },
+  { name: 'PT. Mi Instan Mega Rasa', sector: 'F&B', basePrice: 13200, status: 'HEALTHY' },
+  { name: 'PT. Minuman Boba Kekinian', sector: 'F&B', basePrice: 550, status: 'CRITICAL' },
+  { name: 'PT. Restoran Cepat Saji Mantap', sector: 'F&B', basePrice: 5600, status: 'HEALTHY' },
+  { name: 'PT. Pengolahan Daging Olahan', sector: 'F&B', basePrice: 4200, status: 'HEALTHY' },
+  { name: 'PT. Snack Renyah Gurih', sector: 'F&B', basePrice: 3100, status: 'HEALTHY' },
+  { name: 'PT. Teh Segar Melati Prima', sector: 'F&B', basePrice: 5000, status: 'HEALTHY' },
+  { name: 'PT. Katering Boga Sehat', sector: 'F&B', basePrice: 700, status: 'CRITICAL' },
+  { name: 'PT. Es Krim Gelato Bahagia', sector: 'F&B', basePrice: 2800, status: 'HEALTHY' },
+  { name: 'PT. Perkebunan Cokelat Megah', sector: 'F&B', basePrice: 6600, status: 'HEALTHY' },
 
   // Energi (15)
-  { symbol: 'NRG01', name: 'PT Surya Terbit Tenaga Hijau', sector: 'Energi', basePrice: 7700, status: 'HEALTHY' },
-  { symbol: 'NRG02', name: 'PT Panas Bumi Khatulistiwa', sector: 'Energi', basePrice: 9100, status: 'HEALTHY' },
-  { symbol: 'NRG03', name: 'PT Batu Bara Hitam Mandiri', sector: 'Energi', basePrice: 10400, status: 'HEALTHY' },
-  { symbol: 'NRG04', name: 'PT Minyak Gas Samudera', sector: 'Energi', basePrice: 12100, status: 'HEALTHY' },
-  { symbol: 'NRG05', name: 'PT Hidro Elektrik Perkasa', sector: 'Energi', basePrice: 5800, status: 'HEALTHY' },
-  { symbol: 'NRG06', name: 'PT Biofuel Sawit Mandiri', sector: 'Energi', basePrice: 4600, status: 'HEALTHY' },
-  { symbol: 'NRG07', name: 'PT Baterai Listrik Masa Depan', sector: 'Energi', basePrice: 14800, status: 'HEALTHY' },
-  { symbol: 'NRG08', name: 'PT Kilang Minyak Perbatasan', sector: 'Energi', basePrice: 950, status: 'CRITICAL' },
-  { symbol: 'NRG09', name: 'PT Transmisi Listrik Nasional', sector: 'Energi', basePrice: 8300, status: 'HEALTHY' },
-  { symbol: 'NRG10', name: 'PT Turbina Angin Pesisir', sector: 'Energi', basePrice: 3500, status: 'HEALTHY' },
-  { symbol: 'NRG11', name: 'PT Gas Alam Cair Nusantara', sector: 'Energi', basePrice: 9600, status: 'HEALTHY' },
-  { symbol: 'NRG12', name: 'PT Tambang Uranium Murni', sector: 'Energi', basePrice: 6400, status: 'HEALTHY' },
-  { symbol: 'NRG13', name: 'PT Pengolahan Limbah Energi', sector: 'Energi', basePrice: 800, status: 'CRITICAL' },
-  { symbol: 'NRG14', name: 'PT Distribusi BBM Nusantara', sector: 'Energi', basePrice: 7200, status: 'HEALTHY' },
-  { symbol: 'NRG15', name: 'PT Energi Hidrogen Bersih', sector: 'Energi', basePrice: 11100, status: 'HEALTHY' },
+  { name: 'PT. Surya Terbit Tenaga Hijau', sector: 'Energi', basePrice: 7700, status: 'HEALTHY' },
+  { name: 'PT. Panas Bumi Khatulistiwa', sector: 'Energi', basePrice: 9100, status: 'HEALTHY' },
+  { name: 'PT. Batu Bara Hitam Mandiri', sector: 'Energi', basePrice: 10400, status: 'HEALTHY' },
+  { name: 'PT. Minyak Gas Samudera', sector: 'Energi', basePrice: 12100, status: 'HEALTHY' },
+  { name: 'PT. Hidro Elektrik Perkasa', sector: 'Energi', basePrice: 5800, status: 'HEALTHY' },
+  { name: 'PT. Biofuel Sawit Mandiri', sector: 'Energi', basePrice: 4600, status: 'HEALTHY' },
+  { name: 'PT. Baterai Listrik Masa Depan', sector: 'Energi', basePrice: 14800, status: 'HEALTHY' },
+  { name: 'PT. Kilang Minyak Perbatasan', sector: 'Energi', basePrice: 950, status: 'CRITICAL' },
+  { name: 'PT. Transmisi Listrik Nasional', sector: 'Energi', basePrice: 8300, status: 'HEALTHY' },
+  { name: 'PT. Turbina Angin Pesisir', sector: 'Energi', basePrice: 3500, status: 'HEALTHY' },
+  { name: 'PT. Gas Alam Cair Nusantara', sector: 'Energi', basePrice: 9600, status: 'HEALTHY' },
+  { name: 'PT. Tambang Uranium Murni', sector: 'Energi', basePrice: 6400, status: 'HEALTHY' },
+  { name: 'PT. Pengolahan Limbah Energi', sector: 'Energi', basePrice: 800, status: 'CRITICAL' },
+  { name: 'PT. Distribusi BBM Nusantara', sector: 'Energi', basePrice: 7200, status: 'HEALTHY' },
+  { name: 'PT. Energi Hidrogen Bersih', sector: 'Energi', basePrice: 11100, status: 'HEALTHY' },
 
   // Manufaktur (10)
-  { symbol: 'MFG01', name: 'PT Baja Prima Konstruksi', sector: 'Manufaktur', basePrice: 6200, status: 'HEALTHY' },
-  { symbol: 'MFG02', name: 'PT Semen Nusantara Perkasa', sector: 'Manufaktur', basePrice: 8300, status: 'HEALTHY' },
-  { symbol: 'MFG03', name: 'PT Otomotif Mobil Indo', sector: 'Manufaktur', basePrice: 13900, status: 'HEALTHY' },
-  { symbol: 'MFG04', name: 'PT Tekstil Benang Kencana', sector: 'Manufaktur', basePrice: 600, status: 'CRITICAL' },
-  { symbol: 'MFG05', name: 'PT Elektronika Komponen Inti', sector: 'Manufaktur', basePrice: 7500, status: 'HEALTHY' },
-  { symbol: 'MFG06', name: 'PT Plastik Kemasan Lestari', sector: 'Manufaktur', basePrice: 3100, status: 'HEALTHY' },
-  { symbol: 'MFG07', name: 'PT Kaca Lembaran Megah', sector: 'Manufaktur', basePrice: 4400, status: 'HEALTHY' },
-  { symbol: 'MFG08', name: 'PT Pupuk Tani Sejahtera', sector: 'Manufaktur', basePrice: 6700, status: 'HEALTHY' },
-  { symbol: 'MFG09', name: 'PT Alas Kaki Ekspor Cemerlang', sector: 'Manufaktur', basePrice: 850, status: 'CRITICAL' },
-  { symbol: 'MFG10', name: 'PT Perkapalan Galangan Raya', sector: 'Manufaktur', basePrice: 9200, status: 'HEALTHY' }
+  { name: 'PT. Baja Prima Konstruksi', sector: 'Manufaktur', basePrice: 6200, status: 'HEALTHY' },
+  { name: 'PT. Semen Nusantara Perkasa', sector: 'Manufaktur', basePrice: 8300, status: 'HEALTHY' },
+  { name: 'PT. Otomotif Mobil Nusantara', sector: 'Manufaktur', basePrice: 13900, status: 'HEALTHY' },
+  { name: 'PT. Tekstil Benang Kencana', sector: 'Manufaktur', basePrice: 600, status: 'CRITICAL' },
+  { name: 'PT. Elektronika Komponen Inti', sector: 'Manufaktur', basePrice: 7500, status: 'HEALTHY' },
+  { name: 'PT. Plastik Kemasan Lestari', sector: 'Manufaktur', basePrice: 3100, status: 'HEALTHY' },
+  { name: 'PT. Kaca Lembaran Megah', sector: 'Manufaktur', basePrice: 4400, status: 'HEALTHY' },
+  { name: 'PT. Pupuk Tani Sejahtera', sector: 'Manufaktur', basePrice: 6700, status: 'HEALTHY' },
+  { name: 'PT. Alas Kaki Ekspor Cemerlang', sector: 'Manufaktur', basePrice: 850, status: 'CRITICAL' },
+  { name: 'PT. Perkapalan Galangan Raya', sector: 'Manufaktur', basePrice: 9200, status: 'HEALTHY' }
 ];
+
+const _seedSymbolSet = new Set(ADDITIONAL_COMPANIES.map((c) => c.symbol));
+const COMPANY_NAMES = RAW_COMPANY_NAMES.map((c) => ({
+  ...c,
+  symbol: deriveCleanTicker(c.name, _seedSymbolSet)
+}));
+
+function normalizeCompKey(name) {
+  return String(name || '')
+    .replace(/^(PT\.?\s*)+/i, '')
+    .replace(/\bTbk\.?\b/gi, '')
+    .replace(/[^a-zA-Z0-9]/g, '')
+    .toLowerCase();
+}
 
 async function seed() {
   console.log('Seeding SQLite database with Realistic Indonesian Market scale...');
@@ -148,7 +162,8 @@ async function seed() {
   // 3. News & Macro Events
   const existingCompanies = await query.get('SELECT COUNT(*) as count FROM companies');
   if (existingCompanies && existingCompanies.count > 0) {
-    console.log(`ℹ️ Database sudah memiliki ${existingCompanies.count} emiten. Melewati seed ulang agar data pemain & pasar tetap aman.`);
+    console.log(`ℹ️ Database sudah memiliki ${existingCompanies.count} emiten. Menjalankan migrasi ticker 4-huruf & populasi bot...`);
+    await ensureMarketPopulation();
     return;
   }
 
@@ -172,8 +187,8 @@ async function seed() {
     );
   }
 
-  // 4. Seed 100 Bot Companies dengan harga wajar
-  console.log(`Seeding ${COMPANY_NAMES.length} bot companies with realistic share prices...`);
+  // 4. Seed 100 Bot Companies dengan harga wajar & ticker 4 huruf
+  console.log(`Seeding ${COMPANY_NAMES.length} bot companies with realistic 4-letter tickers...`);
   const now = Date.now();
 
   for (const c of COMPANY_NAMES) {
@@ -216,32 +231,97 @@ async function seed() {
     }
   }
 
-  // Chat awal
-  await query.run(
-    `INSERT OR IGNORE INTO chat_messages (id, user_id, username, pt_name, text, badge)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [uuidv4(), adminId, 'Bank Sentral', 'Bank Sentral', 'Selamat datang di Bursa Capital Federation (CFX)! Mulai merintis dari beli saham 1 Lot.', 'BANK SENTRAL']
-  );
-
   await ensureMarketPopulation();
 
   console.log(`✅ Database successfully initialized with realistic scale & progression!`);
 }
 
 async function ensureMarketPopulation() {
-  console.log('🤖 Checking market population (50 additional companies + 24 bot traders)...');
+  console.log('🤖 Checking market population (4-letter ticker migration + 200+ companies + 100 natural bots)...');
   const now = Date.now();
+
+  // 1. Bersihkan nama PT yang masih memiliki nama merek dunia nyata & rapikan "PT. "
+  await query.run("UPDATE companies SET name = 'PT. Tambang Tembaga Megah' WHERE name LIKE '%Freeport%'");
+  await query.run("UPDATE companies SET name = 'PT. Nusantara Boga Kuliner' WHERE name LIKE '%Indoboga%'");
+  await query.run("UPDATE companies SET name = 'PT. Medika Farma Prima' WHERE name LIKE '%Kimia Medika%'");
+  await query.run("UPDATE companies SET name = 'PT. Nutrisindo Nutrisi Utama' WHERE name LIKE '%Kalbe%'");
+  await query.run("UPDATE companies SET name = 'PT. Sentosa Hospital Raya' WHERE name LIKE '%Siloam%'");
+  await query.run("UPDATE companies SET name = 'PT. Trans Kencana Nusantara' WHERE name LIKE '%Jasa Marga%'");
+
+  // Hilangkan awalan "PT PT." ganda pada users & companies
+  const allUsersForPt = await query.all('SELECT id, pt_name FROM users WHERE pt_name IS NOT NULL AND pt_name != ""');
+  for (const u of allUsersForPt) {
+    const cleaned = String(u.pt_name).replace(/^(PT\.?\s*)+/i, '').trim();
+    const formatted = cleaned ? `PT. ${cleaned}` : '';
+    if (formatted !== u.pt_name) {
+      await query.run('UPDATE users SET pt_name = ? WHERE id = ?', [formatted, u.id]);
+    }
+  }
+
+  // 2. Migrasi seluruh kode saham (symbol) yang masih mengandung angka (contoh: FOOD07, TECH01, FIN02)
+  // menjadi 4 huruf alfabet murni dari singkatan nama PT (contoh: MIMR, NUCS, BAMT)!
+  const currentCompanies = await query.all('SELECT id, symbol, name FROM companies ORDER BY created_at ASC');
+  const usedSymbols = new Set();
+  for (const c of currentCompanies) {
+    if (!/\d/.test(c.symbol) && c.symbol.length >= 3 && c.symbol.length <= 5) {
+      usedSymbols.add(c.symbol.toUpperCase());
+    }
+  }
+
+  // Petakan nama PT ke symbol 4 huruf resmi jika ada di katalog
+  const catalogSymbolByName = new Map();
+  for (const item of [...COMPANY_NAMES, ...ADDITIONAL_COMPANIES]) {
+    catalogSymbolByName.set(normalizeCompKey(item.name), item.symbol);
+  }
+
+  let migratedTickers = 0;
+  for (const comp of currentCompanies) {
+    const cleanName = 'PT. ' + String(comp.name || '').replace(/^(PT\.?\s*)+/i, '').trim();
+    if (cleanName !== comp.name) {
+      await query.run('UPDATE companies SET name = ? WHERE id = ?', [cleanName, comp.id]);
+    }
+
+    if (/\d/.test(comp.symbol)) {
+      const oldSymbol = comp.symbol;
+      const key = normalizeCompKey(cleanName);
+      let newSymbol = catalogSymbolByName.get(key);
+      if (!newSymbol || usedSymbols.has(newSymbol)) {
+        newSymbol = deriveCleanTicker(cleanName, usedSymbols);
+      } else {
+        usedSymbols.add(newSymbol);
+      }
+
+      await query.run('UPDATE companies SET symbol = ? WHERE id = ?', [newSymbol, comp.id]);
+      await query.run('UPDATE market_oversight_log SET symbol = ? WHERE company_id = ?', [newSymbol, comp.id]);
+      await query.run('UPDATE private_deals SET company_symbol = ? WHERE company_id = ?', [newSymbol, comp.id]);
+      await query.run('UPDATE deal_deeds SET company_symbol = ? WHERE company_id = ?', [newSymbol, comp.id]);
+      migratedTickers++;
+    }
+  }
+  if (migratedTickers > 0) {
+    console.log(`🔤 Berhasil mengonversi ${migratedTickers} kode saham berangka (seperti FOOD07/TECH01) menjadi singkatan 4 huruf resmi!`);
+  }
+
+  // 3. Tambahkan emiten baru dari ADDITIONAL_COMPANIES jika belum ada (berdasarkan symbol atau nama)
+  const refreshedCompanies = await query.all('SELECT id, symbol, name FROM companies');
+  const existingKeys = new Set(refreshedCompanies.map((c) => normalizeCompKey(c.name)));
+  const existingSymbols = new Set(refreshedCompanies.map((c) => c.symbol.toUpperCase()));
+
   let addedCompanies = 0;
   for (const c of ADDITIONAL_COMPANIES) {
-    const existing = await query.get('SELECT id FROM companies WHERE symbol = ?', [c.symbol]);
-    if (!existing) {
+    const key = normalizeCompKey(c.name);
+    if (!existingKeys.has(key) && !existingSymbols.has(c.symbol.toUpperCase())) {
       const compId = uuidv4();
+      const sym = existingSymbols.has(c.symbol) ? deriveCleanTicker(c.name, existingSymbols) : c.symbol;
+      existingSymbols.add(sym);
+      existingKeys.add(key);
+
       await query.run(
         `INSERT INTO companies (id, symbol, name, sector, is_bot, status, current_price, base_price, prev_close, daily_high, daily_low, total_shares, circulating_shares, dividend_rate, fundamental_score, operational_level, description)
          VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, 10000000, 3000000, ?, ?, ?, ?)`,
         [
           compId,
-          c.symbol,
+          sym,
           c.name,
           c.sector,
           c.status,
@@ -256,7 +336,6 @@ async function ensureMarketPopulation() {
           `Emiten ${c.sector} di bursa Capital Federation.`
         ]
       );
-      // seed 5 history points
       let lastPrice = c.basePrice;
       for (let i = 5; i >= 0; i--) {
         const delta = (Math.random() - 0.49) * (lastPrice * 0.015);
@@ -280,7 +359,7 @@ async function ensureMarketPopulation() {
     console.log(`✅ ${addedCompanies} emiten baru berhasil ditambahkan ke bursa.`);
   }
 
-  // Clean legacy long-named bots to keep all bot usernames short, natural (1 word gamer style)
+  // 4. Clean legacy long-named bots to keep all bot usernames short, natural (1 word gamer style)
   const legacyBotNames = [
     'tan_sri_hendra', 'robert_hartono_cf', 'anthony_salim_cf', 'prajogo_energi_cf',
     'chairul_tanjung_cf', 'tahap_widjaja_cf', 'lim_haryanto_cf', 'william_soerya_cf',
@@ -297,7 +376,7 @@ async function ensureMarketPopulation() {
     }
   }
 
-  // Seed 100 Bot Investors, Taipans, & Retail Traders with natural 1-word usernames
+  // 5. Seed 100 Bot Investors, Taipans, & Retail Traders with natural 1-word usernames
   const allCompanies = await query.all('SELECT id, current_price, base_price FROM companies');
   const botPass = await bcrypt.hash('botpass123', 8);
   let addedBots = 0;
@@ -328,7 +407,6 @@ async function ensureMarketPopulation() {
       addedBots++;
     }
 
-    // Ensure bot has initial stock portfolio
     const existingPort = await query.get('SELECT COUNT(*) as count FROM portfolios WHERE user_id = ?', [botUserId]);
     if (!existingPort || existingPort.count === 0) {
       const stockCount = idx < 9 ? 4 : (idx < 25 ? 3 : 2);
@@ -353,6 +431,63 @@ async function ensureMarketPopulation() {
   }
   if (addedBots > 0) {
     console.log(`✅ ${addedBots} bot pemain (nama simpel & natural) berhasil dimasukkan ke bursa.`);
+  }
+
+  // 6. Seed percakapan awal Sultan 9 Naga, Taipan VIP, & Ritel di Chat Global Bursa agar ramai & bergengsi
+  const chatCount = await query.get('SELECT COUNT(*) as count FROM chat_messages');
+  if (!chatCount || chatCount.count <= 2) {
+    const sampleChats = [
+      {
+        user_id: 'admin-001',
+        username: 'Bank Sentral',
+        pt_name: 'Otoritas Moneter BCF',
+        text: 'Selamat datang di Bursa Efek Capital Federation (CFX)! Para konglomerat Top 9 menyandang gelar kehormatan 🐉 9 NAGA dan mendapatkan aura emas eksklusif di lantai bursa.',
+        badge: 'BANK SENTRAL'
+      },
+      {
+        user_id: 'bot-user-001',
+        username: 'haziq',
+        pt_name: 'PT. Kencana Artha Persada Tbk.',
+        text: 'Pagi rekan-rekan konglomerat! Hari ini holding kami mulai akumulasi emiten perbankan BCNT dan teknologi MICT. Yang mau negosiasi blok saham P2P silakan merapat 🔥',
+        badge: '9 NAGA'
+      },
+      {
+        user_id: 'bot-user-002',
+        username: 'reza',
+        pt_name: 'PT. Samudera Prima Nusantara Tbk.',
+        text: 'Siap Sultan @haziq! Sektor energi dan maritim SAMR juga lagi kuat arus kasnya, dividen kuartal ini lumayan tebal untuk ekspansi PT.',
+        badge: '9 NAGA'
+      },
+      {
+        user_id: 'bot-user-065',
+        username: 'budi',
+        pt_name: 'Investor Mandiri',
+        text: 'Mantap kali lihat para Sultan 9 Naga ngobrol! Doakan saya dari modal 10 juta segera tembus 30 juta buat dirikan PT dan nyusul ke papan peringkat atas 🙏🚀',
+        badge: 'REGULER'
+      },
+      {
+        user_id: 'bot-user-003',
+        username: 'dimas',
+        pt_name: 'PT. Mahakarya Buana Sejahtera Tbk.',
+        text: 'Semangat @budi! Fokus serok saham berfundamental sehat saat koreksi dan ikut tender pemerintah, pasti cepat naik kelas jadi Taipan & 9 Naga 👑',
+        badge: '9 NAGA'
+      },
+      {
+        user_id: 'bot-user-010',
+        username: 'tiara',
+        pt_name: 'PT. Cakrawala Mineral Federasi Tbk.',
+        text: 'Kuota Obligasi Negara ORI-026 kupon 7.25% juga masih buka tuh, cocok buat parkir kas holding biar tetap cuan stabil.',
+        badge: 'TAIPAN'
+      }
+    ];
+    for (const ch of sampleChats) {
+      await query.run(
+        `INSERT INTO chat_messages (id, user_id, username, pt_name, text, badge)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [uuidv4(), ch.user_id, ch.username, ch.pt_name, ch.text, ch.badge]
+      );
+    }
+    console.log('💬 Chat Global Bursa berhasil diramaikan dengan obrolan Sultan 9 Naga, Taipan & Ritel.');
   }
 }
 

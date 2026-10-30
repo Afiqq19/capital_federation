@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/user.dart';
 import '../providers/game_provider.dart';
+import '../services/api_service.dart';
 import '../utils/formatters.dart';
 import '../screens/game_constitution_screen.dart';
 
@@ -686,13 +687,13 @@ class _UserProfileSheetState extends State<_UserProfileSheet> with SingleTickerP
             ),
             child: Column(
               children: [
-                _buildInfoRow('Versi Aplikasi Mobile (APK):', 'v1.4.0-CFX Production (Build 4)', const Color(0xFF34D399)),
+                _buildInfoRow('Versi Aplikasi Mobile (APK):', ApiService.currentApkDisplayVersion, const Color(0xFF34D399)),
                 const Divider(color: Color(0xFF1E293B), height: 14),
-                _buildInfoRow('Versi Web Admin Console:', 'v1.4.0 Sovereign Launch', const Color(0xFF38BDF8)),
+                _buildInfoRow('Versi Web Admin Console:', 'v1.5.0 Sovereign Launch', const Color(0xFF38BDF8)),
                 const Divider(color: Color(0xFF1E293B), height: 14),
-                _buildInfoRow('Simulasi Pasar Modal:', 'Realistic Engine (CFX-107 Emiten)', const Color(0xFFFBBF24)),
+                _buildInfoRow('Simulasi Pasar Modal:', 'Realistic Engine (${context.read<GameProvider>().companies.length} Emiten • 4-Huruf)', const Color(0xFFFBBF24)),
                 const Divider(color: Color(0xFF1E293B), height: 14),
-                _buildInfoRow('Basis Data & Keamanan:', 'SQLite Multi-Threaded • JWT SHA-256', Colors.white),
+                _buildInfoRow('Basis Data & Keamanan:', 'SQLite & MariaDB • JWT SHA-256', Colors.white),
                 const Divider(color: Color(0xFF1E293B), height: 14),
                 _buildInfoRow('Status Jaringan:', 'Online • WebSocket Realtime Sync', const Color(0xFF34D399)),
               ],

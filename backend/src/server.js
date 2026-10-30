@@ -4143,11 +4143,40 @@ app.get('/api/auctions', async (req, res) => {
   res.json([]);
 });
 
+// Helper format nama PT agar tidak pernah menjadi "PT PT."
+function formatCleanPtName(rawPtName, hasPt) {
+  if (!hasPt || !rawPtName || String(rawPtName).trim() === '' || String(rawPtName).toLowerCase().includes('investor')) {
+    return 'Investor Mandiri';
+  }
+  const stripped = String(rawPtName).replace(/^(PT\.?\s*)+/i, '').trim();
+  return stripped ? `PT. ${stripped}` : 'Investor Mandiri';
+}
+
+// Helper menghitung Peringkat Konglomerat Live (Top 9 Naga, Taipan, VIP)
+async function getUserRankMap() {
+  const rows = await query.all(`
+    SELECT u.id, u.role, u.is_blue_chip,
+           (u.balance_ib + u.company_balance_ib + COALESCE(SUM(p.lots_owned * 100 * c.current_price), 0)) as net_worth
+    FROM users u
+    LEFT JOIN portfolios p ON u.id = p.user_id
+    LEFT JOIN companies c ON p.company_id = c.id
+    WHERE u.role != 'ADMIN'
+    GROUP BY u.id
+    ORDER BY net_worth DESC
+    LIMIT 100
+  `);
+  const map = new Map();
+  rows.forEach((r, idx) => {
+    map.set(r.id, { rank: idx + 1, role: r.role, isBlueChip: Boolean(r.is_blue_chip), netWorth: r.net_worth });
+  });
+  return map;
+}
+
 // Leaderboard Top 100
 app.get('/api/leaderboard', async (req, res) => {
   try {
     const users = await query.all(`
-      SELECT u.id, u.username, u.pt_name, u.has_pt, u.sector, u.balance_ib, u.company_balance_ib, u.pt_level, u.is_blue_chip,
+      SELECT u.id, u.username, u.pt_name, u.has_pt, u.sector, u.balance_ib, u.company_balance_ib, u.pt_level, u.is_blue_chip, u.role,
              COALESCE(SUM(p.lots_owned * 100 * c.current_price), 0) as stock_valuation
       FROM users u
       LEFT JOIN portfolios p ON u.id = p.user_id
@@ -4160,21 +4189,24 @@ app.get('/api/leaderboard', async (req, res) => {
 
     const leaderboard = users.map((u, index) => {
       const netWorth = u.balance_ib + u.company_balance_ib + u.stock_valuation;
+      const isVipUser = String(u.role || '').toUpperCase() === 'VIP' || Boolean(u.is_blue_chip);
       let badge = 'REGULER';
       if (index < 9) badge = '9 NAGA';
       else if (index < 25) badge = 'TAIPAN';
-      else if (u.is_blue_chip) badge = 'BLUE CHIP';
+      else if (isVipUser) badge = 'VIP';
 
       return {
         rank: index + 1,
         id: u.id,
         username: u.username,
-        ptName: u.has_pt ? u.pt_name : 'Investor Mandiri',
+        ptName: formatCleanPtName(u.pt_name, u.has_pt),
+        hasPt: Boolean(u.has_pt),
         sector: u.has_pt ? u.sector : 'Ritel Finansial',
         netWorth,
         cash: u.balance_ib,
         companyCash: u.company_balance_ib,
         stockValuation: u.stock_valuation,
+        isVip: isVipUser || index < 9,
         badge
       };
     });
@@ -4185,29 +4217,91 @@ app.get('/api/leaderboard', async (req, res) => {
   }
 });
 
-// Chat
+// Chat Global Bursa (Menampilkan Status 9 NAGA Sultan, TAIPAN, VIP, & Bank Sentral)
 app.get('/api/chat', async (req, res) => {
-  const msgs = await query.all('SELECT * FROM chat_messages ORDER BY created_at DESC LIMIT 50');
-  res.json(msgs.reverse());
+  try {
+    const msgs = await query.all('SELECT * FROM chat_messages ORDER BY created_at DESC LIMIT 60');
+    const rankMap = await getUserRankMap();
+
+    const enriched = msgs.reverse().map((m) => {
+      const rankInfo = rankMap.get(m.user_id);
+      let liveBadge = m.badge || 'REGULER';
+      if (liveBadge !== 'BANK SENTRAL' && rankInfo) {
+        const isVip = String(rankInfo.role || '').toUpperCase() === 'VIP';
+        if (rankInfo.rank <= 9) {
+          liveBadge = isVip ? `9 NAGA #${rankInfo.rank} • VIP` : `9 NAGA #${rankInfo.rank}`;
+        } else if (rankInfo.rank <= 25) {
+          liveBadge = isVip ? 'TAIPAN • VIP' : 'TAIPAN';
+        } else if (isVip) {
+          liveBadge = 'VIP SULTAN';
+        } else if (rankInfo.isBlueChip) {
+          liveBadge = 'BLUE CHIP';
+        }
+      }
+      const cleanPt = m.pt_name && !m.pt_name.toLowerCase().includes('investor') && !m.pt_name.toLowerCase().includes('bank sentral') && !m.pt_name.toLowerCase().includes('otoritas')
+        ? formatCleanPtName(m.pt_name, true)
+        : (m.pt_name || 'Investor Mandiri');
+
+      return {
+        ...m,
+        pt_name: cleanPt,
+        badge: liveBadge,
+        rank: rankInfo ? rankInfo.rank : null
+      };
+    });
+
+    res.json(enriched);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.post('/api/chat', async (req, res) => {
-  const { userId, text } = req.body;
-  const user = await query.get('SELECT * FROM users WHERE id = ?', [userId]);
-  if (!user) return res.status(404).json({ error: 'User not found' });
+  try {
+    const { userId, text } = req.body;
+    const user = await query.get('SELECT * FROM users WHERE id = ?', [userId]);
+    if (!user) return res.status(404).json({ error: 'User not found' });
 
-  const msgId = uuidv4();
-  const badge = user.role === 'ADMIN' ? 'BANK SENTRAL' : (user.is_blue_chip ? 'BLUE CHIP' : 'REGULER');
-  const ptDisplayName = user.has_pt ? user.pt_name : 'Investor Mandiri';
+    const rankMap = await getUserRankMap();
+    const rankInfo = rankMap.get(user.id);
+    const isVip = String(user.role || '').toUpperCase() === 'VIP';
 
-  await query.run(
-    'INSERT INTO chat_messages (id, user_id, username, pt_name, text, badge) VALUES (?, ?, ?, ?, ?, ?)',
-    [msgId, user.id, user.username, ptDisplayName, text, badge]
-  );
+    let badge = 'REGULER';
+    if (user.role === 'ADMIN') {
+      badge = 'BANK SENTRAL';
+    } else if (rankInfo && rankInfo.rank <= 9) {
+      badge = isVip ? `9 NAGA #${rankInfo.rank} • VIP` : `9 NAGA #${rankInfo.rank}`;
+    } else if (rankInfo && rankInfo.rank <= 25) {
+      badge = isVip ? 'TAIPAN • VIP' : 'TAIPAN';
+    } else if (isVip) {
+      badge = 'VIP SULTAN';
+    } else if (user.is_blue_chip) {
+      badge = 'BLUE CHIP';
+    }
 
-  const obj = { id: msgId, user_id: user.id, username: user.username, pt_name: ptDisplayName, text, badge, created_at: new Date().toISOString() };
-  io.emit('chat:message', obj);
-  res.json(obj);
+    const msgId = uuidv4();
+    const ptDisplayName = formatCleanPtName(user.pt_name, user.has_pt);
+
+    await query.run(
+      'INSERT INTO chat_messages (id, user_id, username, pt_name, text, badge) VALUES (?, ?, ?, ?, ?, ?)',
+      [msgId, user.id, user.username, ptDisplayName, text, badge]
+    );
+
+    const obj = {
+      id: msgId,
+      user_id: user.id,
+      username: user.username,
+      pt_name: ptDisplayName,
+      text,
+      badge,
+      rank: rankInfo ? rankInfo.rank : null,
+      created_at: new Date().toISOString()
+    };
+    io.emit('chat:message', obj);
+    res.json(obj);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Admin overview
@@ -4878,14 +4972,33 @@ app.use('/api/subsidies', subsidiesRouter);
 app.use('/api/tenders', tendersRouter);
 
 // Endpoint Info Versi Sistem (Mobile APK, Web Admin, & Backend Server)
-app.get('/api/version', (req, res) => {
-  res.json({
-    version: '1.4.0',
-    apkVersion: 'v1.4.0-CFX Production (Build 2026.10)',
-    adminVersion: 'v1.4.0 Sovereign Launch',
-    backendVersion: 'v1.4.0-CFX Production',
-    databaseProtection: 'SQLite Persistent Volume (Zero Reset on Update)'
-  });
+app.get('/api/version', async (req, res) => {
+  try {
+    const compCount = await query.get('SELECT COUNT(*) as count FROM companies');
+    const userCount = await query.get('SELECT COUNT(*) as count FROM users WHERE is_admin = 0');
+    res.json({
+      version: '1.5.0',
+      buildNumber: 5,
+      apkVersion: 'v1.5.0-CFX Production (Build 5)',
+      adminVersion: 'v1.5.0 Sovereign Launch',
+      backendVersion: 'v1.5.0-CFX Production',
+      totalCompanies: compCount?.count || 200,
+      totalPlayers: userCount?.count || 124,
+      releaseNotes: 'Ticker Saham 4-Huruf Resmi (Tanpa Angka), Perbaikan Nama PT, Efek Emas Chat Sultan 9 Naga & VIP, dan Deteksi Update Otomatis',
+      updatedAt: new Date().toISOString(),
+      databaseProtection: 'SQLite Persistent Volume (Zero Reset on Update)'
+    });
+  } catch (err) {
+    res.json({
+      version: '1.5.0',
+      buildNumber: 5,
+      apkVersion: 'v1.5.0-CFX Production (Build 5)',
+      adminVersion: 'v1.5.0 Sovereign Launch',
+      backendVersion: 'v1.5.0-CFX Production',
+      releaseNotes: 'Ticker Saham 4-Huruf Resmi (Tanpa Angka), Perbaikan Nama PT, Efek Emas Chat Sultan 9 Naga & VIP, dan Deteksi Update Otomatis',
+      databaseProtection: 'SQLite Persistent Volume (Zero Reset on Update)'
+    });
+  }
 });
 
 // Deployment & Server Utility Routes (Auto-Deploy Git Pull - sejajar dengan db.js, seed.js, server.js)

@@ -73,6 +73,26 @@ class ApiService {
     return null;
   }
 
+  static const String currentAppVersion = '1.5.0';
+  static const int currentBuildNumber = 5;
+  static const String currentApkDisplayVersion = 'v1.5.0-CFX Production (Build 5)';
+
+  // Fetch Live Server Version & Update Detection Info
+  static Future<Map<String, dynamic>?> getServerVersion() async {
+    try {
+      final res = await http
+          .get(Uri.parse('$baseUrl/api/version'))
+          .timeout(const Duration(seconds: 4));
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data is Map<String, dynamic>) {
+          return data;
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
   // Register as Investor Pemula
   static Future<Map<String, dynamic>> register({
     required String username,
