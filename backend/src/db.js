@@ -441,6 +441,8 @@ async function initDb() {
   await safeAddColumn('companies', 'pt_level INTEGER DEFAULT 1');
   await safeAddColumn('companies', "listing_status TEXT DEFAULT 'LISTED'");
   await safeAddColumn('users', "credit_tier TEXT DEFAULT 'STANDARD'");
+  await safeAddColumn('users', "email TEXT");
+  await safeAddColumn('users', "email_verified INTEGER DEFAULT 0");
   await query.exec(`
     CREATE TABLE IF NOT EXISTS market_oversight_log (
       id TEXT PRIMARY KEY,

@@ -1078,7 +1078,7 @@ class GameProvider extends ChangeNotifier {
     if (_user == null) return {'success': false, 'error': 'Silakan login terlebih dahulu'};
     final res = await ApiService.sendEmailVerification(userId: _user!.id, email: email);
     if (res['success'] == true) {
-      _user = _user!.copyWith(email: email);
+      _user = _user!.copyWith(email: email, emailVerified: true);
       notifyListeners();
     }
     return res;

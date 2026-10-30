@@ -256,7 +256,7 @@ app.post('/api/user/profile/update', async (req, res) => {
   }
 });
 
-// Verifikasi Email Resmi Pengguna
+// Verifikasi Email Resmi Pengguna & Tautan Notariat
 app.post('/api/user/email/verify', async (req, res) => {
   try {
     const { userId, email } = req.body;
@@ -271,13 +271,33 @@ app.post('/api/user/email/verify', async (req, res) => {
     }
 
     await query.run(
-      'UPDATE users SET email = ?, is_email_verified = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      'UPDATE users SET email = ?, email_verified = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
       [targetEmail, userId]
     );
 
+    const updated = await query.get('SELECT * FROM users WHERE id = ?', [userId]);
+
     res.json({
       success: true,
-      message: `Tautan verifikasi telah dikonfirmasi! Email ${targetEmail} resmi terdaftar dan terproteksi di Otoritas BIF.`
+      email: targetEmail,
+      sender: 'auth@xie.my.id',
+      verificationToken: `CFX-AUTH-${Date.now()}`,
+      verificationLink: `https://capitalfederation.xie.my.id/auth/verify?email=${encodeURIComponent(targetEmail)}&token=CFX-SECURE`,
+      message: `Tautan verifikasi telah disahkan! Email ${targetEmail} resmi berstatus Terverifikasi di Otoritas Kustodian IPMC.`,
+      user: updated ? {
+        id: updated.id,
+        username: updated.username,
+        hasPt: Boolean(updated.has_pt),
+        ptName: updated.pt_name,
+        sector: updated.sector,
+        balanceIb: updated.balance_ib,
+        companyBalanceIb: updated.company_balance_ib,
+        email: updated.email,
+        emailVerified: true,
+        role: updated.role,
+        creditTier: updated.credit_tier,
+        isIpo: Boolean(updated.is_ipo)
+      } : null
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -5780,13 +5800,13 @@ const localBuiltApkPath = path.join(__dirname, '../../mobile/build/app/outputs/f
 
 async function getApkSettingsMap() {
   const defaults = {
-    apk_version: '1.5.1',
-    apk_build_number: '6',
+    apk_version: '1.5.3',
+    apk_build_number: '7',
     apk_min_android: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
     apk_file_size_mb: '24.8 MB',
-    apk_release_notes: '252 Emiten Tbk. Terkoneksi 1-ke-1 dengan 265 Bot Peringkat, Setoran Pajak Bot ke Kas Negara, Bursa Akuisisi M&A Modern dengan RUPS Persetujuan Pendiri, & Lelang Sitaan Bank Sentral BCF',
+    apk_release_notes: 'Pembaruan Profil Konglomerat & Form Akun Terpadu, Simulasi Email Resmi auth@xie.my.id, Arus Kas & Mutasi di Beranda Bersih, serta Perbaikan SQLite Verifikasi Akun.',
     apk_external_url: '',
-    apk_download_count: '148',
+    apk_download_count: '152',
     apk_sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
     apk_updated_at: new Date().toISOString(),
   };
@@ -5797,11 +5817,11 @@ async function getApkSettingsMap() {
         defaults[r.key] = String(r.value);
       }
     }
-    if (parseInt(defaults.apk_build_number || '0', 10) < 6) {
-      defaults.apk_version = '1.5.1';
-      defaults.apk_build_number = '6';
+    if (parseInt(defaults.apk_build_number || '0', 10) < 7) {
+      defaults.apk_version = '1.5.3';
+      defaults.apk_build_number = '7';
       defaults.apk_file_size_mb = '24.8 MB';
-      defaults.apk_release_notes = '252 Emiten Tbk. Terkoneksi 1-ke-1 dengan 265 Bot Peringkat, Setoran Pajak Bot ke Kas Negara, Bursa Akuisisi M&A Modern dengan RUPS Persetujuan Pendiri, & Lelang Sitaan Bank Sentral BCF';
+      defaults.apk_release_notes = 'Pembaruan Profil Konglomerat & Form Akun Terpadu, Simulasi Email Resmi auth@xie.my.id, Arus Kas & Mutasi di Beranda Bersih, serta Perbaikan SQLite Verifikasi Akun.';
     }
   } catch (_) {}
   return defaults;

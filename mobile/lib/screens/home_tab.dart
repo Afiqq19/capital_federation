@@ -15,7 +15,6 @@ import 'cash_flow_ledger_screen.dart';
 import '../widgets/sovereign_bonds_modal.dart';
 import '../widgets/government_tenders_modal.dart';
 import 'profile_screen.dart';
-import 'leaderboard_tab.dart';
 
 class HomeTab extends StatefulWidget {
   const HomeTab({super.key});
@@ -98,9 +97,6 @@ class _HomeTabState extends State<HomeTab> {
                 const SizedBox(height: 16),
               ],
 
-              // Banner Papan Peringkat Konglomerat (Ramai & Kompetitif)
-              _buildLeaderboardBanner(context, provider, user),
-
               // Mode 1: Pemula (Belum Punya PT) vs Mode 2: Sudah Punya PT / Hasil Akuisisi
               if (!hasAnyBusiness)
                 _buildBeginnerView(context, provider, user)
@@ -108,116 +104,6 @@ class _HomeTabState extends State<HomeTab> {
                 _buildTycoonView(context, provider, user, activeEntity),
             ],
           ),
-        ),
-      ),
-    );
-  }
-
-  // --- BANNER PAPAN PERINGKAT KONGLOMERAT ---
-  Widget _buildLeaderboardBanner(BuildContext context, GameProvider provider, UserModel user) {
-    final leaderboard = provider.leaderboard;
-    final int myRankIndex = leaderboard.indexWhere((item) => item['id'] == user.id || item['username'] == user.username);
-    final String rankLabel = myRankIndex >= 0 ? '#${myRankIndex + 1}' : 'Unranked';
-
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => Scaffold(
-              appBar: AppBar(
-                backgroundColor: const Color(0xFF0D1322),
-                title: const Text('Papan Peringkat Konglomerat', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                leading: IconButton(
-                  icon: const Icon(Icons.arrow_back_ios_new_rounded),
-                  onPressed: () => Navigator.pop(context),
-                ),
-              ),
-              body: const SafeArea(child: LeaderboardTab()),
-            ),
-          ),
-        );
-      },
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 16.0),
-        padding: const EdgeInsets.all(14.0),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFF1E1B4B), Color(0xFF0F172A), Color(0xFF312E81)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(16.0),
-          border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.4), width: 1.2),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFFF59E0B).withValues(alpha: 0.12),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF59E0B).withValues(alpha: 0.18),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.military_tech_rounded, color: Color(0xFFF59E0B), size: 28),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Text(
-                        'PAPAN PERINGKAT KONGLOMERAT',
-                        style: TextStyle(
-                          color: Color(0xFFF59E0B),
-                          fontWeight: FontWeight.w900,
-                          fontSize: 10,
-                          letterSpacing: 0.8,
-                        ),
-                      ),
-                      const Spacer(),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF10B981).withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          '${leaderboard.length} Konglomerat Aktif',
-                          style: const TextStyle(color: Color(0xFF34D399), fontSize: 9, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Peringkat Anda: $rankLabel (${user.isBlueChip ? "BLUE CHIP" : "REGULER"})',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  const Text(
-                    'Lihat persaingan 100 taipan & ritel pasar modal ➔',
-                    style: TextStyle(
-                      color: Color(0xFF94A3B8),
-                      fontSize: 11,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
         ),
       ),
     );
@@ -724,7 +610,119 @@ class _HomeTabState extends State<HomeTab> {
                 'Kumpulkan modal dari capital gain saham & dividen untuk mendirikan PT sendiri!',
                 style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
               ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF38BDF8),
+                        side: const BorderSide(color: Color(0xFF0284C7)),
+                        padding: const EdgeInsets.symmetric(vertical: 9),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => CashFlowLedgerScreen(
+                            userId: user.id,
+                            initialAccountType: 'PERSONAL',
+                          ),
+                        ),
+                      ),
+                      icon: const Icon(Icons.receipt_long_rounded, size: 15),
+                      label: const Text(
+                        'MUTASI KAS',
+                        style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF10B981),
+                        foregroundColor: const Color(0xFF022C22),
+                        padding: const EdgeInsets.symmetric(vertical: 9),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => CashFlowLedgerScreen(
+                            userId: user.id,
+                            initialAccountType: 'PERSONAL',
+                          ),
+                        ),
+                      ),
+                      icon: const Icon(Icons.swap_vert_rounded, size: 16),
+                      label: const Text(
+                        'ARUS KAS MASUK/KELUAR',
+                        style: TextStyle(fontWeight: FontWeight.w900, fontSize: 10),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ],
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        // Tombol Buku Kas & Riwayat Mutasi Transparan (Pemula)
+        InkWell(
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => CashFlowLedgerScreen(
+                userId: user.id,
+                initialAccountType: 'PERSONAL',
+              ),
+            ),
+          ),
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  const Color(0xFF0D9488).withValues(alpha: 0.20),
+                  const Color(0xFF0F766E).withValues(alpha: 0.08),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFF14B8A6).withValues(alpha: 0.45)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(7),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0D9488).withValues(alpha: 0.25),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.account_balance_wallet_rounded, color: Color(0xFF2DD4BF), size: 18),
+                ),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Buku Kas & Riwayat Mutasi Transparan',
+                        style: TextStyle(color: Color(0xFF2DD4BF), fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                      SizedBox(height: 1),
+                      Text(
+                        'Pantau seluruh arus kas masuk dividen, kupon SBN & pengeluaran investasi',
+                        style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.arrow_forward_ios_rounded, color: Color(0xFF2DD4BF), size: 13),
+              ],
+            ),
           ),
         ),
         const SizedBox(height: 12),
