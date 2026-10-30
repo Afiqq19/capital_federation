@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../providers/game_provider.dart';
 import '../utils/formatters.dart';
+import '../widgets/public_player_profile_sheet.dart';
 
 class LeaderboardTab extends StatefulWidget {
   const LeaderboardTab({super.key});
@@ -205,36 +207,48 @@ class _LeaderboardTabState extends State<LeaderboardTab> with SingleTickerProvid
                               rankTextColor = const Color(0xFF64748B);
                             }
 
-                            return Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                              decoration: BoxDecoration(
-                                gradient: isTop9
-                                    ? LinearGradient(
-                                        colors: isRank1
-                                            ? [const Color(0xFF2B1F06), const Color(0xFF141109), const Color(0xFF0F172A)]
-                                            : [const Color(0xFF1D1608), const Color(0xFF0F172A)],
-                                        begin: Alignment.centerLeft,
-                                        end: Alignment.centerRight,
-                                      )
-                                    : null,
-                                color: isTop9 ? null : const Color(0xFF0F172A),
+                            return Material(
+                              color: Colors.transparent,
+                              child: InkWell(
                                 borderRadius: BorderRadius.circular(16),
-                                border: Border.all(
-                                  color: borderColor,
-                                  width: isRank1 ? 1.8 : (isRank2 || isRank3 ? 1.4 : (isTop9 ? 1.2 : 1.0)),
-                                ),
-                                boxShadow: isTop9
-                                    ? [
-                                        BoxShadow(
-                                          color: const Color(0xFFF59E0B).withValues(alpha: isRank1 ? 0.18 : 0.08),
-                                          blurRadius: 12,
-                                          offset: const Offset(0, 3),
-                                        ),
-                                      ]
-                                    : null,
-                              ),
-                              child: Row(
-                                children: [
+                                onTap: () {
+                                  HapticFeedback.lightImpact();
+                                  PublicPlayerProfileSheet.show(
+                                    context,
+                                    userId: item['id']?.toString() ?? '',
+                                    initialData: item,
+                                  );
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                  decoration: BoxDecoration(
+                                    gradient: isTop9
+                                        ? LinearGradient(
+                                            colors: isRank1
+                                                ? [const Color(0xFF2B1F06), const Color(0xFF141109), const Color(0xFF0F172A)]
+                                                : [const Color(0xFF1D1608), const Color(0xFF0F172A)],
+                                            begin: Alignment.centerLeft,
+                                            end: Alignment.centerRight,
+                                          )
+                                        : null,
+                                    color: isTop9 ? null : const Color(0xFF0F172A),
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                      color: borderColor,
+                                      width: isRank1 ? 1.8 : (isRank2 || isRank3 ? 1.4 : (isTop9 ? 1.2 : 1.0)),
+                                    ),
+                                    boxShadow: isTop9
+                                        ? [
+                                            BoxShadow(
+                                              color: const Color(0xFFF59E0B).withValues(alpha: isRank1 ? 0.18 : 0.08),
+                                              blurRadius: 12,
+                                              offset: const Offset(0, 3),
+                                            ),
+                                          ]
+                                        : null,
+                                  ),
+                                  child: Row(
+                                    children: [
                                   // Rank badge
                                   Container(
                                     width: 34,
@@ -354,7 +368,9 @@ class _LeaderboardTabState extends State<LeaderboardTab> with SingleTickerProvid
                                   ),
                                 ],
                               ),
-                            );
+                            ),
+                          ),
+                        );
                           },
                         ),
 
@@ -502,18 +518,33 @@ class _LeaderboardTabState extends State<LeaderboardTab> with SingleTickerProvid
                                     borderColor = const Color(0xFF38BDF8).withValues(alpha: 0.35);
                                   }
 
-                                  return Container(
-                                    padding: const EdgeInsets.all(12),
-                                    decoration: BoxDecoration(
-                                      gradient: cardGradient,
-                                      color: cardGradient == null ? cardBg : null,
-                                      borderRadius: BorderRadius.circular(14),
-                                      border: Border.all(color: borderColor, width: borderWidth),
-                                      boxShadow: shadows,
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
+                                  return GestureDetector(
+                                    onTap: () {
+                                      if (msg.userId.isNotEmpty && !msg.userId.startsWith('system') && !msg.userId.startsWith('admin')) {
+                                        HapticFeedback.lightImpact();
+                                        PublicPlayerProfileSheet.show(
+                                          context,
+                                          userId: msg.userId,
+                                          initialData: {
+                                            'username': msg.username,
+                                            'isVip': isVip,
+                                            'rank': is9Naga ? 1 : 50,
+                                          },
+                                        );
+                                      }
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        gradient: cardGradient,
+                                        color: cardGradient == null ? cardBg : null,
+                                        borderRadius: BorderRadius.circular(14),
+                                        border: Border.all(color: borderColor, width: borderWidth),
+                                        boxShadow: shadows,
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
                                         // Top Prestige Ribbon for 9 NAGA or VIP
                                         if (is9Naga || isVip || isBank) ...[
                                           Container(
@@ -743,8 +774,9 @@ class _LeaderboardTabState extends State<LeaderboardTab> with SingleTickerProvid
                                         ),
                                       ],
                                     ),
-                                  );
-                                },
+                                  ),
+                                );
+                              },
                               ),
                       ),
 

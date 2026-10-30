@@ -4883,6 +4883,135 @@ app.get('/api/leaderboard', async (req, res) => {
   }
 });
 
+// Endpoint Profil Publik Eksekutif Konglomerat (dengan proteksi privasi ketat)
+app.get('/api/user/public-profile/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const user = await query.get(`
+      SELECT id, username, has_pt, pt_name, pt_symbol, sector, pt_level, rd_level,
+             is_ipo, fundamental_score, credit_score, credit_tier, is_blue_chip, role,
+             created_at, employees_count, pt_description, pt_founded_at, email,
+             balance_ib, company_balance_ib
+      FROM users WHERE id = ? OR username = ?
+    `, [userId, userId]);
+
+    if (!user) {
+      return res.status(404).json({ error: 'Data profil konglomerat tidak ditemukan di arsip IPMC.' });
+    }
+
+    // Hitung posisi di Leaderboard
+    const rankMap = await getUserRankMap();
+    const rankInfo = rankMap.get(user.id) || { rank: 999 };
+    const rank = rankInfo.rank;
+    const isVipUser = String(user.role || '').toUpperCase() === 'VIP' || Boolean(user.is_blue_chip);
+    let badge = 'REGULER';
+    if (rank <= 9) badge = '9 NAGA';
+    else if (rank <= 25) badge = 'TAIPAN';
+    else if (isVipUser) badge = 'VIP';
+
+    // Masked Email untuk perlindungan privasi (e.g. "haz***@domain.com")
+    let maskedEmail = 'Disamarkan demi privasi';
+    if (user.email && user.email.includes('@')) {
+      const parts = user.email.split('@');
+      const name = parts[0];
+      const domain = parts[1];
+      const maskedName = name.length > 2 ? `${name.substring(0, 3)}***` : `${name}***`;
+      maskedEmail = `${maskedName}@${domain}`;
+    }
+
+    // Masked Rekening Kas Brankas
+    const maskedVaultAccount = `CFX-VAULT-${user.id.substring(0, 4).toUpperCase()}-****`;
+
+    // Portofolio Saham Terbuka (Public Share Registry)
+    const portfolios = await query.all(`
+      SELECT p.lots_owned, p.avg_buy_price,
+             c.id as company_id, c.symbol, c.name as company_name, c.current_price,
+             c.sector as company_sector, c.total_shares
+      FROM portfolios p
+      JOIN companies c ON p.company_id = c.id
+      WHERE p.user_id = ? AND p.lots_owned > 0
+      ORDER BY (p.lots_owned * 100 * c.current_price) DESC
+      LIMIT 12
+    `, [user.id]);
+
+    let totalStockValuation = 0;
+    const publicShares = (portfolios || []).map((p) => {
+      const sharesCount = p.lots_owned * 100;
+      const valuation = sharesCount * p.current_price;
+      totalStockValuation += valuation;
+      const ownershipPct = p.total_shares > 0 ? ((sharesCount / p.total_shares) * 100).toFixed(2) : '0.00';
+      return {
+        companyId: p.company_id,
+        symbol: p.symbol,
+        companyName: p.company_name,
+        sector: p.company_sector,
+        lotsOwned: p.lots_owned,
+        currentPrice: p.current_price,
+        valuation,
+        ownershipPct: parseFloat(ownershipPct)
+      };
+    });
+
+    const netWorth = (user.balance_ib || 0) + (user.company_balance_ib || 0) + totalStockValuation;
+
+    // Anak Perusahaan / Hasil Akuisisi (Subsidiaries)
+    const subsidiaries = await query.all(`
+      SELECT id, name, symbol, sector, current_price, fundamental_score, total_shares
+      FROM companies
+      WHERE owner_id = ? AND is_seized = 0
+    `, [user.id]);
+
+    res.json({
+      id: user.id,
+      username: user.username,
+      rank,
+      badge,
+      isVip: isVipUser || rank <= 9,
+      is9Naga: rank <= 9,
+      isTaipan: rank > 9 && rank <= 25,
+      joinedAt: user.created_at || '2026-10-15T00:00:00.000Z',
+      creditScore: user.credit_score || 750,
+      creditTier: user.credit_tier || 'STANDARD',
+      privacy: {
+        maskedEmail,
+        maskedVaultAccount,
+        protectionSeal: 'UU Perlindungan Nasabah & Kustodian Sentral IPMC',
+        isAudited: true
+      },
+      wealth: {
+        netWorth,
+        personalCash: user.balance_ib,
+        companyCash: user.company_balance_ib,
+        stockValuation: totalStockValuation
+      },
+      holding: {
+        hasPt: Boolean(user.has_pt),
+        ptName: formatCleanPtName(user.pt_name, user.has_pt),
+        symbol: user.pt_symbol || (user.is_ipo ? 'TBK' : 'PT'),
+        sector: user.has_pt ? user.sector : 'Ritel Finansial',
+        fundamentalScore: user.fundamental_score || 75,
+        rdLevel: user.rd_level || 1,
+        ptLevel: user.pt_level || 1,
+        employeesCount: user.employees_count || 0,
+        isIpo: Boolean(user.is_ipo),
+        description: user.pt_description || `Holding ${user.pt_name} beroperasi di sektor ${user.sector}.`,
+        subsidiariesCount: subsidiaries.length,
+        subsidiaries: subsidiaries.map((s) => ({
+          id: s.id,
+          name: s.name,
+          symbol: s.symbol,
+          sector: s.sector,
+          currentPrice: s.current_price,
+          fundamentalScore: s.fundamental_score
+        }))
+      },
+      portfolioShares: publicShares
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Chat Global Bursa (Menampilkan Status 9 NAGA Sultan, TAIPAN, VIP, & Bank Sentral)
 app.get('/api/chat', async (req, res) => {
   try {

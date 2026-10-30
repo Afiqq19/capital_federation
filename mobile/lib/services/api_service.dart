@@ -1442,6 +1442,22 @@ class ApiService {
       return {'error': 'Gagal memproses verifikasi email: $e'};
     }
   }
+
+  // Profil Publik Eksekutif Pemain Lain (Leaderboard / Chat Global)
+  static Future<Map<String, dynamic>> getPublicPlayerProfile(String userId) async {
+    try {
+      final response = await http
+          .get(Uri.parse('$baseUrl/api/user/public-profile/$userId'))
+          .timeout(const Duration(seconds: 5));
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+      final errData = jsonDecode(response.body);
+      return {'error': errData['error'] ?? 'Gagal memuat profil publik'};
+    } catch (e) {
+      return {'error': 'Gangguan koneksi ke server bursa: $e'};
+    }
+  }
 }
 
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../models/company.dart';
@@ -20,6 +21,8 @@ class _AssetExchangeTabState extends State<AssetExchangeTab> with SingleTickerPr
   List<dynamic> _auctions = [];
   List<dynamic> _incomingProposals = [];
   List<dynamic> _outgoingProposals = [];
+  final Set<String> _processingProposalIds = {};
+  final Set<String> _processingAuctionIds = {};
   bool _isLoading = true;
   String _searchQuery = '';
   String _selectedSector = 'Semua';
@@ -91,6 +94,7 @@ class _AssetExchangeTabState extends State<AssetExchangeTab> with SingleTickerPr
     int percentage = 51;
     String offerTier = 'RESCUE_30'; // 'RESCUE_30' | 'MARKET_FAIR' | 'PREMIUM_15'
     String paymentSource = 'PERSONAL'; // 'PERSONAL' | 'COMPANY'
+    bool isSubmitting = false;
     final pitchCtrl = TextEditingController(
       text: 'Proposal akuisisi saham pengendali & injeksi modal restrukturisasi perseroan ${company.name}.',
     );
@@ -141,7 +145,6 @@ class _AssetExchangeTabState extends State<AssetExchangeTab> with SingleTickerPr
           final selectedBalance = paymentSource == 'COMPANY' ? companyBal : personalBal;
           final canAfford = selectedBalance >= totalDeduction;
           final lotsTransferred = (company.totalShares * (percentage / 100.0) / 100).round();
-          bool isSubmitting = false;
 
           return Container(
             constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.90),
@@ -355,17 +358,51 @@ class _AssetExchangeTabState extends State<AssetExchangeTab> with SingleTickerPr
                   ),
                   const SizedBox(height: 14),
 
-                  // Slider Porsi Hak Suara
+                  // Slider & Preset Porsi Hak Suara
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text(
-                        '2. Porsi Saham Pengendali Diakuisisi',
+                        '2. Porsi Saham Diakuisisi',
                         style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
                       ),
                       Text(
                         '$percentage% (${currencyFormatter.format(lotsTransferred)} Lot)',
                         style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 13, fontWeight: FontWeight.w900),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildTierOption(
+                          title: '51% Kendali',
+                          sub: 'Mayoritas RUPS',
+                          selected: percentage == 51,
+                          color: const Color(0xFF38BDF8),
+                          onTap: () => setSheetState(() => percentage = 51),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: _buildTierOption(
+                          title: '75% Kuorum',
+                          sub: 'Hak Veto Penuh',
+                          selected: percentage == 75,
+                          color: const Color(0xFFF59E0B),
+                          onTap: () => setSheetState(() => percentage = 75),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: _buildTierOption(
+                          title: '100% Penuh',
+                          sub: 'Go-Private / Delist',
+                          selected: percentage == 100,
+                          color: const Color(0xFF10B981),
+                          onTap: () => setSheetState(() => percentage = 100),
+                        ),
                       ),
                     ],
                   ),
@@ -378,6 +415,21 @@ class _AssetExchangeTabState extends State<AssetExchangeTab> with SingleTickerPr
                     inactiveColor: const Color(0xFF1E293B),
                     onChanged: (val) => setSheetState(() => percentage = val.round()),
                   ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF070B14),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFF1E293B)),
+                    ),
+                    child: Text(
+                      percentage == 100
+                          ? '🏛️ Status 100%: Seluruh saham Pendiri dan Publik/Ritel diborong. Emiten beralih menjadi 100% PT Tertutup Swasta.'
+                          : '⚖️ Status $percentage%: Anda memegang kendali mayoritas perseroan, menempatkan direksi, dan menyerap kas dividen holding.',
+                      style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10, height: 1.3),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
 
                   // Pilihan Sumber Dana (Kas Pribadi vs Kas PT)
                   const Text(
@@ -520,6 +572,7 @@ class _AssetExchangeTabState extends State<AssetExchangeTab> with SingleTickerPr
                           ? null
                           : () async {
                               setSheetState(() => isSubmitting = true);
+                              HapticFeedback.mediumImpact();
                               final provider = context.read<GameProvider>();
                               final res = await provider.takeoverCompany(
                                 companyId: company.id,
@@ -533,10 +586,13 @@ class _AssetExchangeTabState extends State<AssetExchangeTab> with SingleTickerPr
 
                               if (res['success'] == true) {
                                 if (res['pendingFounderApproval'] == true) {
+                                  ScaffoldMessenger.of(context).clearSnackBars();
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
                                       content: Text(res['message'] ?? 'Proposal dikirim ke Pendiri untuk disetujui!'),
                                       backgroundColor: const Color(0xFF0284C7),
+                                      behavior: SnackBarBehavior.floating,
+                                      duration: const Duration(seconds: 2),
                                     ),
                                   );
                                   _tabController.animateTo(1);
@@ -545,10 +601,13 @@ class _AssetExchangeTabState extends State<AssetExchangeTab> with SingleTickerPr
                                 }
                                 _loadData();
                               } else {
+                                ScaffoldMessenger.of(context).clearSnackBars();
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
                                     content: Text(res['error'] ?? 'Gagal memproses proposal akuisisi'),
                                     backgroundColor: Colors.red,
+                                    behavior: SnackBarBehavior.floating,
+                                    duration: const Duration(seconds: 2),
                                   ),
                                 );
                               }
@@ -558,10 +617,12 @@ class _AssetExchangeTabState extends State<AssetExchangeTab> with SingleTickerPr
                         foregroundColor: const Color(0xFF451A03),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
-                      icon: const Icon(Icons.verified_rounded, size: 18),
-                      label: const Text(
-                        'AJUKAN PERSETUJUAN PENDIRI & AKUISISI',
-                        style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
+                      icon: isSubmitting
+                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                          : const Icon(Icons.verified_rounded, size: 18),
+                      label: Text(
+                        isSubmitting ? 'MEMPROSES KONTRAK NOTARIAT...' : 'AJUKAN PERSETUJUAN PENDIRI & AKUISISI',
+                        style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
                       ),
                     ),
                   ),
@@ -777,66 +838,96 @@ class _AssetExchangeTabState extends State<AssetExchangeTab> with SingleTickerPr
   Future<void> _handleProposalDecision(Map<String, dynamic> prop, String decision) async {
     final gp = context.read<GameProvider>();
     final userId = gp.user?.id ?? '';
-    if (userId.isEmpty) return;
+    final propId = prop['id'].toString();
+    if (userId.isEmpty || _processingProposalIds.contains(propId)) return;
 
-    final res = await ApiService.respondTakeoverProposal(
-      proposalId: prop['id'].toString(),
-      userId: userId,
-      decision: decision,
-    );
+    setState(() => _processingProposalIds.add(propId));
+    HapticFeedback.lightImpact();
 
-    if (!mounted) return;
-    if (res['success'] == true) {
-      await gp.refreshPortfolio();
-      await gp.loadInitialData();
-      await _loadData();
+    try {
+      final res = await ApiService.respondTakeoverProposal(
+        proposalId: propId,
+        userId: userId,
+        decision: decision,
+      );
+
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(res['message'] ?? 'Keputusan RUPS Pendiri berhasil disimpan!'),
-          backgroundColor: decision == 'APPROVE' ? const Color(0xFF10B981) : const Color(0xFFEF4444),
-        ),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(res['error'] ?? 'Gagal memproses keputusan'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      ScaffoldMessenger.of(context).clearSnackBars();
+      if (res['success'] == true) {
+        await gp.refreshPortfolio();
+        await gp.loadInitialData();
+        await _loadData();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(res['message'] ?? 'Keputusan RUPS Pendiri berhasil disimpan!'),
+            backgroundColor: decision == 'APPROVE' ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(res['error'] ?? 'Gagal memproses keputusan'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _processingProposalIds.remove(propId));
+      }
     }
   }
 
   Future<void> _handleAuctionAction(Map<String, dynamic> auction, String action) async {
     final gp = context.read<GameProvider>();
     final userId = gp.user?.id ?? '';
-    if (userId.isEmpty) return;
+    final auctionId = auction['id'].toString();
+    if (userId.isEmpty || _processingAuctionIds.contains(auctionId)) return;
 
-    final res = await ApiService.bidAuction(
-      userId: userId,
-      auctionId: auction['id'].toString(),
-      action: action,
-    );
+    setState(() => _processingAuctionIds.add(auctionId));
+    HapticFeedback.lightImpact();
 
-    if (!mounted) return;
-    if (res['success'] == true) {
-      await gp.refreshPortfolio();
-      await gp.loadInitialData();
-      await _loadData();
+    try {
+      final res = await ApiService.bidAuction(
+        userId: userId,
+        auctionId: auctionId,
+        action: action,
+      );
+
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(res['message'] ?? 'Lelang berhasil diproses!'),
-          backgroundColor: const Color(0xFF10B981),
-        ),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(res['error'] ?? 'Gagal memproses lelang'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      ScaffoldMessenger.of(context).clearSnackBars();
+      if (res['success'] == true) {
+        await gp.refreshPortfolio();
+        await gp.loadInitialData();
+        await _loadData();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(res['message'] ?? 'Lelang berhasil diproses!'),
+            backgroundColor: const Color(0xFF10B981),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(res['error'] ?? 'Gagal memproses lelang'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _processingAuctionIds.remove(auctionId));
+      }
     }
   }
 
@@ -1385,7 +1476,9 @@ class _AssetExchangeTabState extends State<AssetExchangeTab> with SingleTickerPr
                             children: [
                               Expanded(
                                 child: OutlinedButton.icon(
-                                  onPressed: () => _handleProposalDecision(Map<String, dynamic>.from(p), 'REJECT'),
+                                  onPressed: _processingProposalIds.contains(p['id'].toString())
+                                      ? null
+                                      : () => _handleProposalDecision(Map<String, dynamic>.from(p), 'REJECT'),
                                   style: OutlinedButton.styleFrom(
                                     side: const BorderSide(color: Color(0xFFEF4444)),
                                     foregroundColor: const Color(0xFFF87171),
@@ -1398,15 +1491,19 @@ class _AssetExchangeTabState extends State<AssetExchangeTab> with SingleTickerPr
                               Expanded(
                                 flex: 2,
                                 child: ElevatedButton.icon(
-                                  onPressed: () => _handleProposalDecision(Map<String, dynamic>.from(p), 'APPROVE'),
+                                  onPressed: _processingProposalIds.contains(p['id'].toString())
+                                      ? null
+                                      : () => _handleProposalDecision(Map<String, dynamic>.from(p), 'APPROVE'),
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: const Color(0xFF10B981),
                                     foregroundColor: const Color(0xFF022C22),
                                   ),
-                                  icon: const Icon(Icons.check_circle_rounded, size: 15),
-                                  label: const Text(
-                                    'SETUJUI & TERIMA DANA',
-                                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900),
+                                  icon: _processingProposalIds.contains(p['id'].toString())
+                                      ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                                      : const Icon(Icons.check_circle_rounded, size: 15),
+                                  label: Text(
+                                    _processingProposalIds.contains(p['id'].toString()) ? 'MEMPROSES...' : 'SETUJUI & TERIMA DANA',
+                                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900),
                                   ),
                                 ),
                               ),
@@ -1686,7 +1783,9 @@ class _AssetExchangeTabState extends State<AssetExchangeTab> with SingleTickerPr
                 children: [
                   Expanded(
                     child: OutlinedButton.icon(
-                      onPressed: () => _handleAuctionAction(a, 'BID'),
+                      onPressed: _processingAuctionIds.contains(a['id'].toString())
+                          ? null
+                          : () => _handleAuctionAction(a, 'BID'),
                       style: OutlinedButton.styleFrom(
                         side: const BorderSide(color: Color(0xFF38BDF8)),
                         foregroundColor: const Color(0xFF38BDF8),
@@ -1704,17 +1803,21 @@ class _AssetExchangeTabState extends State<AssetExchangeTab> with SingleTickerPr
                   Expanded(
                     flex: 2,
                     child: ElevatedButton.icon(
-                      onPressed: () => _handleAuctionAction(a, 'BUYOUT'),
+                      onPressed: _processingAuctionIds.contains(a['id'].toString())
+                          ? null
+                          : () => _handleAuctionAction(a, 'BUYOUT'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF10B981),
                         foregroundColor: const Color(0xFF022C22),
                         padding: const EdgeInsets.symmetric(vertical: 10),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
-                      icon: const Icon(Icons.gavel_rounded, size: 15),
-                      label: const Text(
-                        'TEBUS INSTAN & MENANGKAN',
-                        style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w900),
+                      icon: _processingAuctionIds.contains(a['id'].toString())
+                          ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                          : const Icon(Icons.gavel_rounded, size: 15),
+                      label: Text(
+                        _processingAuctionIds.contains(a['id'].toString()) ? 'MEMPROSES LELANG...' : 'TEBUS INSTAN & MENANGKAN',
+                        style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w900),
                       ),
                     ),
                   ),
