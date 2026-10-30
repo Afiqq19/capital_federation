@@ -721,7 +721,7 @@ class MarketSimulationEngine {
           if ((existingBids || []).length < 3) {
             const existingBidderIds = new Set((existingBids || []).map(b => b.bidder_user_id));
             const botCandidates = await query.all(
-              "SELECT id, username, pt_name, company_balance_ib FROM users WHERE id LIKE 'user-bot-%' AND has_pt = 1 AND company_balance_ib >= 2500000000 LIMIT 8"
+              "SELECT id, username, pt_name, company_balance_ib FROM users WHERE (id LIKE 'bot-user-%' OR id LIKE 'user-bot-%') AND has_pt = 1 AND company_balance_ib >= 1500000000 LIMIT 8"
             );
             const pitches = [
               'Aliansi strategis integrasi rantai pasok & distribusi regional Capital Federation.',
