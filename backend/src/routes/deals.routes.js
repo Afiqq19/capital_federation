@@ -108,6 +108,16 @@ module.exports = function(io) {
           percentage: pct,
           grossAmount
         });
+
+        // Jika pembeli yang dituju adalah BOT (seperti @haziq / Top Konglomerat):
+        // Aktifkan Bot Evaluator cerdas yang bermain kooperatif mengevaluasi harga & membeli!
+        const isBotBuyer = buyerUserId.startsWith('bot-user-') || buyerUserId.startsWith('user-bot-') || (buyerName && (buyerName.toLowerCase().includes('haziq') || buyerName.toLowerCase().includes('reza') || buyerName.toLowerCase().includes('fajar')));
+        if (isBotBuyer) {
+          triggerBotP2PEvaluation(dealId);
+        }
+      } else if (dealType === 'GLOBAL') {
+        // Jika dilepas ke Pasar Global, bot konglomerat kaya dapat mengevaluasi dan memborong blok saham jika harga wajar
+        triggerBotGlobalEvaluation(dealId);
       }
 
       // Siarkan breaking news jika transaksi listing besar
@@ -218,106 +228,305 @@ module.exports = function(io) {
       }
 
       // TRANSAKSI ATOMIK EKSEKUSI PEMINDAHAN HAK SAHAM & PEMBAYARAN
-      await query.run('BEGIN TRANSACTION');
-      try {
-        // 1. Tarik kas pembeli
-        await query.run('UPDATE users SET balance_ib = balance_ib - ? WHERE id = ?', [totalBuyerDeduction, buyerUserId]);
+      const result = await executeDealTransaction({
+        deal,
+        buyer,
+        seller,
+        comp,
+        pctToBuy,
+        sharesTransferred,
+        lotsTransferred,
+        totalPrice,
+        feeTax,
+        meteraiFee,
+        totalBuyerDeduction,
+        tradingTaxRate,
+        io
+      });
 
-        // 2. Setor uang bersih ke kas pribadi penjual
-        await query.run('UPDATE users SET balance_ib = balance_ib + ? WHERE id = ?', [totalPrice, seller.id]);
-
-        // 3. Potong persentase pendiri penjual
-        await query.run('UPDATE users SET founder_shares_sold = COALESCE(founder_shares_sold, 0) + ? WHERE id = ?', [pctToBuy, seller.id]);
-        if (comp) {
-          await query.run('UPDATE companies SET founder_shares_sold = COALESCE(founder_shares_sold, 0) + ? WHERE id = ?', [pctToBuy, comp.id]);
-        }
-
-        // 4. Tambah portofolio saham ke pembeli
-        const existingPort = await query.get('SELECT * FROM portfolios WHERE user_id = ? AND company_id = ?', [buyerUserId, comp.id]);
-        if (existingPort) {
-          await query.run('UPDATE portfolios SET lots_owned = lots_owned + ? WHERE id = ?', [lotsTransferred, existingPort.id]);
-        } else {
-          await query.run(
-            'INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price) VALUES (?, ?, ?, ?, ?)',
-            [uuidv4(), buyerUserId, comp.id, lotsTransferred, deal.price_per_share]
-          );
-        }
-
-        // 5. Kurangi sisa penawaran di deal
-        const newRemaining = Math.max(0, deal.percentage_remaining - pctToBuy);
-        const newStatus = newRemaining <= 0.05 ? 'COMPLETED' : deal.status;
-        await query.run(
-          `UPDATE private_deals 
-           SET percentage_remaining = ?, status = ?, buyer_signed_at = COALESCE(buyer_signed_at, ?)
-           WHERE id = ?`,
-          [newRemaining, newStatus, new Date().toISOString(), deal.id]
-        );
-
-        // 6. Terbitkan Akta Resmi Perjanjian Jual Beli Saham (Deed)
-        const deedId = uuidv4();
-        const deedNumber = `AKTA/PNAF/${new Date().getFullYear()}/${Math.floor(10000 + Math.random() * 90000)}`;
-        await query.run(
-          `INSERT INTO deal_deeds (
-            id, deed_number, deal_id, seller_user_id, seller_name, buyer_user_id, buyer_name,
-            company_id, company_name, company_symbol, percentage_transferred, shares_transferred,
-            price_per_share, total_price_ib, meterai_status, status
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            deedId, deedNumber, deal.id, seller.id, `${seller.username} (${seller.pt_name || 'Pendiri'})`,
-            buyer.id, `${buyer.username} (${buyer.pt_name || 'Investor'})`,
-            comp.id, comp.name, comp.symbol, pctToBuy, sharesTransferred,
-            deal.price_per_share, totalPrice, `LUNAS_IB_${Math.round(meteraiFee)}`, 'ACTIVE'
-          ]
-        );
-
-        // 7. Catat Pajak & Bea Meterai ke Kas Negara (State Treasury)
-        await query.run(
-          'INSERT INTO state_treasury_ledger (id, source_type, title, amount_ib, direction, reference_id, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          [uuidv4(), 'TRANSACTION_TAX', `Pajak Transaksi Jual-Beli Saham ${(tradingTaxRate * 100).toFixed(2)}% Akta #${deedNumber}`, feeTax, 'INCOME', deedNumber, `Dipungut dari pembeli ${buyer.username}`]
-        );
-        await query.run(
-          'INSERT INTO state_treasury_ledger (id, source_type, title, amount_ib, direction, reference_id, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          [uuidv4(), 'METERAI_FEE', `Bea Meterai Digital Korporasi Akta #${deedNumber}`, meteraiFee, 'INCOME', deedNumber, `Meterai Digital Lunas (IB ${meteraiFee.toLocaleString('id-ID')})`]
-        );
-
-        await query.run('COMMIT');
-
-        // Emit update treasury ke Web Admin & Mobile
-        if (io) {
-          io.emit('treasury:updated');
-        }
-
-        // Siarkan Breaking News ke seluruh bursa
-        const newsItem = {
-          id: uuidv4(),
-          title: `📜 AKTA JUAL-BELI SAHAM SAH: ${buyer.username} Mengakuisisi ${pctToBuy.toFixed(1)}% ${comp.symbol}!`,
-          content: `Peralihan ${pctToBuy.toFixed(1)}% saham ${comp.name} dari ${seller.username} ke ${buyer.username} resmi disahkan Notariat PNAF senilai IB ${totalPrice.toLocaleString('id-ID')} (Akta No: ${deedNumber}).`,
-          affected_sector: comp.sector,
-          sentiment: 'BULLISH',
-          published_at: new Date().toISOString()
-        };
-        await query.run(
-          'INSERT INTO news (id, title, content, affected_sector, sentiment, published_at) VALUES (?, ?, ?, ?, ?, ?)',
-          [newsItem.id, newsItem.title, newsItem.content, newsItem.affected_sector, newsItem.sentiment, newsItem.published_at]
-        );
-        io.emit('market:news_broadcast', newsItem);
-
-        res.json({
-          success: true,
-          deedNumber,
-          pctTransferred: pctToBuy,
-          totalPrice,
-          remainingOfferedPct: newRemaining,
-          message: `🎉 Akta Notaris #${deedNumber} Sah Ditandatangani! ${pctToBuy.toFixed(1)}% Saham resmi beralih ke portofolio Anda.`
-        });
-      } catch (e) {
-        await query.run('ROLLBACK');
-        throw e;
-      }
+      res.json({
+        success: true,
+        deedNumber: result.deedNumber,
+        pctTransferred: pctToBuy,
+        totalPrice,
+        remainingOfferedPct: result.newRemaining,
+        message: `🎉 Akta Notaris #${result.deedNumber} Sah Ditandatangani! ${pctToBuy.toFixed(1)}% Saham resmi beralih ke portofolio Anda.`
+      });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
   });
+
+  // Eksekusi Inti Transaksi Akta Jual Beli Saham (Digunakan oleh User & Bot)
+  async function executeDealTransaction({
+    deal,
+    buyer,
+    seller,
+    comp,
+    pctToBuy,
+    sharesTransferred,
+    lotsTransferred,
+    totalPrice,
+    feeTax,
+    meteraiFee,
+    totalBuyerDeduction,
+    tradingTaxRate = 0.0015,
+    io
+  }) {
+    await query.run('BEGIN TRANSACTION');
+    try {
+      // 1. Tarik kas pembeli
+      await query.run('UPDATE users SET balance_ib = balance_ib - ? WHERE id = ?', [totalBuyerDeduction, buyer.id]);
+
+      // 2. Setor uang bersih ke kas pribadi penjual
+      await query.run('UPDATE users SET balance_ib = balance_ib + ? WHERE id = ?', [totalPrice, seller.id]);
+
+      // 3. Potong persentase pendiri penjual
+      await query.run('UPDATE users SET founder_shares_sold = COALESCE(founder_shares_sold, 0) + ? WHERE id = ?', [pctToBuy, seller.id]);
+      if (comp) {
+        await query.run('UPDATE companies SET founder_shares_sold = COALESCE(founder_shares_sold, 0) + ? WHERE id = ?', [pctToBuy, comp.id]);
+      }
+
+      // 4. Tambah portofolio saham ke pembeli
+      const existingPort = await query.get('SELECT * FROM portfolios WHERE user_id = ? AND company_id = ?', [buyer.id, comp.id]);
+      if (existingPort) {
+        await query.run('UPDATE portfolios SET lots_owned = lots_owned + ? WHERE id = ?', [lotsTransferred, existingPort.id]);
+      } else {
+        await query.run(
+          'INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price) VALUES (?, ?, ?, ?, ?)',
+          [uuidv4(), buyer.id, comp.id, lotsTransferred, deal.price_per_share]
+        );
+      }
+
+      // 5. Kurangi sisa penawaran di deal
+      const newRemaining = Math.max(0, deal.percentage_remaining - pctToBuy);
+      const newStatus = newRemaining <= 0.05 ? 'COMPLETED' : deal.status;
+      await query.run(
+        `UPDATE private_deals 
+         SET percentage_remaining = ?, status = ?, buyer_signed_at = COALESCE(buyer_signed_at, ?)
+         WHERE id = ?`,
+        [newRemaining, newStatus, new Date().toISOString(), deal.id]
+      );
+
+      // 6. Terbitkan Akta Resmi Perjanjian Jual Beli Saham (Deed)
+      const deedId = uuidv4();
+      const deedNumber = `AKTA/PNAF/${new Date().getFullYear()}/${Math.floor(10000 + Math.random() * 90000)}`;
+      await query.run(
+        `INSERT INTO deal_deeds (
+          id, deed_number, deal_id, seller_user_id, seller_name, buyer_user_id, buyer_name,
+          company_id, company_name, company_symbol, percentage_transferred, shares_transferred,
+          price_per_share, total_price_ib, meterai_status, status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          deedId, deedNumber, deal.id, seller.id, `${seller.username} (${seller.pt_name || 'Pendiri'})`,
+          buyer.id, `${buyer.username} (${buyer.pt_name || 'Investor'})`,
+          comp.id, comp.name, comp.symbol, pctToBuy, sharesTransferred,
+          deal.price_per_share, totalPrice, `LUNAS_IB_${Math.round(meteraiFee)}`, 'ACTIVE'
+        ]
+      );
+
+      // 7. Catat Pajak & Bea Meterai ke Kas Negara (State Treasury)
+      await query.run(
+        'INSERT INTO state_treasury_ledger (id, source_type, title, amount_ib, direction, reference_id, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [uuidv4(), 'TRANSACTION_TAX', `Pajak Transaksi Jual-Beli Saham ${(tradingTaxRate * 100).toFixed(2)}% Akta #${deedNumber}`, feeTax, 'INCOME', deedNumber, `Dipungut dari pembeli ${buyer.username}`]
+      );
+      await query.run(
+        'INSERT INTO state_treasury_ledger (id, source_type, title, amount_ib, direction, reference_id, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [uuidv4(), 'METERAI_FEE', `Bea Meterai Digital Korporasi Akta #${deedNumber}`, meteraiFee, 'INCOME', deedNumber, `Meterai Digital Lunas (IB ${meteraiFee.toLocaleString('id-ID')})`]
+      );
+
+      // 8. SUKSESI KONTROL KORPORASI: Jika transaksi mencapai mayoritas (>= 50%)
+      const totalShares = comp.total_shares || 10000000;
+      const isMajorityTransfer = pctToBuy >= 50.0 || (sharesTransferred / totalShares) >= 0.50;
+      if (isMajorityTransfer) {
+        // Alihkan kepemilikan pengendali (owner_id) ke pembeli
+        await query.run(
+          'UPDATE companies SET owner_id = ?, founder_name = ?, is_acquired = 1 WHERE id = ?',
+          [buyer.id, buyer.username, comp.id]
+        );
+
+        // Jika penjual kehilangan kendali atas PT ini:
+        const sellerRow = await query.get('SELECT * FROM users WHERE id = ?', [seller.id]);
+        if (sellerRow && (sellerRow.pt_symbol === comp.symbol || sellerRow.pt_name === comp.name || comp.owner_id === seller.id)) {
+          // Cari anak perusahaan lain milik penjual untuk dipromosikan jadi PT Utama
+          const nextSub = await query.get(
+            'SELECT * FROM companies WHERE owner_id = ? AND id != ? ORDER BY (circulating_shares * current_price) DESC, founded_at ASC LIMIT 1',
+            [seller.id, comp.id]
+          );
+
+          if (nextSub) {
+            console.log(`🏢 [P2P Suksesi] Mempromosikan ${nextSub.name} (${nextSub.symbol}) menjadi PT Utama baru bagi @${seller.username}...`);
+            await query.run(
+              `UPDATE users 
+               SET pt_name = ?, pt_symbol = ?, sector = ?, is_ipo = ?, company_balance_ib = ?, founder_shares_sold = ?, has_pt = 1
+               WHERE id = ?`,
+              [nextSub.name, nextSub.symbol, nextSub.sector, nextSub.is_ipo || 0, nextSub.company_balance_ib || 0, nextSub.founder_shares_sold || 0, seller.id]
+            );
+          } else {
+            console.log(`🏢 [P2P Suksesi] Seluruh PT @${seller.username} telah dilepas, mereset PT Utama (bisa dirikan PT baru)...`);
+            await query.run(
+              "UPDATE users SET has_pt = 0, pt_name = '', pt_symbol = '', is_ipo = 0, company_balance_ib = 0 WHERE id = ?",
+              [seller.id]
+            );
+          }
+        }
+      }
+
+      await query.run('COMMIT');
+
+      if (io) {
+        io.emit('treasury:updated');
+        io.emit('user:balance_updated', { userId: buyer.id });
+        io.emit('user:balance_updated', { userId: seller.id });
+        io.emit('user:conglomerate_updated', { userId: buyer.id });
+        io.emit('user:conglomerate_updated', { userId: seller.id });
+      }
+
+      // Siarkan Breaking News ke seluruh bursa
+      const newsItem = {
+        id: uuidv4(),
+        title: `📜 AKTA JUAL-BELI SAHAM SAH: ${buyer.username} Mengakuisisi ${pctToBuy.toFixed(1)}% ${comp.symbol}!`,
+        content: `Peralihan ${pctToBuy.toFixed(1)}% saham ${comp.name} dari ${seller.username} ke ${buyer.username} resmi disahkan Notariat PNAF senilai IB ${totalPrice.toLocaleString('id-ID')} (Akta No: ${deedNumber}).`,
+        affected_sector: comp.sector,
+        sentiment: 'BULLISH',
+        published_at: new Date().toISOString()
+      };
+      await query.run(
+        'INSERT INTO news (id, title, content, affected_sector, sentiment, published_at) VALUES (?, ?, ?, ?, ?, ?)',
+        [newsItem.id, newsItem.title, newsItem.content, newsItem.affected_sector, newsItem.sentiment, newsItem.published_at]
+      );
+      if (io) io.emit('market:news_broadcast', newsItem);
+
+      return { deedNumber, newRemaining };
+    } catch (e) {
+      await query.run('ROLLBACK');
+      throw e;
+    }
+  }
+
+  // BOT EVALUATOR: Bot P2P mengevaluasi tawaran penjualan saham dari pemain secara kooperatif
+  function triggerBotP2PEvaluation(dealId) {
+    setTimeout(async () => {
+      try {
+        const deal = await query.get('SELECT * FROM private_deals WHERE id = ?', [dealId]);
+        if (!deal || deal.status !== 'PENDING_BUYER_SIGNATURE') return;
+
+        const buyer = await query.get('SELECT * FROM users WHERE id = ?', [deal.buyer_user_id]);
+        const seller = await query.get('SELECT * FROM users WHERE id = ?', [deal.seller_user_id]);
+        const comp = await query.get('SELECT * FROM companies WHERE id = ?', [deal.company_id]);
+        if (!buyer || !seller || !comp) return;
+
+        const currentPrice = comp.current_price || 1000;
+        const offerPrice = deal.price_per_share || currentPrice;
+        const priceRatio = offerPrice / currentPrice;
+
+        // Bot menyetujui jika harga wajar (<= 135% dari harga pasar):
+        if (priceRatio <= 1.35) {
+          const totalShares = comp.total_shares || 10000000;
+          const pctToBuy = deal.percentage_remaining;
+          const sharesTransferred = Math.round(totalShares * (pctToBuy / 100.0));
+          const lotsTransferred = Math.max(1, Math.round(sharesTransferred / 100));
+          const totalPrice = Math.round(sharesTransferred * deal.price_per_share);
+          const feeTax = Math.round(totalPrice * 0.0015);
+          const meteraiFee = 10000.0;
+          const totalBuyerDeduction = totalPrice + feeTax + meteraiFee;
+
+          if ((buyer.balance_ib || 0) >= totalBuyerDeduction) {
+            console.log(`🤖 [Bot P2P] @${buyer.username} MENYETUJUI pembelian ${pctToBuy}% saham ${comp.name} dari @${seller.username}!`);
+            await executeDealTransaction({
+              deal,
+              buyer,
+              seller,
+              comp,
+              pctToBuy,
+              sharesTransferred,
+              lotsTransferred,
+              totalPrice,
+              feeTax,
+              meteraiFee,
+              totalBuyerDeduction,
+              tradingTaxRate: 0.0015,
+              io
+            });
+            return;
+          }
+        }
+
+        // Jika harga di atas batas wajar (> 135% pasar) atau kas tidak cukup, bot menolak:
+        console.log(`🤖 [Bot P2P] @${buyer.username} MENOLAK penawaran #${deal.deal_number} (Harga: ${(priceRatio * 100 - 100).toFixed(0)}% di atas pasar).`);
+        const rejectMsg = `Penawaran ditolak oleh @${buyer.username}: Valuasi harga IB ${offerPrice.toLocaleString('id-ID')} dinilai terlalu tinggi dibanding nilai wajar pasar (IB ${currentPrice.toLocaleString('id-ID')}).`;
+        await query.run(
+          "UPDATE private_deals SET status = 'CANCELLED', rejection_reason = ? WHERE id = ?",
+          [rejectMsg, deal.id]
+        );
+
+        if (io) {
+          io.emit(`user:deal_offer:${seller.id}`, {
+            type: 'REJECTED',
+            dealId: deal.id,
+            message: `@${buyer.username} menolak tawaran akta saham ${comp.symbol}: Valuasi harga terlalu tinggi.`
+          });
+        }
+      } catch (err) {
+        console.error('Error in Bot P2P evaluation:', err.message);
+      }
+    }, 2500);
+  }
+
+  // BOT EVALUATOR: Bot Konglomerat mengevaluasi paket divestasi global dari pemain
+  function triggerBotGlobalEvaluation(dealId) {
+    setTimeout(async () => {
+      try {
+        const deal = await query.get('SELECT * FROM private_deals WHERE id = ?', [dealId]);
+        if (!deal || deal.status !== 'ACTIVE_GLOBAL' || deal.percentage_remaining <= 0) return;
+
+        const comp = await query.get('SELECT * FROM companies WHERE id = ?', [deal.company_id]);
+        const seller = await query.get('SELECT * FROM users WHERE id = ?', [deal.seller_user_id]);
+        if (!comp || !seller) return;
+
+        const currentPrice = comp.current_price || 1000;
+        const offerPrice = deal.price_per_share || currentPrice;
+
+        // Jika harga global wajar (<= 115% harga pasar):
+        if (offerPrice <= currentPrice * 1.15) {
+          const totalShares = comp.total_shares || 10000000;
+          const pctToBuy = deal.percentage_remaining;
+          const sharesTransferred = Math.round(totalShares * (pctToBuy / 100.0));
+          const lotsTransferred = Math.max(1, Math.round(sharesTransferred / 100));
+          const totalPrice = Math.round(sharesTransferred * deal.price_per_share);
+          const feeTax = Math.round(totalPrice * 0.0015);
+          const meteraiFee = 10000.0;
+          const totalDeduction = totalPrice + feeTax + meteraiFee;
+
+          const wealthyBot = await query.get(
+            "SELECT * FROM users WHERE (id LIKE 'bot-user-%' OR id LIKE 'user-bot-%') AND id != ? AND balance_ib >= ? ORDER BY balance_ib DESC LIMIT 1",
+            [seller.id, totalDeduction]
+          );
+
+          if (wealthyBot) {
+            console.log(`🤖 [Bot Global] @${wealthyBot.username} memborong ${pctToBuy}% saham global ${comp.symbol} milik @${seller.username}!`);
+            await executeDealTransaction({
+              deal,
+              buyer: wealthyBot,
+              seller,
+              comp,
+              pctToBuy,
+              sharesTransferred,
+              lotsTransferred,
+              totalPrice,
+              feeTax,
+              meteraiFee,
+              totalBuyerDeduction: totalDeduction,
+              tradingTaxRate: 0.0015,
+              io
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Error in Bot Global evaluation:', err.message);
+      }
+    }, 4000);
+  }
 
   // 5. Tolak Tawaran P2P
   router.post('/reject', async (req, res) => {

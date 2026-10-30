@@ -746,6 +746,61 @@ async function initDb() {
         daily_low = CASE WHEN daily_low IS NULL OR daily_low <= 0 THEN current_price * 0.98 ELSE daily_low END;
   `);
 
+  // Otomatisasi Perbaikan Inkonsistensi Status Kepemilikan & PT Utama Pasca-Akuisisi M&A
+  try {
+    // 1. Cek jika ada user yang PT Utamanya sudah beralih kepemilikan (owner_id bukan dirinya lagi)
+    const usersWithPt = await query.all("SELECT id, username, pt_name, pt_symbol, has_pt FROM users WHERE has_pt = 1 AND role != 'ADMIN'");
+    for (const u of (usersWithPt || [])) {
+      const primaryOwned = await query.get(
+        "SELECT id, name, symbol, sector, is_ipo, company_balance_ib, founder_shares_sold FROM companies WHERE owner_id = ? AND (symbol = ? OR name = ?)",
+        [u.id, u.pt_symbol, u.pt_name]
+      );
+      if (!primaryOwned) {
+        // PT Utama user ini rupanya telah diakuisisi pihak lain! Cari anak perusahaan pengganti milik user ini
+        const substituteSub = await query.get(
+          "SELECT id, name, symbol, sector, is_ipo, company_balance_ib, founder_shares_sold FROM companies WHERE owner_id = ? ORDER BY founded_at ASC, id ASC LIMIT 1",
+          [u.id]
+        );
+        if (substituteSub) {
+          console.log(`🔄 [Auto-Healing] Mempromosikan ${substituteSub.name} (${substituteSub.symbol}) menjadi PT Utama baru bagi @${u.username}...`);
+          await query.run(
+            `UPDATE users 
+             SET pt_name = ?, pt_symbol = ?, sector = ?, is_ipo = ?, company_balance_ib = ?, founder_shares_sold = ?, has_pt = 1
+             WHERE id = ?`,
+            [substituteSub.name, substituteSub.symbol, substituteSub.sector, substituteSub.is_ipo || 0, substituteSub.company_balance_ib || 0, substituteSub.founder_shares_sold || 0, u.id]
+          );
+        } else {
+          // Jika tidak ada PT lain yang dimiliki, set has_pt = 0 agar pemain bisa mendirikan PT baru
+          console.log(`🔄 [Auto-Healing] Seluruh PT @${u.username} telah diakuisisi, mereset status PT Utama (bisa dirikan PT baru)...`);
+          await query.run(
+            "UPDATE users SET has_pt = 0, pt_name = '', pt_symbol = '', is_ipo = 0, company_balance_ib = 0 WHERE id = ?",
+            [u.id]
+          );
+        }
+      }
+    }
+
+    // 2. Pulihkan sisa 19% saham (19.000 lot) PT. Syafiq Furniture Tbk. (SYFU) ke portofolio msyafiq19
+    const msyafiqUser = await query.get("SELECT id, username FROM users WHERE username = 'msyafiq19'");
+    const syfuComp = await query.get("SELECT id, total_shares, current_price FROM companies WHERE symbol = 'SYFU' OR name LIKE '%Syafiq Furniture%'");
+    if (msyafiqUser && syfuComp) {
+      const portRow = await query.get("SELECT id, lots_owned FROM portfolios WHERE user_id = ? AND company_id = ?", [msyafiqUser.id, syfuComp.id]);
+      if (!portRow) {
+        const { v4: uuidv4 } = require('uuid');
+        await query.run(
+          "INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price) VALUES (?, ?, ?, 19000, ?)",
+          [uuidv4(), msyafiqUser.id, syfuComp.id, syfuComp.current_price || 927]
+        );
+        console.log(`✅ [Auto-Healing] Portofolio sisa 19% saham (19.000 Lot) SYFU berhasil dipulihkan untuk @msyafiq19.`);
+      } else if (portRow.lots_owned < 19000) {
+        await query.run("UPDATE portfolios SET lots_owned = 19000 WHERE id = ?", [portRow.id]);
+        console.log(`✅ [Auto-Healing] Portofolio sisa 19% saham (19.000 Lot) SYFU berhasil diupdate menjadi 19.000 Lot untuk @msyafiq19.`);
+      }
+    }
+  } catch (healErr) {
+    console.error("Auto-healing error (non-fatal):", healErr.message);
+  }
+
   // Seed Initial Sample E-IPO Offerings if empty
   const existingIpo = await query.get('SELECT COUNT(*) as count FROM ipo_offerings');
   if (!existingIpo || existingIpo.count === 0) {

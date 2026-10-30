@@ -2180,68 +2180,92 @@ app.get('/api/user/conglomerate/:userId', async (req, res) => {
     const list = [];
     let primaryComp = null;
     if (user.has_pt) {
-      const isIpo = user.is_ipo === 1;
-      const officialPtName = formatCorporateName(user.pt_name, isIpo);
-      if (isIpo) {
-        primaryComp = await query.get('SELECT * FROM companies WHERE owner_id = ? AND is_bot = 0', [userId]);
-      }
-      const founderSold = user.founder_shares_sold || 0;
-      let founderPct = Math.max(0, 100.0 - (isIpo ? (30.0 + founderSold) : founderSold));
+      // 1. Cari PT Utama: Utamakan perusahaan yang owner_id-nya adalah user dan simbol/namanya cocok
+      primaryComp = await query.get(
+        'SELECT * FROM companies WHERE owner_id = ? AND (symbol = ? OR name = ?)',
+        [userId, user.pt_symbol, user.pt_name]
+      ) || await query.get(
+        'SELECT * FROM companies WHERE owner_id = ? ORDER BY founded_at ASC, id ASC LIMIT 1',
+        [userId]
+      );
 
-      // Jika founder melakukan buyback saham sendiri di pasar sekunder, tambahkan ke kepemilikan PT Utama
-      if (primaryComp) {
-        const ownPort = await query.get('SELECT lots_owned FROM portfolios WHERE user_id = ? AND company_id = ?', [userId, primaryComp.id]);
-        if (ownPort && ownPort.lots_owned > 0) {
-          const buybackPct = ((ownPort.lots_owned * 100.0) / primaryComp.total_shares) * 100.0;
-          founderPct = Math.min(100.0, founderPct + buybackPct);
+      // Jika user.has_pt == 1 tapi di database perusahaan tidak ditemukan sama sekali di tangan user:
+      if (!primaryComp) {
+        // Cek apakah user punya anak perusahaan lain
+        const anyOwnedComp = await query.get('SELECT * FROM companies WHERE owner_id = ? LIMIT 1', [userId]);
+        if (anyOwnedComp) {
+          primaryComp = anyOwnedComp;
+          await query.run(
+            'UPDATE users SET pt_name = ?, pt_symbol = ?, sector = ?, is_ipo = ?, company_balance_ib = ?, founder_shares_sold = ? WHERE id = ?',
+            [primaryComp.name, primaryComp.symbol, primaryComp.sector, primaryComp.is_ipo || 0, primaryComp.company_balance_ib || 0, primaryComp.founder_shares_sold || 0, userId]
+          );
+        } else {
+          // User tidak memiliki PT apapun lagi (semua sudah dijual/diakuisisi)
+          await query.run("UPDATE users SET has_pt = 0, pt_name = '', pt_symbol = '', is_ipo = 0, company_balance_ib = 0 WHERE id = ?", [userId]);
+          user.has_pt = 0;
         }
       }
 
-      list.push({
-        id: 'primary',
-        companyDbId: primaryComp ? primaryComp.id : null,
-        name: officialPtName,
-        symbol: primaryComp ? primaryComp.symbol : (isIpo ? 'TBK' : 'PT'),
-        sector: user.sector,
-        isPrimary: true,
-        isAcquired: false,
-        isSubsidiary: false,
-        companyBalance: user.company_balance_ib,
-        employeesCount: user.employees_count || 0,
-        ceoLevel: user.ceo_level || 0,
-        cfoLevel: user.cfo_level || 0,
-        cmoLevel: user.cmo_level || 0,
-        rdLevel: user.rd_level || 1,
-        marketingLevel: user.marketing_level || 1,
-        hrLevel: user.hr_level || 1,
-        capacityLevel: user.capacity_level || 1,
-        ptLevel: user.pt_level || 1,
-        fundamentalScore: user.fundamental_score || 70,
-        isIpo,
-        currentPrice: primaryComp ? primaryComp.current_price : 2500.0,
-        description: primaryComp?.description || `PT ${user.pt_name} beroperasi di sektor ${user.sector}.`,
-        ownershipPct: parseFloat(founderPct.toFixed(1)),
-        founderSharesSold: founderSold,
-        isSeized: primaryComp ? (primaryComp.is_seized === 1) : false,
-        status: primaryComp ? primaryComp.status : 'HEALTHY',
-        seizeReason: primaryComp ? primaryComp.seize_reason : null,
-        seizedBy: primaryComp ? primaryComp.seized_by : null,
-        isUma: primaryComp ? (primaryComp.uma_flag === 1) : false,
-        umaReason: primaryComp ? primaryComp.uma_reason : null
-      });
+      if (user.has_pt && primaryComp) {
+        const isIpo = primaryComp.is_ipo === 1;
+        const officialPtName = formatCorporateName(primaryComp.name, isIpo);
+        const founderSold = primaryComp.founder_shares_sold || user.founder_shares_sold || 0;
+        let founderPct = Math.max(0, 100.0 - (isIpo ? (30.0 + founderSold) : founderSold));
+
+        // Jika founder melakukan buyback saham sendiri di pasar sekunder, tambahkan ke kepemilikan PT Utama
+        const ownPort = await query.get('SELECT lots_owned FROM portfolios WHERE user_id = ? AND company_id = ?', [userId, primaryComp.id]);
+        if (ownPort && ownPort.lots_owned > 0) {
+          const buybackPct = ((ownPort.lots_owned * 100.0) / (primaryComp.total_shares || 10000000)) * 100.0;
+          founderPct = Math.min(100.0, founderPct + buybackPct);
+        }
+
+        list.push({
+          id: 'primary',
+          companyDbId: primaryComp.id,
+          name: officialPtName,
+          symbol: primaryComp.symbol,
+          sector: primaryComp.sector || user.sector,
+          isPrimary: true,
+          isAcquired: false,
+          isSubsidiary: false,
+          companyBalance: primaryComp.company_balance_ib || user.company_balance_ib || 0.0,
+          employeesCount: primaryComp.employees_count || user.employees_count || 0,
+          ceoLevel: primaryComp.ceo_level || user.ceo_level || 0,
+          cfoLevel: primaryComp.cfo_level || user.cfo_level || 0,
+          cmoLevel: primaryComp.cmo_level || user.cmo_level || 0,
+          rdLevel: primaryComp.rd_level || user.rd_level || 1,
+          marketingLevel: primaryComp.marketing_level || user.marketing_level || 1,
+          hrLevel: primaryComp.hr_level || user.hr_level || 1,
+          capacityLevel: primaryComp.capacity_level || user.capacity_level || 1,
+          ptLevel: primaryComp.pt_level || user.pt_level || 1,
+          fundamentalScore: primaryComp.fundamental_score || user.fundamental_score || 70,
+          isIpo,
+          currentPrice: primaryComp.current_price || 2500.0,
+          description: primaryComp.description || `PT ${primaryComp.name} beroperasi di sektor ${primaryComp.sector}.`,
+          ownershipPct: parseFloat(founderPct.toFixed(1)),
+          founderSharesSold: founderSold,
+          isSeized: primaryComp.is_seized === 1,
+          status: primaryComp.status || 'HEALTHY',
+          seizeReason: primaryComp.seize_reason || null,
+          seizedBy: primaryComp.seized_by || null,
+          isUma: primaryComp.uma_flag === 1,
+          umaReason: primaryComp.uma_reason || null
+        });
+      }
     }
 
     // Perusahaan anak (Subsidiary) & hasil akuisisi selain PT Utama sendiri
+    // HANYA yang benar-benar DIMILIKI oleh user (owner_id = userId) ATAU porsi saham mayoritas (>= 50%)!
     const primaryCompId = primaryComp ? primaryComp.id : '---none---';
     const acquired = await query.all(`
-      SELECT c.*, COALESCE(p.lots_owned, 100000) as lots_owned,
+      SELECT c.*, COALESCE(p.lots_owned, 0) as lots_owned,
              CASE WHEN c.owner_id = ? AND (p.lots_owned IS NULL OR p.lots_owned = 0) THEN 100.0
                   ELSE ((COALESCE(p.lots_owned, 0) * 100.0) / c.total_shares * 100.0)
-             END as ownership_pct
+             END as calculated_ownership_pct
       FROM companies c
       LEFT JOIN portfolios p ON c.id = p.company_id AND p.user_id = ?
       WHERE c.id != ? 
-        AND (c.owner_id = ? OR c.is_acquired = 1 OR ((COALESCE(p.lots_owned, 0) * 100.0) / c.total_shares) >= 0.50)
+        AND (c.owner_id = ? OR ((COALESCE(p.lots_owned, 0) * 100.0) / c.total_shares) >= 50.0)
     `, [userId, userId, primaryCompId, userId]);
 
     for (const a of acquired) {
@@ -2271,7 +2295,7 @@ app.get('/api/user/conglomerate/:userId', async (req, res) => {
         currentPrice: a.current_price,
         description: a.description || (isSubsidiary ? `Anak Perusahaan resmi sektor ${a.sector}.` : `Emiten hasil akuisisi konglomerasi di sektor ${a.sector}.`),
         lotsOwned: a.lots_owned,
-        ownershipPct: Math.min(100.0, Math.max(0.0, parseFloat((a.ownership_pct || 51.0).toFixed(1)))),
+        ownershipPct: Math.min(100.0, Math.max(0.0, parseFloat((a.calculated_ownership_pct || 100.0).toFixed(1)))),
         founderSharesSold: a.founder_shares_sold || 0,
         isSeized: a.is_seized === 1,
         status: a.status || 'HEALTHY',
@@ -4108,11 +4132,72 @@ async function executeApprovedAcquisition({
   const avgPrice = Math.max(50, Math.round(company.current_price * discountFactor));
 
   if (sellerUserId && sellerUserId !== 'consortium-trustee') {
-    await query.run(`
-      UPDATE portfolios 
-      SET lots_owned = MAX(0, lots_owned - ?) 
-      WHERE user_id = ? AND company_id = ?
-    `, [acquiredLots, sellerUserId, companyId]);
+    // Kurangi portofolio atau berikan alokasi sisa saham pendiri (misal 19%) ke portofolio penjual
+    const remainingFounderLots = Math.round(((company.total_shares || 10000000) * (remainingFounderPct / 100.0)) / 100);
+    const existingSellerPort = await query.get('SELECT * FROM portfolios WHERE user_id = ? AND company_id = ?', [sellerUserId, companyId]);
+    if (existingSellerPort) {
+      await query.run('UPDATE portfolios SET lots_owned = ? WHERE id = ?', [remainingFounderLots, existingSellerPort.id]);
+    } else if (remainingFounderLots > 0) {
+      await query.run(
+        'INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price) VALUES (?, ?, ?, ?, ?)',
+        [uuidv4(), sellerUserId, companyId, remainingFounderLots, avgPrice]
+      );
+    }
+
+    // Catat penjualan saham pendiri ke users & companies
+    await query.run('UPDATE users SET founder_shares_sold = COALESCE(founder_shares_sold, 0) + ? WHERE id = ?', [pct, sellerUserId]);
+    await query.run('UPDATE companies SET founder_shares_sold = COALESCE(founder_shares_sold, 0) + ? WHERE id = ?', [pct, companyId]);
+
+    // SUKSESI PT UTAMA: Jika pembeli mengakuisisi mayoritas (>= 50%) dan penjual kehilangan kendali:
+    if (pct >= 50.0 || remainingFounderPct < 50.0) {
+      const sellerUserRow = await query.get('SELECT * FROM users WHERE id = ?', [sellerUserId]);
+      const isSellingPrimary = (sellerUserRow && (sellerUserRow.pt_symbol === company.symbol || sellerUserRow.pt_name === company.name));
+
+      if (isSellingPrimary || company.owner_id === sellerUserId) {
+        // Cari anak perusahaan lain milik penjual untuk dipromosikan jadi PT Utama baru
+        const nextSubsidiary = await query.get(`
+          SELECT * FROM companies 
+          WHERE owner_id = ? AND id != ?
+          ORDER BY (circulating_shares * current_price) DESC, founded_at ASC 
+          LIMIT 1
+        `, [sellerUserId, companyId]);
+
+        if (nextSubsidiary) {
+          console.log(`🏢 [M&A Suksesi] Mempromosikan anak perusahaan ${nextSubsidiary.name} (${nextSubsidiary.symbol}) menjadi PT Utama baru @${sellerName}...`);
+          await query.run(`
+            UPDATE users 
+            SET pt_name = ?,
+                pt_symbol = ?,
+                sector = ?,
+                is_ipo = ?,
+                company_balance_ib = ?,
+                founder_shares_sold = ?,
+                has_pt = 1
+            WHERE id = ?
+          `, [
+            nextSubsidiary.name,
+            nextSubsidiary.symbol,
+            nextSubsidiary.sector,
+            nextSubsidiary.is_ipo || 0,
+            nextSubsidiary.company_balance_ib || 0,
+            nextSubsidiary.founder_shares_sold || 0,
+            sellerUserId
+          ]);
+        } else {
+          console.log(`🏢 [M&A Suksesi] Seluruh kepemilikan perseroan @${sellerName} beralih, status PT Utama direset (bisa bangun PT Baru)...`);
+          await query.run(`
+            UPDATE users 
+            SET has_pt = 0,
+                pt_name = '',
+                pt_symbol = '',
+                is_ipo = 0,
+                company_balance_ib = 0
+            WHERE id = ?
+          `, [sellerUserId]);
+        }
+      }
+    }
+    io.emit('user:conglomerate_updated', { userId: sellerUserId });
   }
 
   const existingBuyerPort = await query.get('SELECT * FROM portfolios WHERE user_id = ? AND company_id = ?', [userId, companyId]);
@@ -5826,14 +5911,14 @@ const localBuiltApkPath = path.join(__dirname, '../../mobile/build/app/outputs/f
 
 async function getApkSettingsMap() {
   const defaults = {
-    apk_version: '1.5.7',
-    apk_build_number: '11',
+    apk_version: '1.5.8',
+    apk_build_number: '12',
     apk_min_android: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
     apk_file_size_mb: '25.0 MB',
-    apk_release_notes: 'Notifikasi Popup Update Otomatis saat Buka Aplikasi, Tombol Langsung Unduh & Update Sekarang di Profil Konglomerat, Fitur Download Backup Database (.sqlite), dan Tata Letak Web Admin Mobile Responsif Rapi.',
+    apk_release_notes: 'Sistem Suksesi Kepemilikan & PT Utama Otomatis saat Akuisisi Mayoritas (M&A/RUPS), Bot P2P Kooperatif Cerdas yang Bisa Membeli & Menolak Divestasi Saham Pemain, Hak Dividen Saham Minoritas, dan Perbaikan Duplikasi Kartu Perusahaan.',
     apk_external_url: '',
-    apk_download_count: '175',
-    apk_sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+    apk_download_count: '185',
+    apk_sha256: 'a063050909de6876837f05f3dba5aed608e7cc2d5ec47b9a2ed0ab0ea4438d08',
     apk_updated_at: new Date().toISOString(),
   };
   try {
@@ -5843,11 +5928,11 @@ async function getApkSettingsMap() {
         defaults[r.key] = String(r.value);
       }
     }
-    if (parseInt(defaults.apk_build_number || '0', 10) < 11) {
-      defaults.apk_version = '1.5.7';
-      defaults.apk_build_number = '11';
+    if (parseInt(defaults.apk_build_number || '0', 10) < 12) {
+      defaults.apk_version = '1.5.8';
+      defaults.apk_build_number = '12';
       defaults.apk_file_size_mb = '25.0 MB';
-      defaults.apk_release_notes = 'Notifikasi Popup Update Otomatis saat Buka Aplikasi, Tombol Langsung Unduh & Update Sekarang di Profil Konglomerat, Fitur Download Backup Database (.sqlite), dan Tata Letak Web Admin Mobile Responsif Rapi.';
+      defaults.apk_release_notes = 'Sistem Suksesi Kepemilikan & PT Utama Otomatis saat Akuisisi Mayoritas (M&A/RUPS), Bot P2P Kooperatif Cerdas yang Bisa Membeli & Menolak Divestasi Saham Pemain, Hak Dividen Saham Minoritas, dan Perbaikan Duplikasi Kartu Perusahaan.';
     }
   } catch (_) {}
   return defaults;
