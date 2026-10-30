@@ -21,6 +21,8 @@ class PublicPlayerProfileSheet extends StatefulWidget {
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useRootNavigator: true,
+      useSafeArea: true,
       backgroundColor: Colors.transparent,
       barrierColor: Colors.black.withValues(alpha: 0.75),
       builder: (_) => PublicPlayerProfileSheet(
@@ -100,23 +102,49 @@ class _PublicPlayerProfileSheetState extends State<PublicPlayerProfileSheet> {
 
     final double sheetHeight = MediaQuery.of(context).size.height * 0.88;
 
-    return Container(
-      height: sheetHeight,
-      padding: EdgeInsets.fromLTRB(18, 12, 18, MediaQuery.of(context).viewInsets.bottom + 16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0A0F1E),
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        border: Border(top: BorderSide(color: themeColor, width: 2.0)),
-        boxShadow: [
-          BoxShadow(
-            color: themeColor.withValues(alpha: 0.25),
-            blurRadius: 28,
-            offset: const Offset(0, -6),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
+    final wealthData = _profileData?['wealth'] ?? {
+      'netWorth': widget.initialData?['netWorth'] ?? 0,
+      'personalCash': widget.initialData?['cash'] ?? 0,
+      'companyCash': widget.initialData?['companyCash'] ?? 0,
+      'stockValuation': widget.initialData?['stockValuation'] ?? 0,
+    };
+    final privacyData = _profileData?['privacy'] ?? {
+      'maskedEmail': 'Disamarkan demi privasi',
+      'maskedVaultAccount': 'CFX-VAULT-****',
+      'protectionSeal': 'UU Perlindungan Nasabah & Kustodian Sentral IPMC',
+    };
+    final holdingData = _profileData?['holding'] ?? {
+      'hasPt': widget.initialData?['hasPt'] == true || (widget.initialData?['ptName'] != null && widget.initialData!['ptName'].toString().isNotEmpty),
+      'ptName': widget.initialData?['ptName'] ?? 'Belum Mendirikan PT',
+      'symbol': 'TBK',
+      'sector': widget.initialData?['sector'] ?? 'Strategis',
+      'isIpo': true,
+      'fundamentalScore': 85,
+      'rdLevel': 4,
+      'employeesCount': 35,
+      'subsidiaries': [],
+    };
+    final portfolioShares = _profileData?['portfolioShares'] ?? [];
+
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        height: sheetHeight,
+        padding: EdgeInsets.fromLTRB(18, 12, 18, (MediaQuery.of(context).viewInsets.bottom > 0 ? MediaQuery.of(context).viewInsets.bottom : 16)),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0A0F1E),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          border: Border(top: BorderSide(color: themeColor, width: 2.0)),
+          boxShadow: [
+            BoxShadow(
+              color: themeColor.withValues(alpha: 0.25),
+              blurRadius: 28,
+              offset: const Offset(0, -6),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
           // Drag handle
           Center(
             child: Container(
@@ -252,88 +280,80 @@ class _PublicPlayerProfileSheetState extends State<PublicPlayerProfileSheet> {
           ),
           const SizedBox(height: 14),
 
-          // Body Scrollable
+          // Body Scrollable (Langsung tampil instan dari initialData & realtime sinkron)
           Expanded(
-            child: _isLoading
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+            child: ListView(
+              children: [
+                if (_isLoading)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: themeColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: themeColor.withValues(alpha: 0.25)),
+                    ),
+                    child: Row(
                       children: [
                         SizedBox(
-                          width: 36,
-                          height: 36,
-                          child: CircularProgressIndicator(
-                            color: themeColor,
-                            strokeWidth: 3,
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(color: themeColor, strokeWidth: 2),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Menyinkronkan portofolio saham realtime dari Kustodian...',
+                            style: TextStyle(color: themeColor, fontSize: 10.5, fontWeight: FontWeight.bold),
                           ),
-                        ),
-                        const SizedBox(height: 14),
-                        Text(
-                          'Mengakses Arsip Kustodian Sentral...',
-                          style: TextStyle(color: themeColor, fontWeight: FontWeight.bold, fontSize: 12.5),
-                        ),
-                        const SizedBox(height: 4),
-                        const Text(
-                          'Memverifikasi kepemilikan saham, kas brankas & valuasi aset',
-                          style: TextStyle(color: Color(0xFF64748B), fontSize: 10.5),
                         ),
                       ],
                     ),
                   )
-                : (_errorMessage != null)
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.error_outline_rounded, color: Color(0xFFF87171), size: 36),
-                            const SizedBox(height: 10),
-                            Text(
-                              _errorMessage!,
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(color: Color(0xFFF87171), fontSize: 12),
-                            ),
-                            const SizedBox(height: 12),
-                            OutlinedButton.icon(
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: themeColor,
-                                side: BorderSide(color: themeColor),
-                              ),
-                              onPressed: () {
-                                setState(() {
-                                  _isLoading = true;
-                                  _errorMessage = null;
-                                });
-                                _fetchProfile();
-                              },
-                              icon: const Icon(Icons.refresh_rounded, size: 16),
-                              label: const Text('Coba Lagi', style: TextStyle(fontSize: 11)),
-                            ),
-                          ],
+                else if (_errorMessage != null)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEF4444).withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.info_outline_rounded, size: 15, color: Color(0xFFF87171)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Pratinjau Data Offline: $_errorMessage',
+                            style: const TextStyle(color: Color(0xFFFCA5A5), fontSize: 10.5),
+                          ),
                         ),
-                      )
-                    : ListView(
-                        children: [
-                          // 1. KOTAK TOTAL KEKAYAAN BERSIH (NET WORTH)
-                          _buildNetWorthCard(_profileData?['wealth'], is9Naga, themeColor),
+                      ],
+                    ),
+                  ),
 
-                          const SizedBox(height: 12),
+                // 1. KOTAK TOTAL KEKAYAAN BERSIH (NET WORTH)
+                _buildNetWorthCard(wealthData, is9Naga, themeColor),
 
-                          // 2. KOTAK KEAMANAN & PRIVASI TERTUTUP (KUSTODIAN)
-                          _buildPrivacyCard(_profileData?['privacy']),
+                const SizedBox(height: 12),
 
-                          const SizedBox(height: 12),
+                // 2. KOTAK KEAMANAN & PRIVASI TERTUTUP (KUSTODIAN)
+                _buildPrivacyCard(privacyData),
 
-                          // 3. HOLDING PERSEROAN TERBATAS (PT INDUK & ANAK USAHA)
-                          _buildHoldingCard(_profileData?['holding']),
+                const SizedBox(height: 12),
 
-                          const SizedBox(height: 12),
+                // 3. HOLDING PERSEROAN TERBATAS (PT INDUK & ANAK USAHA)
+                _buildHoldingCard(holdingData),
 
-                          // 4. PORTOFOLIO SAHAM TERBUKA (PUBLIC SHARE REGISTRY)
-                          _buildPortfolioSharesCard(_profileData?['portfolioShares']),
+                const SizedBox(height: 12),
 
-                          const SizedBox(height: 16),
-                        ],
-                      ),
+                // 4. PORTOFOLIO SAHAM TERBUKA (PUBLIC SHARE REGISTRY)
+                _buildPortfolioSharesCard(portfolioShares),
+
+                const SizedBox(height: 16),
+              ],
+            ),
           ),
 
           // Tombol Tutup Lembar Profil
@@ -352,7 +372,8 @@ class _PublicPlayerProfileSheetState extends State<PublicPlayerProfileSheet> {
           ),
         ],
       ),
-    );
+    ),
+  );
   }
 
   // 1. KARTU NET WORTH
