@@ -7207,6 +7207,7 @@ if (!fs.existsSync(releasesDir)) {
 }
 const hostedApkPath = path.join(releasesDir, 'Capital-Federation-CFX.apk');
 const bundledPublicApkPath = path.join(__dirname, '../public/downloads/Capital-Federation-CFX.apk');
+const directPublicApkPath = path.join(__dirname, '../public/downloads/capital-federation.apk');
 const localBuiltApkPath = path.join(__dirname, '../../mobile/build/app/outputs/flutter-apk/app-release.apk');
 
 const LATEST_RELEASE_NOTES_V170 = 'v1.7.0: Sinkronisasi Tunggal 100% Real-Time Backend–APK–Website–Web Admin (Kekayaan Bersih, Kas PT, Anak Perusahaan & Kepemilikan Mayoritas), Pembekuan Otomatis ~525 Bot Ritel (100% Player Asli Aman), serta Optimasi Ekstrem Server <50ms Tanpa Lag.';
@@ -7256,7 +7257,7 @@ async function saveApkSetting(key, value) {
 }
 
 function getActiveApkFilePath() {
-  const candidates = [hostedApkPath, bundledPublicApkPath, localBuiltApkPath].filter((p) => fs.existsSync(p));
+  const candidates = [hostedApkPath, bundledPublicApkPath, directPublicApkPath, localBuiltApkPath].filter((p) => fs.existsSync(p));
   if (candidates.length === 0) return null;
   candidates.sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
   return candidates[0];
