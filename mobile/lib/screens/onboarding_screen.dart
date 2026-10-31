@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../providers/game_provider.dart';
 import '../services/api_service.dart';
+import '../services/google_auth_service.dart';
 
 class OnboardingScreen extends StatefulWidget {
   final VoidCallback onCompleted;
@@ -165,39 +166,53 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     }
   }
 
-  void _showGoogleAuthInfo() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF0D1527),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
-          side: const BorderSide(color: Color(0xFF1E293B)),
-        ),
-        title: const Row(
-          children: [
-            Icon(Icons.g_mobiledata_rounded, color: Color(0xFF38BDF8), size: 28),
-            SizedBox(width: 8),
-            Text('Login Google & Notariat', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
-          ],
-        ),
-        content: const Text(
-          'Demi menjaga integritas kerahasiaan keuangan bursa dan kedaulatan akun investor tanpa pelacakan pihak ketiga, akun dibuat instan menggunakan Username & Sandi terenkripsi.\n\nAnda dapat menautkan & memverifikasi email resmi kapan saja melalui menu Profil Konglomerat.',
-          style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11.5, height: 1.4),
-        ),
-        actions: [
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF38BDF8),
-              foregroundColor: const Color(0xFF082F49),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            child: const Text('MENGERTI', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
-          ),
-        ],
-      ),
-    );
+  Future<void> _handleGoogleSignIn() async {
+    setState(() {
+      _isSubmitting = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final googleData = await GoogleAuthService.signIn();
+      if (googleData == null) {
+        if (mounted) setState(() => _isSubmitting = false);
+        return;
+      }
+
+      if (googleData.containsKey('error') && googleData['error'] != null) {
+        if (mounted) {
+          setState(() {
+            _isSubmitting = false;
+            _errorMessage = 'Google Sign-In: ${googleData['error']}';
+          });
+        }
+        return;
+      }
+
+      if (!mounted) return;
+      final provider = context.read<GameProvider>();
+      final err = await provider.loginWithGoogle(googleData);
+
+      if (err == null) {
+        if (mounted) {
+          widget.onCompleted();
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _isSubmitting = false;
+            _errorMessage = err;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+          _errorMessage = 'Gagal autentikasi Google: $e';
+        });
+      }
+    }
   }
 
   void _showServerConfigDialog() {
@@ -768,7 +783,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     width: double.infinity,
                     height: 44,
                     child: OutlinedButton.icon(
-                      onPressed: _showGoogleAuthInfo,
+                      onPressed: _isSubmitting ? null : _handleGoogleSignIn,
                       icon: const Icon(Icons.g_mobiledata_rounded, color: Colors.white, size: 24),
                       label: const Text('Lanjutkan dengan Akun Google', style: TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.bold)),
                       style: OutlinedButton.styleFrom(

@@ -156,6 +156,53 @@ class ApiService {
     }
   }
 
+  // Login / Registrasi Akun Google Resmi (OAuth 2.0 / Google Play Services)
+  static Future<Map<String, dynamic>> loginWithGoogle({
+    String? idToken,
+    required String email,
+    String? name,
+    String? googleId,
+    String? avatarUrl,
+    String? userId,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/auth/google'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          if (idToken != null) 'idToken': idToken,
+          'email': email,
+          if (name != null) 'name': name,
+          if (googleId != null) 'googleId': googleId,
+          if (avatarUrl != null) 'avatarUrl': avatarUrl,
+          if (userId != null) 'userId': userId,
+        }),
+      ).timeout(const Duration(seconds: 20));
+
+      return jsonDecode(response.body);
+    } catch (e) {
+      await autoDiscoverHost();
+      try {
+        final retryRes = await http.post(
+          Uri.parse('$baseUrl/api/auth/google'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            if (idToken != null) 'idToken': idToken,
+            'email': email,
+            if (name != null) 'name': name,
+            if (googleId != null) 'googleId': googleId,
+            if (avatarUrl != null) 'avatarUrl': avatarUrl,
+            if (userId != null) 'userId': userId,
+          }),
+        ).timeout(const Duration(seconds: 20));
+
+        return jsonDecode(retryRes.body);
+      } catch (_) {
+        return {'error': 'Koneksi ke server ($baseUrl) gagal saat autentikasi Google.'};
+      }
+    }
+  }
+
   // Login
   static Future<Map<String, dynamic>> login({
     required String username,

@@ -382,7 +382,13 @@ app.post('/api/auth/google', async (req, res) => {
       return res.status(400).json({ error: 'Email atau Google ID Token wajib disertakan.' });
     }
 
-    let user = await query.get('SELECT * FROM users WHERE google_id = ? OR email = ?', [googleId || '', email]);
+    let user = null;
+    if (req.body.userId) {
+      user = await query.get('SELECT * FROM users WHERE id = ?', [req.body.userId]);
+    }
+    if (!user) {
+      user = await query.get('SELECT * FROM users WHERE google_id = ? OR email = ?', [googleId || '', email]);
+    }
 
     if (user) {
       await query.run(
@@ -5021,31 +5027,42 @@ app.get('/api/portfolio/:userId', async (req, res) => {
 // Takeover Targets (Pasar Akuisisi M&A & Restrukturisasi Emiten)
 app.get('/api/takeover/targets', async (req, res) => {
   try {
-    let targets = await query.all(`
+    const search = (req.query.search || '').trim();
+    const companyId = (req.query.companyId || '').trim();
+
+    let sql = `
       SELECT c.*, 
              COALESCE(u.username, NULLIF(c.founder_name, ''), 'galih') as owner_username,
              COALESCE(u.pt_name, c.name) as owner_pt_name,
              COALESCE((SELECT sh.percentage FROM company_shareholders sh WHERE sh.company_id = c.id ORDER BY sh.percentage DESC LIMIT 1), 60.0) as founder_share_pct
       FROM companies c
       LEFT JOIN users u ON c.owner_id = u.id
-      WHERE c.status = 'CRITICAL' OR (c.uma_flag = 1 AND c.uma_direction = 'DOWN')
-      ORDER BY c.current_price ASC
-      LIMIT 35
-    `);
+    `;
+    const params = [];
 
-    if (!targets || targets.length < 8) {
-      targets = await query.all(`
-        SELECT c.*, 
-               COALESCE(u.username, NULLIF(c.founder_name, ''), 'galih') as owner_username,
-               COALESCE(u.pt_name, c.name) as owner_pt_name,
-               COALESCE((SELECT sh.percentage FROM company_shareholders sh WHERE sh.company_id = c.id ORDER BY sh.percentage DESC LIMIT 1), 60.0) as founder_share_pct
-        FROM companies c
-        LEFT JOIN users u ON c.owner_id = u.id
-        ORDER BY c.fundamental_score ASC, c.current_price ASC
-        LIMIT 20
-      `);
+    if (companyId) {
+      sql += ` WHERE (c.id = ? OR UPPER(c.symbol) = UPPER(?)) `;
+      params.push(companyId, companyId);
+    } else if (search) {
+      sql += ` WHERE (UPPER(c.symbol) LIKE UPPER(?) OR UPPER(c.name) LIKE UPPER(?)) AND c.status != 'BANKRUPT' `;
+      params.push(`%${search}%`, `%${search}%`);
+    } else {
+      sql += ` WHERE c.status != 'BANKRUPT' `;
     }
-    res.json(targets);
+
+    sql += `
+      ORDER BY 
+        CASE 
+          WHEN c.status = 'CRITICAL' THEN 1 
+          WHEN c.uma_flag = 1 THEN 2 
+          ELSE 3 
+        END, 
+        c.current_price ASC
+      LIMIT 100
+    `;
+
+    const targets = await query.all(sql, params);
+    res.json(targets || []);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -7552,18 +7569,18 @@ const bundledPublicApkPath = path.join(__dirname, '../public/downloads/Capital-F
 const directPublicApkPath = path.join(__dirname, '../public/downloads/capital-federation.apk');
 const localBuiltApkPath = path.join(__dirname, '../../mobile/build/app/outputs/flutter-apk/app-release.apk');
 
-const LATEST_RELEASE_NOTES_V190 = 'v1.9.0: Fitur Kotak Masuk (Inbox) Terpadu untuk Notifikasi Tawaran & Penolakan P2P Real-Time, Navigasi Langsung Emiten dari Warta Berita Bursa, Pembaruan Majelis Hakim Arbitrase PNAF Resmi (Ketua Majelis Prof. Dr. Bagas Daniswara, S.H., M.H.), Gugatan Sengketa Pemulihan Saham Curian/Manipulasi, dan Sanksi Rekonvensi Denda Pencemaran Nama Baik untuk Tuduhan Palsu.';
+const LATEST_RELEASE_NOTES_V191 = 'v1.9.1: Integrasi Resmi Google Sign-In & Otentikasi Akun Riil (OAuth 2.0 / Google Play Services), Akses Cepat Akuisisi & Tender Offer Pengendali Langsung dari Layar Detail Saham, Pencarian Seluruh Emiten Publik untuk M&A, dan Notariat Kustodian Terverifikasi.';
 
 async function getApkSettingsMap() {
   const defaults = {
-    apk_version: '1.9.0',
-    apk_build_number: '26',
+    apk_version: '1.9.1',
+    apk_build_number: '27',
     apk_min_android: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
-    apk_file_size_mb: '56.4 MB',
-    apk_release_notes: LATEST_RELEASE_NOTES_V190,
+    apk_file_size_mb: '56.7 MB',
+    apk_release_notes: LATEST_RELEASE_NOTES_V191,
     apk_external_url: '',
-    apk_download_count: '325',
-    apk_sha256: '7f1f70f7edad00443f3ee6dfaf8fa8c9fb4d85be63be2c1dcd36c4b2f39bd9a6',
+    apk_download_count: '330',
+    apk_sha256: '9a2b84c8e76319f07148a04b1e52bcde9f417da5232cd4ea769185bd3a2e0a4f',
     apk_updated_at: new Date().toISOString(),
   };
   try {
@@ -7573,12 +7590,12 @@ async function getApkSettingsMap() {
         defaults[r.key] = String(r.value);
       }
     }
-    if (parseInt(defaults.apk_build_number || '0', 10) < 26) {
-      defaults.apk_version = '1.9.0';
-      defaults.apk_build_number = '26';
-      defaults.apk_file_size_mb = '56.4 MB';
-      defaults.apk_sha256 = '7f1f70f7edad00443f3ee6dfaf8fa8c9fb4d85be63be2c1dcd36c4b2f39bd9a6';
-      defaults.apk_release_notes = LATEST_RELEASE_NOTES_V190;
+    if (parseInt(defaults.apk_build_number || '0', 10) < 27) {
+      defaults.apk_version = '1.9.1';
+      defaults.apk_build_number = '27';
+      defaults.apk_file_size_mb = '56.7 MB';
+      defaults.apk_sha256 = '9a2b84c8e76319f07148a04b1e52bcde9f417da5232cd4ea769185bd3a2e0a4f';
+      defaults.apk_release_notes = LATEST_RELEASE_NOTES_V191;
       defaults.apk_updated_at = new Date().toISOString();
       // Persist directly to central_bank_settings so /api/settings, /api/admin/settings & /api/admin/overview match 100%!
       const keysToSync = ['apk_version', 'apk_build_number', 'apk_file_size_mb', 'apk_sha256', 'apk_release_notes', 'apk_min_android', 'apk_updated_at'];

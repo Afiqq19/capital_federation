@@ -7,6 +7,7 @@ import '../services/api_service.dart';
 import '../services/socket_service.dart';
 import '../utils/formatters.dart';
 import '../widgets/trading_modal.dart';
+import '../widgets/takeover_modal_sheet.dart';
 
 class StockDetailScreen extends StatefulWidget {
   final CompanyModel company;
@@ -1490,6 +1491,22 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                 ),
                 child: Row(
                   children: [
+                    // M&A / Takeover Shortcut
+                    Container(
+                      height: 48,
+                      width: 48,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFF59E0B), width: 1.2),
+                      ),
+                      child: IconButton(
+                        tooltip: 'Tender Offer & Akuisisi M&A',
+                        onPressed: () => showTakeoverModalSheet(context, c),
+                        icon: const Icon(Icons.handshake_rounded, color: Color(0xFFF59E0B), size: 22),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
                     // Buy Button
                     Expanded(
                       child: SizedBox(
@@ -2699,7 +2716,7 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                               border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.45)),
                             ),
                             child: Text(
-                              'Antrean Jual Pasar Reguler kosong (0 Lot). Seluruh kuota gabungan Publik & Institusi (${c.regularMarketQuotaPct.toStringAsFixed(0)}%) telah terserap habis. Untuk mengambil alih porsi Pengendali Utama (${(100 - c.regularMarketQuotaPct).toStringAsFixed(0)}%), ajukan penawaran melalui Akuisisi M&A / Pasar Negosiasi P2P di menu Bursa Aset.',
+                              'Antrean Jual Pasar Reguler kosong (0 Lot). Seluruh kuota gabungan Publik & Institusi (${c.regularMarketQuotaPct.toStringAsFixed(0)}%) telah terserap habis. Klik ikon jabat tangan 🤝 di bilah bawah untuk mengajukan Tender Offer / Akuisisi Saham Pengendali.',
                               style: const TextStyle(color: Color(0xFFFBBF24), fontSize: 11, height: 1.35),
                             ),
                           )

@@ -665,6 +665,35 @@ class GameProvider extends ChangeNotifier {
     }
   }
 
+  // Login with Google Account (OAuth 2.0 / Google Play Services)
+  Future<String?> loginWithGoogle(Map<String, dynamic> googleData) async {
+    try {
+      final res = await ApiService.loginWithGoogle(
+        idToken: googleData['idToken'],
+        email: googleData['email'] ?? '',
+        name: googleData['displayName'],
+        googleId: googleData['googleId'],
+        avatarUrl: googleData['photoUrl'],
+        userId: _user?.id,
+      );
+      if (res['user'] != null) {
+        _user = UserModel.fromJson(res['user']);
+        LocalCache.write('user', jsonEncode(res['user']));
+        await loadInitialData();
+        if (_user != null) {
+          SocketService.joinUser(_user!.id);
+          NotificationService.syncUserToken(_user!.id);
+        }
+        notifyListeners();
+        return null;
+      } else {
+        return res['error'] ?? 'Gagal autentikasi akun Google';
+      }
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
   // Login as Demo / Guest Player
   Future<void> loginAsGuest() async {
     final res = await ApiService.login(username: 'sultan_budi', password: 'player123');

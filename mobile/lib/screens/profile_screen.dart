@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/user.dart';
 import '../providers/game_provider.dart';
 import '../services/api_service.dart';
+import '../services/google_auth_service.dart';
 import '../utils/download_helper.dart';
 import '../utils/formatters.dart';
 import 'game_constitution_screen.dart';
@@ -252,7 +253,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
             ),
             const SizedBox(height: 14),
             const Text(
-              'Klik tombol di bawah untuk menyimulasikan pembukaan tautan dari inbox email Anda:',
+              'Pengesahan resmi dari Kustodian Bursa Efek Federasi. Klik tombol di bawah untuk mengaktifkan status Terverifikasi seketika:',
               style: TextStyle(color: Color(0xFF64748B), fontSize: 10.5),
             ),
           ],
@@ -262,12 +263,40 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
             onPressed: () => Navigator.pop(ctx),
             child: const Text('TUTUP', style: TextStyle(color: Color(0xFF64748B))),
           ),
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: Color(0xFF38BDF8)),
+              foregroundColor: const Color(0xFF38BDF8),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            ),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              setState(() => _isVerifyingEmail = true);
+              try {
+                final googleData = await GoogleAuthService.signIn();
+                if (googleData != null && !googleData.containsKey('error')) {
+                  if (!mounted) return;
+                  final provider = context.read<GameProvider>();
+                  final err = await provider.loginWithGoogle(googleData);
+                  setState(() => _isVerifyingEmail = false);
+                  if (err == null) {
+                    _showSuccessVerificationDialog(googleData['email'] ?? email);
+                    return;
+                  }
+                }
+              } catch (_) {}
+              setState(() => _isVerifyingEmail = false);
+            },
+            icon: const Icon(Icons.g_mobiledata_rounded, size: 20),
+            label: const Text('LINK GOOGLE', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 10.5)),
+          ),
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF10B981),
               foregroundColor: const Color(0xFF022C22),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             ),
             onPressed: () async {
               Navigator.pop(ctx);
@@ -282,9 +311,9 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                 _showToast(res['error']?.toString() ?? 'Gagal memverifikasi email.', isError: true);
               }
             },
-            icon: const Icon(Icons.touch_app_rounded, size: 16),
+            icon: const Icon(Icons.verified_rounded, size: 16),
             label: const Text(
-              'KLIK TAUTAN & VERIFIKASI',
+              'SAHKAN NOTARIAT',
               style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11),
             ),
           ),
