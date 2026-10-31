@@ -17,6 +17,10 @@ class NotificationService {
   static bool _isInitialized = false;
   static String? _fcmToken;
 
+  /// Status apakah aplikasi sedang dibuka/dimainkan oleh user di foreground.
+  /// Jika bernilai true, notifikasi drop-down sistem Android di atas layar diredam agar tidak mengganggu gameplay.
+  static bool isAppInForeground = true;
+
   static String? get fcmToken => _fcmToken;
 
   static Future<void> initialize() async {
@@ -86,9 +90,14 @@ class NotificationService {
         _syncTokenWithServer(newToken);
       });
 
-      // Foreground message listener: Show system tray notification (filter out general news, only court/seizure/takeover/summons)
+      // Foreground message listener: Redam notifikasi sistem Android jika user sedang aktif bermain di dalam game
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
         debugPrint('Foreground FCM received: ${message.notification?.title}');
+        if (isAppInForeground) {
+          debugPrint('🔕 Notifikasi sistem status bar diredam karena user sedang aktif bermain di dalam game.');
+          return;
+        }
+
         final notif = message.notification;
         if (notif != null) {
           final title = notif.title ?? '';
@@ -129,7 +138,13 @@ class NotificationService {
     required String body,
     String channelId = 'pnaf_court_channel',
     String? payload,
+    bool forceInForeground = false,
   }) async {
+    // Jika user sedang aktif bermain game (in foreground), jangan munculkan notifikasi drop-down sistem Android di atas layar
+    if (isAppInForeground && !forceInForeground) {
+      debugPrint('🔕 Notifikasi sistem status bar diredam saat aplikasi sedang dimainkan: $title');
+      return;
+    }
     try {
       final isCourt = channelId == 'pnaf_court_channel';
       final androidDetails = AndroidNotificationDetails(

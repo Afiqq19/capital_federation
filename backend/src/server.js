@@ -7681,18 +7681,18 @@ const bundledPublicApkPath = path.join(__dirname, '../public/downloads/Capital-F
 const directPublicApkPath = path.join(__dirname, '../public/downloads/capital-federation.apk');
 const localBuiltApkPath = path.join(__dirname, '../../mobile/build/app/outputs/flutter-apk/app-release.apk');
 
-const LATEST_RELEASE_NOTES_V192 = 'v1.9.2: Sub-Tab Saham Interaktif Lengkap (Orderbook Antrean Real, Live Trade Activity Running Trade Per-Emiten, Broker Summary Bandarmology Top 5 Buyer/Seller, Profil Pemilik & Cap Table Pemegang Saham Terbesar), dan Akses Tender Offer M&A Akuisisi.';
+const LATEST_RELEASE_NOTES_V193 = 'v1.9.3: Redam Notifikasi Sistem Status Bar Saat Bermain Game (Bebas Gangguan Pop-up), Normalisasi Skala Font Standar Seluruh Perangkat HP (Anti-Oversize), dan Optimasi Struktur Pemegang Saham.';
 
 async function getApkSettingsMap() {
   const defaults = {
-    apk_version: '1.9.2',
-    apk_build_number: '28',
+    apk_version: '1.9.3',
+    apk_build_number: '29',
     apk_min_android: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
     apk_file_size_mb: '56.9 MB',
-    apk_release_notes: LATEST_RELEASE_NOTES_V192,
+    apk_release_notes: LATEST_RELEASE_NOTES_V193,
     apk_external_url: '',
-    apk_download_count: '335',
-    apk_sha256: '58bfc5a5d4c8203513569f186076cc477ee6699815c849f4e6a7f818bdb33c01',
+    apk_download_count: '340',
+    apk_sha256: '37a2063951d3643af249646c57bef5fcd46571d404fe3241283c7f5fbb8a9ab5',
     apk_updated_at: new Date().toISOString(),
   };
   try {
@@ -7702,12 +7702,12 @@ async function getApkSettingsMap() {
         defaults[r.key] = String(r.value);
       }
     }
-    if (parseInt(defaults.apk_build_number || '0', 10) < 28) {
-      defaults.apk_version = '1.9.2';
-      defaults.apk_build_number = '28';
+    if (parseInt(defaults.apk_build_number || '0', 10) < 29) {
+      defaults.apk_version = '1.9.3';
+      defaults.apk_build_number = '29';
       defaults.apk_file_size_mb = '56.9 MB';
-      defaults.apk_sha256 = '58bfc5a5d4c8203513569f186076cc477ee6699815c849f4e6a7f818bdb33c01';
-      defaults.apk_release_notes = LATEST_RELEASE_NOTES_V192;
+      defaults.apk_sha256 = '37a2063951d3643af249646c57bef5fcd46571d404fe3241283c7f5fbb8a9ab5';
+      defaults.apk_release_notes = LATEST_RELEASE_NOTES_V193;
       defaults.apk_updated_at = new Date().toISOString();
       // Persist directly to central_bank_settings so /api/settings, /api/admin/settings & /api/admin/overview match 100%!
       const keysToSync = ['apk_version', 'apk_build_number', 'apk_file_size_mb', 'apk_sha256', 'apk_release_notes', 'apk_min_android', 'apk_updated_at'];

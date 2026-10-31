@@ -4567,16 +4567,17 @@ class _HomeTabState extends State<HomeTab> {
         children: [
           Row(
             children: [
-              const Icon(Icons.pie_chart_rounded, color: Color(0xFF38BDF8), size: 18),
-              const SizedBox(width: 8),
+              const Icon(Icons.pie_chart_rounded, color: Color(0xFF38BDF8), size: 16),
+              const SizedBox(width: 6),
               const Expanded(
                 child: Text(
                   'Struktur Pemegang Saham',
-                  style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                  style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               // Button Pasar Negosiasi & Akta
               InkWell(
                 onTap: () {
@@ -4587,7 +4588,7 @@ class _HomeTabState extends State<HomeTab> {
                 },
                 borderRadius: BorderRadius.circular(6),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3.5),
                   decoration: BoxDecoration(
                     color: const Color(0xFF38BDF8).withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(6),
@@ -4596,20 +4597,20 @@ class _HomeTabState extends State<HomeTab> {
                   child: const Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.inventory_2_rounded, color: Color(0xFF38BDF8), size: 11),
+                      Icon(Icons.inventory_2_rounded, color: Color(0xFF38BDF8), size: 10),
                       SizedBox(width: 3),
-                      Text('BRANKAS & AKTA', style: TextStyle(color: Color(0xFF38BDF8), fontSize: 9, fontWeight: FontWeight.w900)),
+                      Text('AKTA', style: TextStyle(color: Color(0xFF38BDF8), fontSize: 8.5, fontWeight: FontWeight.w900)),
                     ],
                   ),
                 ),
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 5),
               // Button Divestasi Saham
               InkWell(
                 onTap: () => P2PNegotiationSheet.show(context, activeEntity),
                 borderRadius: BorderRadius.circular(6),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3.5),
                   decoration: BoxDecoration(
                     color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(6),
@@ -4618,9 +4619,9 @@ class _HomeTabState extends State<HomeTab> {
                   child: const Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.sell_rounded, color: Color(0xFFF59E0B), size: 11),
+                      Icon(Icons.sell_rounded, color: Color(0xFFF59E0B), size: 10),
                       SizedBox(width: 3),
-                      Text('JUAL SAHAM', style: TextStyle(color: Color(0xFFF59E0B), fontSize: 9, fontWeight: FontWeight.w900)),
+                      Text('JUAL', style: TextStyle(color: Color(0xFFF59E0B), fontSize: 8.5, fontWeight: FontWeight.w900)),
                     ],
                   ),
                 ),

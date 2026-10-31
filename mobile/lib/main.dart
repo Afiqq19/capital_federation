@@ -61,6 +61,19 @@ class CapitalFederationApp extends StatelessWidget {
     return MaterialApp(
       title: 'Capital Federation',
       debugShowCheckedModeBanner: false,
+      builder: (context, child) {
+        // Standardisasi skala teks: membatasi maxScaleFactor ke 1.0 agar font tetap elegan, pas, dan tidak membesar berlebihan akibat setelan display HP
+        final mediaQuery = MediaQuery.of(context);
+        return MediaQuery(
+          data: mediaQuery.copyWith(
+            textScaler: mediaQuery.textScaler.clamp(
+              minScaleFactor: 0.85,
+              maxScaleFactor: 1.0,
+            ),
+          ),
+          child: child ?? const SizedBox(),
+        );
+      },
       theme: ThemeData(
         brightness: Brightness.dark,
         scaffoldBackgroundColor: const Color(0xFF070B14),
@@ -99,7 +112,7 @@ class RootScreen extends StatefulWidget {
   State<RootScreen> createState() => _RootScreenState();
 }
 
-class _RootScreenState extends State<RootScreen> with SingleTickerProviderStateMixin {
+class _RootScreenState extends State<RootScreen> with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   bool _showRetry = false;
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
@@ -115,6 +128,9 @@ class _RootScreenState extends State<RootScreen> with SingleTickerProviderStateM
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    NotificationService.isAppInForeground = true;
+
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1400),
@@ -132,6 +148,17 @@ class _RootScreenState extends State<RootScreen> with SingleTickerProviderStateM
     });
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      NotificationService.isAppInForeground = true;
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached ||
+        state == AppLifecycleState.hidden) {
+      NotificationService.isAppInForeground = false;
+    }
+  }
+
   void _cycleStatus() {
     if (!mounted) return;
     setState(() {
@@ -142,6 +169,7 @@ class _RootScreenState extends State<RootScreen> with SingleTickerProviderStateM
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _pulseController.dispose();
     super.dispose();
   }

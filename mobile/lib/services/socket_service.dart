@@ -7,19 +7,6 @@ class SocketService {
   static socket_io.Socket? socket;
   static Function(dynamic)? onOrderMatched;
 
-  static bool _isTargetAlert(String title) {
-    final upper = title.toUpperCase();
-    return upper.contains('PNAF') ||
-        upper.contains('SIDANG') ||
-        upper.contains('PANGGILAN') ||
-        upper.contains('GUGATAN') ||
-        upper.contains('VONIS') ||
-        upper.contains('PUTUSAN') ||
-        upper.contains('SITA') ||
-        upper.contains('AKUISISI') ||
-        upper.contains('PENGAMBILALIHAN');
-  }
-
   static void init({
     required Function(List<dynamic>) onMarketTicker,
     required Function(dynamic) onNewsBroadcast,
@@ -79,34 +66,10 @@ class SocketService {
 
       socket!.on('market:news_broadcast', (data) {
         onNewsBroadcast(data);
-        if (data != null && data['title'] != null) {
-          final title = data['title'].toString();
-          final content = data['content']?.toString() ?? '';
-          if (_isTargetAlert(title)) {
-            NotificationService.showNotification(
-              id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-              title: title,
-              body: content,
-              channelId: 'pnaf_court_channel',
-            );
-          }
-        }
       });
 
       socket!.on('market:breaking_news', (data) {
         onNewsBroadcast(data);
-        if (data != null && data['title'] != null) {
-          final title = data['title'].toString();
-          final content = data['content']?.toString() ?? '';
-          if (_isTargetAlert(title)) {
-            NotificationService.showNotification(
-              id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-              title: title,
-              body: content,
-              channelId: 'pnaf_court_channel',
-            );
-          }
-        }
       });
 
       socket!.on('court:new_case', (data) {
