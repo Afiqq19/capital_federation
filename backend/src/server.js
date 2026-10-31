@@ -10,6 +10,7 @@ require('dotenv').config();
 const { query, initDb, recordCashFlow, syncAllToMariaDb } = require('./db');
 const MarketSimulationEngine = require('./engine/simulation');
 const SurveillanceService = require('./services/surveillance.service');
+const CommunitySimulationService = require('./services/communitySimulation.service');
 const registerAdminRoutes = require('./routes/admin');
 
 const app = express();
@@ -47,7 +48,14 @@ const simulationEngine = new MarketSimulationEngine(io);
 
 // Pengawasan Bursa (UMA & Suspensi) + modul route admin
 const surveillance = new SurveillanceService({ query, io, simulationEngine });
-registerAdminRoutes(app, { query, io, simulationEngine, surveillance });
+const communitySimulation = new CommunitySimulationService({
+  query,
+  io,
+  simulationEngine,
+  getUserRankMap,
+  formatCleanPtName,
+});
+registerAdminRoutes(app, { query, io, simulationEngine, surveillance, communitySimulation });
 
 // JWT Middleware
 function authMiddleware(req, res, next) {
@@ -2763,7 +2771,7 @@ app.get('/api/market/running-trade', async (req, res) => {
 
 app.get('/api/news', async (req, res) => {
   try {
-    const list = await query.all('SELECT * FROM news ORDER BY published_at DESC LIMIT 25');
+    const list = await query.all('SELECT * FROM news ORDER BY published_at DESC LIMIT 50');
     res.json(list || []);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -5234,7 +5242,7 @@ app.get('/api/user/public-profile/:userId', async (req, res) => {
 // Chat Global Bursa (Menampilkan Status 9 NAGA Sultan, TAIPAN, VIP, & Bank Sentral)
 app.get('/api/chat', async (req, res) => {
   try {
-    const msgs = await query.all('SELECT * FROM chat_messages ORDER BY created_at DESC LIMIT 60');
+    const msgs = await query.all('SELECT * FROM chat_messages ORDER BY created_at DESC LIMIT 100');
     const rankMap = await getUserRankMap();
 
     const enriched = msgs.reverse().map((m) => {
@@ -5313,6 +5321,25 @@ app.post('/api/chat', async (req, res) => {
     };
     io.emit('chat:message', obj);
     res.json(obj);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin Community Simulation Triggers
+app.post('/api/admin/community/trigger-news', async (req, res) => {
+  try {
+    await communitySimulation.generateDynamicNews();
+    res.json({ success: true, message: 'Warta pasar dinamis berhasil dirilis!' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/community/trigger-chat', async (req, res) => {
+  try {
+    await communitySimulation.generateBotChat();
+    res.json({ success: true, message: 'Pesan obrolan bot berhasil dikirim!' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -6190,14 +6217,14 @@ const localBuiltApkPath = path.join(__dirname, '../../mobile/build/app/outputs/f
 
 async function getApkSettingsMap() {
   const defaults = {
-    apk_version: '1.6.1',
-    apk_build_number: '15',
+    apk_version: '1.6.2',
+    apk_build_number: '16',
     apk_min_android: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
     apk_file_size_mb: '25.0 MB',
-    apk_release_notes: 'Perbaikan Total Engine M&A Akuisisi, Penyesuaian Beli Saham Kuota Publik Beredar, Eliminasi Antrean Notifikasi, Sinkronisasi Integritas Tender Nasional, dan Perbaikan Tema Gelap Sheet.',
+    apk_release_notes: 'Simulasi Warta Pasar Dinamis 24/7 (Aksi Korporasi & Laba Kuartalan Emiten Tbk.), Ekosistem Chat Global Bursa Aktif dari 1.000++ Konglomerat & Investor Ritel, serta Peningkatan Stabilitas Komunitas.',
     apk_external_url: '',
-    apk_download_count: '272',
-    apk_sha256: '830fdfd04a1bb6476ca99c4758f5cd10fbf0424358a91b14a0580cd2a4580110',
+    apk_download_count: '296',
+    apk_sha256: '5998839556ddf9a3e0b1c89bdc67fe2cc071dba550e8607aecf08457920efa85',
     apk_updated_at: new Date().toISOString(),
   };
   try {
@@ -6207,11 +6234,11 @@ async function getApkSettingsMap() {
         defaults[r.key] = String(r.value);
       }
     }
-    if (parseInt(defaults.apk_build_number || '0', 10) < 15) {
-      defaults.apk_version = '1.6.1';
-      defaults.apk_build_number = '15';
+    if (parseInt(defaults.apk_build_number || '0', 10) < 16) {
+      defaults.apk_version = '1.6.2';
+      defaults.apk_build_number = '16';
       defaults.apk_file_size_mb = '25.0 MB';
-      defaults.apk_release_notes = 'Perbaikan Total Engine M&A Akuisisi, Penyesuaian Beli Saham Kuota Publik Beredar, Eliminasi Antrean Notifikasi, Sinkronisasi Integritas Tender Nasional, dan Perbaikan Tema Gelap Sheet.';
+      defaults.apk_release_notes = 'Simulasi Warta Pasar Dinamis 24/7 (Aksi Korporasi & Laba Kuartalan Emiten Tbk.), Ekosistem Chat Global Bursa Aktif dari 1.000++ Konglomerat & Investor Ritel, serta Peningkatan Stabilitas Komunitas.';
     }
   } catch (_) {}
   return defaults;
@@ -6603,6 +6630,7 @@ async function start() {
   }
   simulationEngine.start();
   surveillance.start();
+  communitySimulation.start();
 }
 
 start().catch((err) => {

@@ -23,16 +23,16 @@ import {
 
 export default function PublicDownloadLandingPage() {
   const [versionInfo, setVersionInfo] = useState({
-    version: '1.6.1',
-    buildNumber: 15,
-    apkVersion: 'v1.6.1 (Build 15)',
+    version: '1.6.2',
+    buildNumber: 16,
+    apkVersion: 'v1.6.2 (Build 16)',
     minAndroid: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
     fileSizeMb: '25.0 MB',
     downloadUrl: '/api/download/apk',
-    downloadCount: 168,
+    downloadCount: 196,
     totalCompanies: 504,
     totalPlayers: 1055,
-    sha256: '830fdfd04a1bb6476ca99c4758f5cd10fbf0424358a91b14a0580cd2a4580110',
+    sha256: '5998839556ddf9a3e0b1c89bdc67fe2cc071dba550e8607aecf08457920efa85',
     releaseNotes:
       'Ekspansi 12 Naga & 1.000+ Konglomerat, Perbaikan Profil Realtime, Validasi Pendirian PT, dan Performa Optimal',
   });
