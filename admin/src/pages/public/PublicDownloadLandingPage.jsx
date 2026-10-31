@@ -23,9 +23,9 @@ import {
 
 export default function PublicDownloadLandingPage() {
   const [versionInfo, setVersionInfo] = useState({
-    version: '1.6.5',
-    buildNumber: 19,
-    apkVersion: 'v1.6.5 (Build 19)',
+    version: '1.6.6',
+    buildNumber: 20,
+    apkVersion: 'v1.6.6 (Build 20)',
     minAndroid: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
     fileSizeMb: '25.0 MB',
     downloadUrl: '/api/download/apk',

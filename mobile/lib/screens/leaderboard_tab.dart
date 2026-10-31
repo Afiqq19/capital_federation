@@ -15,16 +15,59 @@ class LeaderboardTab extends StatefulWidget {
 class _LeaderboardTabState extends State<LeaderboardTab> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final _chatController = TextEditingController();
+  final ScrollController _chatScroll = ScrollController();
+  int _seenChatCount = 0;
+  bool _stickToBottom = true; // true bila pengguna sedang di dasar chat
+  bool _showJumpToLatest = false;
+  bool _forceScrollNext = false;
+
+  bool _isNearBottom() {
+    if (!_chatScroll.hasClients) return true;
+    final pos = _chatScroll.position;
+    return pos.maxScrollExtent - pos.pixels < 100;
+  }
+
+  void _scrollChatToBottom({bool animate = true}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_chatScroll.hasClients) return;
+      final max = _chatScroll.position.maxScrollExtent;
+      if (animate) {
+        _chatScroll.animateTo(max, duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
+      } else {
+        _chatScroll.jumpTo(max);
+      }
+    });
+  }
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _chatScroll.addListener(() {
+      final atBottom = _isNearBottom();
+      if (atBottom != _stickToBottom || (atBottom && _showJumpToLatest)) {
+        setState(() {
+          _stickToBottom = atBottom;
+          if (atBottom) _showJumpToLatest = false;
+        });
+      }
+    });
+    // Saat pindah ke tab Chat Global, langsung tampilkan pesan terbaru
+    _tabController.addListener(() {
+      if (!_tabController.indexIsChanging && _tabController.index == 1) {
+        _scrollChatToBottom(animate: false);
+        // build tab bisa tertunda satu frame; ulangi sekali agar pasti di dasar
+        Future.delayed(const Duration(milliseconds: 120), () {
+          if (mounted) _scrollChatToBottom(animate: false);
+        });
+      }
+    });
   }
 
   @override
   void dispose() {
     _chatController.dispose();
+    _chatScroll.dispose();
     _tabController.dispose();
     super.dispose();
   }
@@ -42,6 +85,21 @@ class _LeaderboardTabState extends State<LeaderboardTab> with SingleTickerProvid
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<GameProvider>();
+
+    // Auto-scroll chat: ikuti pesan baru bila pengguna di dasar, jika tidak tampilkan tombol "Pesan baru"
+    final chatCount = provider.chatMessages.length;
+    if (chatCount != _seenChatCount) {
+      final firstLoad = _seenChatCount == 0;
+      final grew = chatCount > _seenChatCount;
+      _seenChatCount = chatCount;
+      if (firstLoad || _forceScrollNext || _stickToBottom) {
+        _forceScrollNext = false;
+        _showJumpToLatest = false;
+        _scrollChatToBottom(animate: !firstLoad);
+      } else if (grew) {
+        _showJumpToLatest = true;
+      }
+    }
     final currentUser = provider.user;
 
     // Lookup map dari leaderboard untuk mendeteksi rank 9 Naga & VIP secara live di Chat
@@ -431,6 +489,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> with SingleTickerProvid
                                 ),
                               )
                             : ListView.separated(
+                                controller: _chatScroll,
                                 padding: const EdgeInsets.fromLTRB(20, 6, 20, 16),
                                 itemCount: provider.chatMessages.length,
                                 separatorBuilder: (_, __) => const SizedBox(height: 10),
@@ -780,6 +839,35 @@ class _LeaderboardTabState extends State<LeaderboardTab> with SingleTickerProvid
                               ),
                       ),
 
+                      if (_showJumpToLatest)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: GestureDetector(
+                            onTap: () {
+                              setState(() => _showJumpToLatest = false);
+                              _scrollChatToBottom();
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF0EA5E9),
+                                borderRadius: BorderRadius.circular(20),
+                                boxShadow: [
+                                  BoxShadow(color: const Color(0xFF0EA5E9).withValues(alpha: 0.4), blurRadius: 10),
+                                ],
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.arrow_downward_rounded, color: Colors.white, size: 14),
+                                  SizedBox(width: 6),
+                                  Text('Pesan baru', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+
                       // Input Bar
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -838,6 +926,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> with SingleTickerProvid
                               onPressed: () {
                                 final text = _chatController.text.trim();
                                 if (text.isNotEmpty) {
+                                  _forceScrollNext = true;
                                   provider.sendChatMessage(text);
                                   _chatController.clear();
                                 }

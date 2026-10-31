@@ -213,6 +213,7 @@ class GameProvider extends ChangeNotifier {
       },
       onChatMessage: (data) {
         _chatMessages.add(ChatMessageModel.fromJson(data));
+        if (_chatMessages.length > 300) _chatMessages.removeAt(0);
         notifyListeners();
       },
       onTradeExecuted: (data) {

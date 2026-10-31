@@ -85,9 +85,9 @@ class ApiService {
     return null;
   }
 
-  static const String currentAppVersion = '1.6.5';
-  static const int currentBuildNumber = 19;
-  static const String currentApkDisplayVersion = 'v1.6.5-CFX Production (Build 19)';
+  static const String currentAppVersion = '1.6.6';
+  static const int currentBuildNumber = 20;
+  static const String currentApkDisplayVersion = 'v1.6.6-CFX Production (Build 20)';
 
   // Fetch Live Server Version & Update Detection Info
   static Future<Map<String, dynamic>?> getServerVersion() async {

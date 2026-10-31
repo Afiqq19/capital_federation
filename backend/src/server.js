@@ -6217,14 +6217,14 @@ const localBuiltApkPath = path.join(__dirname, '../../mobile/build/app/outputs/f
 
 async function getApkSettingsMap() {
   const defaults = {
-    apk_version: '1.6.5',
-    apk_build_number: '19',
+    apk_version: '1.6.6',
+    apk_build_number: '20',
     apk_min_android: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
     apk_file_size_mb: '25.1 MB',
-    apk_release_notes: 'v1.6.5: aplikasi langsung terbuka dengan data tersimpan lalu memperbarui diam-diam di latar belakang, jam & tanggal kini sesuai WIB, data pasar tidak lagi kosong di sinyal lemah.',
+    apk_release_notes: 'v1.6.6: Chat Global otomatis menggulir ke pesan terbaru (plus tombol "Pesan baru"), buka instan dengan data tersimpan, jam & tanggal sesuai WIB.',
     apk_external_url: '',
     apk_download_count: '315',
-    apk_sha256: '1e706d01be3f778091efa119f10663d457d01af477ea68fc02f0e3960cabbe2a',
+    apk_sha256: 'b12a5fb9c70f2cf11222c4a618fb45eb1f95c1c5ba40c8c9d6ac86d7c9093342',
     apk_updated_at: new Date().toISOString(),
   };
   try {
@@ -6234,12 +6234,12 @@ async function getApkSettingsMap() {
         defaults[r.key] = String(r.value);
       }
     }
-    if (parseInt(defaults.apk_build_number || '0', 10) < 19) {
-      defaults.apk_version = '1.6.5';
-      defaults.apk_build_number = '19';
+    if (parseInt(defaults.apk_build_number || '0', 10) < 20) {
+      defaults.apk_version = '1.6.6';
+      defaults.apk_build_number = '20';
       defaults.apk_file_size_mb = '25.1 MB';
-      defaults.apk_sha256 = '1e706d01be3f778091efa119f10663d457d01af477ea68fc02f0e3960cabbe2a';
-      defaults.apk_release_notes = 'v1.6.5: aplikasi langsung terbuka dengan data tersimpan lalu memperbarui diam-diam di latar belakang, jam & tanggal kini sesuai WIB, data pasar tidak lagi kosong di sinyal lemah.';
+      defaults.apk_sha256 = 'b12a5fb9c70f2cf11222c4a618fb45eb1f95c1c5ba40c8c9d6ac86d7c9093342';
+      defaults.apk_release_notes = 'v1.6.6: Chat Global otomatis menggulir ke pesan terbaru (plus tombol "Pesan baru"), buka instan dengan data tersimpan, jam & tanggal sesuai WIB.';
     }
   } catch (_) {}
   return defaults;
