@@ -5660,10 +5660,86 @@ app.post('/api/takeover/negotiate', async (req, res) => {
       });
     }
 
-    // JIKA PENDIRI ADALAH BOT PEMILIK PT: Pendiri mengevaluasi & menandatangani Persetujuan RUPS Luar Biasa!
-    const founderApprovalNote = pct >= 50.0
-      ? `Selaku Pendiri & Pemegang Saham Terbesar (${founderSharePct}% Hak Suara) ${company.name}, saya (@${sellerName}) menyetujui proposal akuisisi & restrukturisasi dari @${user.username} sebesar ${pct}% saham pengendali.`
-      : `Selaku Pendiri & Pemegang Saham Terbesar (${founderSharePct}% Hak Suara) ${company.name}, saya (@${sellerName}) menyambut baik kemitraan strategis dengan @${user.username} sebesar ${pct}% saham (Dewan Komisaris).`;
+    // JIKA PENDIRI ADALAH BOT PEMILIK PT: Bot konglomerat mengevaluasi tawaran secara cerdas (tidak asal setuju!)
+    const isCompanyHealthy = (company.status === 'HEALTHY' || !company.status) &&
+      (Number(company.fundamental_score) || 75) >= 60 &&
+      (Number(company.company_balance_ib) || 0) >= 0;
+
+    let botDecision = 'APPROVED';
+    let founderApprovalNote = '';
+    let rejectReason = '';
+
+    if (isCompanyHealthy) {
+      if (offerTier === 'RESCUE_30') {
+        // Emiten sehat ditawar murah diskon -30% -> BOT MENOLAK KERAS!
+        botDecision = 'REJECTED';
+        rejectReason = `RUPSLB Ditolak oleh @${sellerName}: Fundamental perseroan ${company.name} sangat sehat (Skor Fundamental: ${company.fundamental_score || 85}/100) dan mencetak laba rutin. Kami menolak keras diskon -30%!`;
+      } else if (offerTier === 'MARKET_FAIR') {
+        // Harga pasar wajar: jika minta kendali mayoritas (>= 50%), bot konglomerat menolak 65% kecuali ada Premi Sultan
+        if (pct >= 50 && Math.random() < 0.65) {
+          botDecision = 'REJECTED';
+          rejectReason = `RUPSLB Ditolak oleh @${sellerName}: Selaku pemegang saham pengendali, kami menolak menyerahkan hak veto kendali ${company.name} pada harga reguler. Naikkan tawaran ke PREMI SULTAN (+15%) jika ingin akuisisi!`;
+        } else {
+          botDecision = 'APPROVED';
+          founderApprovalNote = pct >= 50
+            ? `Selaku Pendiri & Pemegang Saham Pengendali (${founderSharePct}% Hak Suara) ${company.name}, saya (@${sellerName}) menyetujui transaksi akuisisi ${pct}% saham pengendali dari @${user.username} pada harga pasar wajar.`
+            : `Selaku Pendiri ${company.name}, saya (@${sellerName}) menyambut baik kemitraan strategis dengan @${user.username} sebesar ${pct}% saham (Dewan Komisaris).`;
+        }
+      } else {
+        // PREMIUM_15 (Premi Sultan +15% di atas pasar): Bot tergiur keuntungan besar dan menyetujui!
+        botDecision = 'APPROVED';
+        founderApprovalNote = `TAKE OVER DISAHKAN: Selaku Pendiri @${sellerName}, kami menyetujui tawaran akuisisi PREMI SULTAN (+15% di atas valuasi) senilai IB ${rawAcquisitionPrice.toLocaleString('id-ID')} dari @${user.username}. Dengan ini kendali perseroan resmi dialihkan!`;
+      }
+    } else {
+      // Emiten sedang sakit / defisit kas / krisis: Bot bersyukur ada investor penyelamat, bahkan dengan diskon RESCUE_30
+      botDecision = 'APPROVED';
+      founderApprovalNote = `PENYELAMATAN DISETUJUI: Kondisi kas operasional ${company.name} sedang tertekan. Selaku Pendiri @${sellerName}, saya menyetujui restrukturisasi dan pengambilalihan ${pct}% saham oleh @${user.username} demi kelangsungan hidup emiten.`;
+    }
+
+    if (botDecision === 'REJECTED') {
+      // REFUND DANA ESCROW PEMAIN 100% UTUH!
+      if (useCompanyCash) {
+        await query.run('UPDATE users SET company_balance_ib = company_balance_ib + ? WHERE id = ?', [totalDeduction, userId]);
+      } else {
+        await query.run('UPDATE users SET balance_ib = balance_ib + ? WHERE id = ?', [totalDeduction, userId]);
+      }
+
+      await query.run(`
+        INSERT INTO acquisition_proposals (
+          id, company_id, company_symbol, company_name, sector,
+          buyer_user_id, buyer_username, founder_user_id, founder_username, founder_share_pct,
+          is_bot_founder, percentage_requested, lots_transferred, price_per_share_ib,
+          raw_acquisition_ib, total_deduction_ib, offer_tier, payment_source, pitch_notes,
+          status, founder_response_note, responded_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, 'REJECTED', ?, CURRENT_TIMESTAMP)
+      `, [
+        proposalId, company.id, company.symbol, company.name, company.sector,
+        userId, user.username, sellerUserId, sellerName, founderSharePct,
+        pct, acquiredLots, avgPrice, rawAcquisitionPrice, totalDeduction,
+        offerTier, useCompanyCash ? 'COMPANY' : 'PERSONAL', cleanPitch, rejectReason
+      ]);
+
+      const refundUser = await query.get('SELECT balance_ib, company_balance_ib FROM users WHERE id = ?', [userId]);
+      io.emit('user:balance_updated', { userId });
+
+      return res.status(200).json({
+        success: false,
+        rejected: true,
+        error: rejectReason,
+        founderApproval: {
+          founder_username: sellerName,
+          founder_share_pct: founderSharePct,
+          decision: 'REJECTED',
+          statement: rejectReason,
+        },
+        message: rejectReason,
+        refunded: true,
+        refundAmountIb: totalDeduction,
+        newPersonalBalance: refundUser.balance_ib,
+        newCompanyBalance: refundUser.company_balance_ib,
+        suggestion: 'Tingkatkan penawaran ke opsi PREMI SULTAN (+15%) atau bidik emiten yang sedang defisit kas operasional untuk akuisisi murah.'
+      });
+    }
 
     await query.run(`
       INSERT INTO acquisition_proposals (
@@ -7681,18 +7757,18 @@ const bundledPublicApkPath = path.join(__dirname, '../public/downloads/Capital-F
 const directPublicApkPath = path.join(__dirname, '../public/downloads/capital-federation.apk');
 const localBuiltApkPath = path.join(__dirname, '../../mobile/build/app/outputs/flutter-apk/app-release.apk');
 
-const LATEST_RELEASE_NOTES_V193 = 'v1.9.3: Redam Notifikasi Sistem Status Bar Saat Bermain Game (Bebas Gangguan Pop-up), Normalisasi Skala Font Standar Seluruh Perangkat HP (Anti-Oversize), dan Optimasi Struktur Pemegang Saham.';
+const LATEST_RELEASE_NOTES_V194 = 'v1.9.4: AI Bot Cerdas & Reaktif (Bisa Menolak Tawaran Murah, Menuntut Balik Pencemaran Nama Baik di PNAF, Mengalahkan Penggugat Ceroboh), dan Tombol Akses Cepat Akuisisi M&A / Tender Offer di Layar Detail Saham.';
 
 async function getApkSettingsMap() {
   const defaults = {
-    apk_version: '1.9.3',
-    apk_build_number: '29',
+    apk_version: '1.9.4',
+    apk_build_number: '30',
     apk_min_android: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
     apk_file_size_mb: '56.9 MB',
-    apk_release_notes: LATEST_RELEASE_NOTES_V193,
+    apk_release_notes: LATEST_RELEASE_NOTES_V194,
     apk_external_url: '',
-    apk_download_count: '340',
-    apk_sha256: '37a2063951d3643af249646c57bef5fcd46571d404fe3241283c7f5fbb8a9ab5',
+    apk_download_count: '345',
+    apk_sha256: 'f7f22cbc07073e154f2e9e3d87c919121d5abf56968d11069e52660ce1eb2ea1',
     apk_updated_at: new Date().toISOString(),
   };
   try {
@@ -7702,12 +7778,12 @@ async function getApkSettingsMap() {
         defaults[r.key] = String(r.value);
       }
     }
-    if (parseInt(defaults.apk_build_number || '0', 10) < 29) {
-      defaults.apk_version = '1.9.3';
-      defaults.apk_build_number = '29';
+    if (parseInt(defaults.apk_build_number || '0', 10) < 30) {
+      defaults.apk_version = '1.9.4';
+      defaults.apk_build_number = '30';
       defaults.apk_file_size_mb = '56.9 MB';
-      defaults.apk_sha256 = '37a2063951d3643af249646c57bef5fcd46571d404fe3241283c7f5fbb8a9ab5';
-      defaults.apk_release_notes = LATEST_RELEASE_NOTES_V193;
+      defaults.apk_sha256 = 'f7f22cbc07073e154f2e9e3d87c919121d5abf56968d11069e52660ce1eb2ea1';
+      defaults.apk_release_notes = LATEST_RELEASE_NOTES_V194;
       defaults.apk_updated_at = new Date().toISOString();
       // Persist directly to central_bank_settings so /api/settings, /api/admin/settings & /api/admin/overview match 100%!
       const keysToSync = ['apk_version', 'apk_build_number', 'apk_file_size_mb', 'apk_sha256', 'apk_release_notes', 'apk_min_android', 'apk_updated_at'];

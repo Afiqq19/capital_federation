@@ -1188,15 +1188,38 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.45)),
                               ),
-                              child: Row(
+                              child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Icon(Icons.handshake_rounded, color: Color(0xFFF59E0B), size: 15),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      'Seluruh kuota Pasar Reguler (${c.regularMarketQuotaPct.toStringAsFixed(0)}% = ${CurrencyFormatter.formatNumberOnly(maxRegularLots)} Lot) telah habis Anda serap sehingga Offer kosong (0 Lot). Untuk mengakuisisi Saham Pengendali (${(100 - c.regularMarketQuotaPct).toStringAsFixed(0)}%), gunakan menu Bursa Aset (Akuisisi M&A / P2P).',
-                                      style: const TextStyle(color: Color(0xFFFBBF24), fontSize: 10.5, height: 1.35),
+                                  Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Icon(Icons.handshake_rounded, color: Color(0xFFF59E0B), size: 15),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          'Seluruh kuota Pasar Reguler (${c.regularMarketQuotaPct.toStringAsFixed(0)}% = ${CurrencyFormatter.formatNumberOnly(maxRegularLots)} Lot) telah habis Anda serap sehingga antrean Offer kosong (0 Lot / Cornering the Float).',
+                                          style: const TextStyle(color: Color(0xFFFBBF24), fontSize: 10.5, height: 1.35),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    height: 34,
+                                    child: ElevatedButton.icon(
+                                      onPressed: () => showTakeoverModalSheet(context, c),
+                                      icon: const Icon(Icons.handshake_rounded, size: 14),
+                                      label: const Text(
+                                        '🤝 AJUKAN TENDER OFFER / AKUISISI PENGENDALI',
+                                        style: TextStyle(fontWeight: FontWeight.w900, fontSize: 10.5),
+                                      ),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: const Color(0xFFF59E0B),
+                                        foregroundColor: const Color(0xFF0F172A),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -1550,18 +1573,32 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                 child: Row(
                   children: [
                     // M&A / Takeover Shortcut
-                    Container(
-                      height: 48,
-                      width: 48,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFFF59E0B), width: 1.2),
-                      ),
-                      child: IconButton(
-                        tooltip: 'Tender Offer & Akuisisi M&A',
-                        onPressed: () => showTakeoverModalSheet(context, c),
-                        icon: const Icon(Icons.handshake_rounded, color: Color(0xFFF59E0B), size: 22),
+                    InkWell(
+                      onTap: () => showTakeoverModalSheet(context, c),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        height: 48,
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFF59E0B), width: 1.2),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.handshake_rounded, color: Color(0xFFF59E0B), size: 18),
+                            SizedBox(width: 4),
+                            Text(
+                              'AKUISISI',
+                              style: TextStyle(
+                                color: Color(0xFFF59E0B),
+                                fontWeight: FontWeight.w900,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                     const SizedBox(width: 8),

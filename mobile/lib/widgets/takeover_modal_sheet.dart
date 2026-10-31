@@ -367,11 +367,11 @@ void showTakeoverModalSheet(
                               }
                               onCompleted?.call();
                             } else {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(res['error'] ?? 'Gagal memproses proposal akuisisi'),
-                                  backgroundColor: const Color(0xFFEF4444),
-                                ),
+                              _showTakeoverRejectionDialog(
+                                context,
+                                company,
+                                res['error'] ?? 'Proposal akuisisi ditolak oleh RUPSLB pendiri.',
+                                res['suggestion'] ?? 'Tingkatkan penawaran ke opsi PREMI SULTAN (+15%) atau bidik emiten yang sedang defisit kas operasional.',
                               );
                             }
                           },
@@ -500,6 +500,98 @@ void _showTakeoverSuccessDialog(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           ),
           child: const Text('TUTUP & LIHAT PORTOFOLIO', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+        ),
+      ],
+    ),
+  );
+}
+
+void _showTakeoverRejectionDialog(
+  BuildContext context,
+  CompanyModel company,
+  String reason,
+  String suggestion,
+) {
+  showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: const Color(0xFF0F172A),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: const BorderSide(color: Color(0xFFEF4444), width: 1.5),
+      ),
+      title: const Row(
+        children: [
+          Icon(Icons.cancel_rounded, color: Color(0xFFEF4444), size: 24),
+          SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'RUPSLB: AKUISISI DITOLAK PENDIRI',
+              style: TextStyle(color: Color(0xFFF87171), fontSize: 13, fontWeight: FontWeight.w900),
+            ),
+          ),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFEF4444).withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.4)),
+            ),
+            child: Text(
+              reason,
+              style: const TextStyle(color: Color(0xFFFCA5A5), fontSize: 11, height: 1.4),
+            ),
+          ),
+          const SizedBox(height: 12),
+          const Row(
+            children: [
+              Icon(Icons.check_circle_outline_rounded, color: Color(0xFF10B981), size: 16),
+              SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Saldo Anda telah di-refund 100% utuh tanpa potongan.',
+                  style: TextStyle(color: Color(0xFF34D399), fontSize: 10.5, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E293B),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.lightbulb_rounded, color: Color(0xFFF59E0B), size: 16),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Saran Strategi: $suggestion',
+                    style: const TextStyle(color: Color(0xFFFDE68A), fontSize: 10, height: 1.3),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        ElevatedButton(
+          onPressed: () => Navigator.pop(ctx),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF334155),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+          child: const Text('MENGERTI', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
         ),
       ],
     ),

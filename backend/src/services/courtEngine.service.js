@@ -1162,18 +1162,30 @@ class CourtJudgeBotService {
       }
     }
 
+    const linkedDeed = await resolveLinkedDeed(c);
+
     if (!defPresent && isBotOrInstitutionalDefendant) {
-      // 80% Kuasa Hukum Tergugat hadir menyampaikan jawaban hukum, 20% mangkir (verstek)
-      const willAttend = Math.random() < 0.8;
+      // 85% Kuasa Hukum Tergugat hadir menyampaikan jawaban hukum & tuntutan balik, 15% mangkir (verstek)
+      const willAttend = Math.random() < 0.85;
       if (willAttend) {
         defPresent = true;
         await query.run('UPDATE court_cases SET defendant_present = 1 WHERE id = ?', [c.id]);
-        const defenseText =
-          c.case_type === 'BANKRUPTCY'
-            ? `Yang Mulia, Biro Hukum ${c.defendant_name} hadir dan menyerahkan rekapitulasi baki kredit serta mendukung opsi restrukturisasi yang sehat.`
-            : c.case_type === 'REGULATORY'
-            ? `Yang Mulia, Kuasa Hukum ${c.defendant_name} hadir menyerahkan log aktivitas perdagangan bursa untuk diperiksa secara objektif.`
-            : `Yang Mulia, Kuasa Hukum ${c.defendant_name} hadir memenuhi panggilan relaas dan menyerahkan salinan dokumen transaksi kepada Majelis Hakim.`;
+
+        let defenseText = '';
+        if (c.case_type === 'BANKRUPTCY') {
+          defenseText = `Yang Mulia, Biro Hukum ${c.defendant_name} hadir dan menyerahkan rekapitulasi baki kredit serta mendukung opsi restrukturisasi yang sehat.`;
+        } else if (c.case_type === 'REGULATORY') {
+          defenseText = `Yang Mulia, Kuasa Hukum ${c.defendant_name} hadir menyerahkan log aktivitas perdagangan bursa untuk diperiksa secara objektif.`;
+        } else if (linkedDeed) {
+          const isDeedFulfilled = linkedDeed.status === 'COMPLETED' || String(linkedDeed.status || '').startsWith('LUNAS');
+          if (isDeedFulfilled) {
+            defenseText = `Yang Mulia Majelis Hakim PNAF, Tergugat (${c.defendant_name}) membantah keras seluruh dalil Penggugat! Kewajiban transaksi Akta #${linkedDeed.deed_number} telah diselesaikan secara sah, tuntas, dan lunas. Penggugat sengaja merekayasa dalil demi memeras penalti penjaminan! Kami mengajukan GUGATAN REKONVENSI (TUNTUTAN BALIK): Menuntut Penggugat dihukum membayar ganti rugi pencemaran nama baik dan ongkos perkara sebesar 15% nilai tuntutan!`;
+          } else {
+            defenseText = `Yang Mulia, Kuasa Hukum ${c.defendant_name} hadir melampirkan pembukuan perdata Akta #${linkedDeed.deed_number}. Tergugat telah bertindak dengan itikad baik dan tidak pernah melanggar klausul pokok perjanjian. Kami memohon Majelis Hakim menolak seluruh gugatan Penggugat dan memulihkan nama baik Tergugat!`;
+          }
+        } else {
+          defenseText = `Yang Mulia, Kuasa Hukum ${c.defendant_name} hadir membantah dalil Penggugat. Gugatan ini tidak didasari alas hak hukum yang sah. Kami menuntut perkara digugurkan demi hukum!`;
+        }
 
         await appendCourtChat(this.io, {
           caseId: c.id,
@@ -1184,8 +1196,6 @@ class CourtJudgeBotService {
         });
       }
     }
-
-    const linkedDeed = await resolveLinkedDeed(c);
     const examMsg = linkedDeed
       ? `⚖️ PEMERIKSAAN ALAT BUKTI: Majelis Hakim telah memverifikasi keabsahan Akta Notaris #${linkedDeed.deed_number} senilai IB ${Number(linkedDeed.total_price_ib || 0).toLocaleString('id-ID')} bermeterai lunas beserta bukti tuntutan sebesar IB ${Number(c.claim_amount_ib || 0).toLocaleString('id-ID')}. Majelis memasuki musyawarah pembacaan putusan.`
       : `⚖️ PEMERIKSAAN POKOK PERKARA: Majelis Hakim sedang meneliti berkas gugatan "${c.title}", riwayat kepatuhan finansial para pihak, dan nilai tuntutan IB ${Number(c.claim_amount_ib || 0).toLocaleString('id-ID')} sebelum mengetuk palu putusan.`;
@@ -1301,11 +1311,39 @@ class CourtJudgeBotService {
         customAwardedAmount = 0;
         verdictNotes = `❌ GUGATAN DITOLAK: Tuntutan sebesar IB ${rawClaim.toLocaleString('id-ID')} tidak didukung bukti Akta Notaris / Meterai Digital yang sah di Brankas Kepaniteraan PNAF.`;
       } else if (c.defendant_present === 0) {
+        // Tergugat mangkir dari persidangan -> Putusan Verstek memenangkan Penggugat
         verdictStatus = 'VERDICT_APPROVED';
         verdictType = 'VERSTEK_PLAINTIFF_WIN';
       } else if (linkedDeed) {
-        verdictStatus = 'VERDICT_APPROVED';
-        verdictType = 'APPROVED_PLAINTIFF_WIN';
+        // PEMERIKSAAN MATERI BUKTI AKTA OLEH MAJELIS HAKIM (BOT BISA MENGALAHKAN PENGGUNA ASLI)
+        const isDeedFulfilled = linkedDeed.status === 'COMPLETED' || String(linkedDeed.status || '').startsWith('LUNAS');
+        if (isDeedFulfilled) {
+          // Akta terbukti sudah lunas / selesai -> Gugatan Penggugat adalah pencemaran nama baik fiktif!
+          verdictStatus = 'VERDICT_REJECTED';
+          verdictType = 'GUGUR_DISMISSED';
+          const defamationFine = Math.max(10000000, Math.min(100000000, Math.round(rawClaim * 0.15)));
+          customAwardedAmount = 0;
+          verdictNotes = `❌ GUGATAN DITOLAK & PENGGUGAT DIHUKUM DENDA REKONVENSI: ${BOT_JUDGE_NAME} memeriksa berkas Akta #${linkedDeed.deed_number} dan menemukan seluruh kewajiban telah lunas dieksekusi secara sah. Tuduhan wanprestasi Penggugat (${c.plaintiff_name}) dinyatakan TIDAK TERBUKTI. Menghukum Penggugat membayar denda pencemaran nama baik sebesar IB ${defamationFine.toLocaleString('id-ID')} kepada Tergugat (${c.defendant_name}).`;
+        } else {
+          // Ada sengketa klausul nyata: Bot bisa menang jika pembelaan kuat!
+          const roll = Math.random();
+          if (roll < 0.50) {
+            verdictStatus = 'VERDICT_APPROVED';
+            verdictType = 'APPROVED_PLAINTIFF_WIN';
+          } else if (roll < 0.80) {
+            // Kuasa Hukum Tergugat Bot berhasil mematahkan dalil gugatan -> Bot menang, Penggugat kalah!
+            verdictStatus = 'VERDICT_REJECTED';
+            verdictType = 'GUGUR_DISMISSED';
+            const defamationFine = Math.max(10000000, Math.min(50000000, Math.round(rawClaim * 0.10)));
+            customAwardedAmount = 0;
+            verdictNotes = `❌ GUGATAN DITOLAK: Majelis Hakim PNAF memeriksa pembuktian Tergugat (${c.defendant_name}) dan menyatakan tidak terdapat wanprestasi sepihak atas Akta #${linkedDeed.deed_number}. Gugatan Penggugat dinyatakan gugur dan Penggugat dihukum membayar ganti rugi biaya perkara IB ${defamationFine.toLocaleString('id-ID')} kepada Tergugat.`;
+          } else {
+            // Mediasi / Restrukturisasi PKPU
+            verdictStatus = 'VERDICT_PKPU';
+            verdictType = 'SETTLED_MEDIATION';
+            verdictNotes = `🤝 PUTUSAN MEDIASI ARBITRASE PNAF: Majelis Hakim memutus sengketa Akta #${linkedDeed.deed_number} diselesaikan melalui jalur musyawarah perdata tanpa eksekusi sita paksa.`;
+          }
+        }
       } else {
         verdictStatus = 'VERDICT_PKPU';
         verdictType = 'SETTLED_MEDIATION';
