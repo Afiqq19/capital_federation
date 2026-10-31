@@ -806,7 +806,8 @@ module.exports = function(io) {
       let caseNumber = '';
       while (true) {
         const randSuffix = Math.floor(1000 + Math.random() * 9000);
-        caseNumber = `${String(caseSeq).padStart(3, '0')}.${randSuffix}/Pdt.Sus-Wanprestasi/${new Date().getFullYear()}/PNAF`;
+        const timePart = Date.now().toString().slice(-4);
+        caseNumber = `${String(caseSeq).padStart(3, '0')}.${randSuffix}.${timePart}/Pdt.Sus-Wanprestasi/${new Date().getFullYear()}/PNAF`;
         const exists = await query.get('SELECT 1 FROM court_cases WHERE case_number = ?', [caseNumber]);
         if (!exists) break;
         caseSeq++;

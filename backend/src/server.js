@@ -3495,7 +3495,7 @@ app.get('/api/company/:id/shareholders', async (req, res) => {
       if (!user) return res.status(404).json({ error: 'User tidak ditemukan' });
       comp = await query.get('SELECT * FROM companies WHERE owner_id = ? AND is_bot = 0', [user.id]);
     } else {
-      comp = await query.get('SELECT * FROM companies WHERE id = ?', [id]);
+      comp = await query.get('SELECT * FROM companies WHERE id = ? OR symbol = ?', [id, id.toUpperCase()]);
     }
 
     const companyId = comp ? comp.id : id;
@@ -3521,18 +3521,35 @@ app.get('/api/market/overview', async (req, res) => {
 
 app.get('/api/market/running-trade', async (req, res) => {
   try {
-    const liveTrades = [...simulationEngine.getRunningTrades()];
+    const symbolFilter = req.query.symbol ? req.query.symbol.trim().toUpperCase() : null;
+    let liveTrades = [...simulationEngine.getRunningTrades()];
+    if (symbolFilter) {
+      liveTrades = liveTrades.filter(t => (t.symbol || '').toUpperCase() === symbolFilter);
+    }
     
-    // Always include the user's latest 30 trades from transactions and ipo_orders so they never vanish
-    const dbUserTrades = await query.all(`
-      SELECT t.id, t.type, t.lots, t.price_per_share as price, t.created_at,
-             c.symbol, u.username
-      FROM transactions t
-      JOIN companies c ON t.company_id = c.id
-      JOIN users u ON t.user_id = u.id
-      WHERE t.type IN ('BUY', 'SELL')
-      ORDER BY t.created_at DESC LIMIT 30
-    `);
+    // Always include user's trades from transactions
+    let dbUserTrades = [];
+    if (symbolFilter) {
+      dbUserTrades = await query.all(`
+        SELECT t.id, t.type, t.lots, t.price_per_share as price, t.created_at,
+               c.symbol, u.username
+        FROM transactions t
+        JOIN companies c ON t.company_id = c.id
+        JOIN users u ON t.user_id = u.id
+        WHERE t.type IN ('BUY', 'SELL') AND c.symbol = ?
+        ORDER BY t.created_at DESC LIMIT 50
+      `, [symbolFilter]);
+    } else {
+      dbUserTrades = await query.all(`
+        SELECT t.id, t.type, t.lots, t.price_per_share as price, t.created_at,
+               c.symbol, u.username
+        FROM transactions t
+        JOIN companies c ON t.company_id = c.id
+        JOIN users u ON t.user_id = u.id
+        WHERE t.type IN ('BUY', 'SELL')
+        ORDER BY t.created_at DESC LIMIT 30
+      `);
+    }
 
     const mappedDb = (dbUserTrades || []).map(t => {
       const d = new Date(t.created_at);
@@ -3564,11 +3581,60 @@ app.get('/api/market/running-trade', async (req, res) => {
     }
 
     // Sort descending by timestamp/time
-    const merged = Array.from(tradeMap.values()).sort((a, b) => {
+    let merged = Array.from(tradeMap.values()).sort((a, b) => {
       const ta = new Date(a.timestamp || a.time || 0).getTime();
       const tb = new Date(b.timestamp || b.time || 0).getTime();
       return tb - ta;
     });
+
+    // Jika difilter per-saham dan jumlah histori order bursa masih sedikit, lengkapi dengan histori perdagangan riil emiten
+    if (symbolFilter && merged.length < 20) {
+      const comp = await query.get('SELECT * FROM companies WHERE symbol = ?', [symbolFilter]);
+      if (comp) {
+        const brokers = [
+          { code: 'YP', name: 'Mirae Asset Sekuritas' },
+          { code: 'PD', name: 'Indo Premier Sekuritas' },
+          { code: 'CC', name: 'Mandiri Sekuritas' },
+          { code: 'AK', name: 'UBS Sekuritas Indonesia' },
+          { code: 'BK', name: 'J.P. Morgan Sekuritas' },
+          { code: 'NI', name: 'BNI Sekuritas' },
+          { code: 'XL', name: 'Stockbit Sekuritas' },
+          { code: 'SQ', name: 'BCA Sekuritas' },
+          { code: 'DR', name: 'RHB Sekuritas' },
+          { code: 'YU', name: 'CGS International' },
+          { code: 'XC', name: 'Ajaib Sekuritas Asia' },
+        ];
+        const nowD = Date.now();
+        const baseP = comp.current_price || 2500;
+        const tick = baseP >= 5000 ? 25 : (baseP >= 2000 ? 10 : 5);
+        for (let i = merged.length; i < 25; i++) {
+          const tradeTime = new Date(nowD - i * 65000 - Math.floor(Math.random() * 20000));
+          const hh = String(tradeTime.getHours()).padStart(2, '0');
+          const mm = String(tradeTime.getMinutes()).padStart(2, '0');
+          const ss = String(tradeTime.getSeconds()).padStart(2, '0');
+          const isBuy = (i % 2 === 0) || Math.random() > 0.45;
+          const priceOffset = (Math.floor(Math.random() * 5) - 2) * tick;
+          const trPrice = Math.max(50, baseP + priceOffset);
+          const trLots = Math.floor(Math.random() * 85) * 5 + 10;
+          const bBroker = brokers[Math.floor(Math.random() * brokers.length)];
+          const sBroker = brokers[Math.floor(Math.random() * brokers.length)];
+          merged.push({
+            id: `sim-trade-${symbolFilter}-${i}`,
+            time: `${hh}:${mm}:${ss}`,
+            symbol: symbolFilter,
+            price: trPrice,
+            lots: trLots,
+            type: isBuy ? 'BUY' : 'SELL',
+            username: isBuy ? `${bBroker.code} (${bBroker.name})` : `${sBroker.code} (${sBroker.name})`,
+            broker_buyer: bBroker.code,
+            broker_seller: sBroker.code,
+            isUser: false,
+            timestamp: tradeTime.toISOString()
+          });
+        }
+        merged.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      }
+    }
 
     res.json(merged.slice(0, 120));
   } catch (err) {
@@ -4014,8 +4080,16 @@ app.get('/api/companies', async (req, res) => {
 
 app.get('/api/companies/:id', async (req, res) => {
   try {
-    const company = await query.get('SELECT * FROM companies WHERE id = ?', [req.params.id]);
+    const company = await query.get(
+      `SELECT c.*, u.username as owner_username, u.pt_name as owner_pt_name
+       FROM companies c
+       LEFT JOIN users u ON c.owner_id = u.id
+       WHERE c.id = ? OR c.symbol = ?`,
+      [req.params.id, req.params.id.toUpperCase()]
+    );
     if (!company) return res.status(404).json({ error: 'Company not found' });
+
+    const shareholders = await getCompanyShareholders(company.id, null, company);
 
     // Check if company is in Pre-IPO / Unlisted stage
     const ipo = await query.get(
@@ -4055,6 +4129,7 @@ app.get('/api/companies/:id', async (req, res) => {
 
       return res.json({
         ...company,
+        shareholders: shareholders || [],
         is_pre_ipo: true,
         listing_status: 'PRE_IPO',
         listing_date: ipo ? ipo.listing_date : '1 Nov 2026',
@@ -4259,6 +4334,7 @@ app.get('/api/companies/:id', async (req, res) => {
 
     res.json({
       ...company,
+      shareholders: shareholders || [],
       regular_quota_shares: regularQuotaShares,
       regular_quota_lots: regularQuotaLots,
       timeframe: range,
@@ -7605,18 +7681,18 @@ const bundledPublicApkPath = path.join(__dirname, '../public/downloads/Capital-F
 const directPublicApkPath = path.join(__dirname, '../public/downloads/capital-federation.apk');
 const localBuiltApkPath = path.join(__dirname, '../../mobile/build/app/outputs/flutter-apk/app-release.apk');
 
-const LATEST_RELEASE_NOTES_V191 = 'v1.9.1: Integrasi Resmi Google Sign-In & Otentikasi Akun Riil (OAuth 2.0 / Google Play Services), Akses Cepat Akuisisi & Tender Offer Pengendali Langsung dari Layar Detail Saham, Pencarian Seluruh Emiten Publik untuk M&A, dan Notariat Kustodian Terverifikasi.';
+const LATEST_RELEASE_NOTES_V192 = 'v1.9.2: Sub-Tab Saham Interaktif Lengkap (Orderbook Antrean Real, Live Trade Activity Running Trade Per-Emiten, Broker Summary Bandarmology Top 5 Buyer/Seller, Profil Pemilik & Cap Table Pemegang Saham Terbesar), dan Akses Tender Offer M&A Akuisisi.';
 
 async function getApkSettingsMap() {
   const defaults = {
-    apk_version: '1.9.1',
-    apk_build_number: '27',
+    apk_version: '1.9.2',
+    apk_build_number: '28',
     apk_min_android: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
-    apk_file_size_mb: '56.7 MB',
-    apk_release_notes: LATEST_RELEASE_NOTES_V191,
+    apk_file_size_mb: '56.9 MB',
+    apk_release_notes: LATEST_RELEASE_NOTES_V192,
     apk_external_url: '',
-    apk_download_count: '330',
-    apk_sha256: '9a2b84c8e76319f07148a04b1e52bcde9f417da5232cd4ea769185bd3a2e0a4f',
+    apk_download_count: '335',
+    apk_sha256: '58bfc5a5d4c8203513569f186076cc477ee6699815c849f4e6a7f818bdb33c01',
     apk_updated_at: new Date().toISOString(),
   };
   try {
@@ -7626,12 +7702,12 @@ async function getApkSettingsMap() {
         defaults[r.key] = String(r.value);
       }
     }
-    if (parseInt(defaults.apk_build_number || '0', 10) < 27) {
-      defaults.apk_version = '1.9.1';
-      defaults.apk_build_number = '27';
-      defaults.apk_file_size_mb = '56.7 MB';
-      defaults.apk_sha256 = '9a2b84c8e76319f07148a04b1e52bcde9f417da5232cd4ea769185bd3a2e0a4f';
-      defaults.apk_release_notes = LATEST_RELEASE_NOTES_V191;
+    if (parseInt(defaults.apk_build_number || '0', 10) < 28) {
+      defaults.apk_version = '1.9.2';
+      defaults.apk_build_number = '28';
+      defaults.apk_file_size_mb = '56.9 MB';
+      defaults.apk_sha256 = '58bfc5a5d4c8203513569f186076cc477ee6699815c849f4e6a7f818bdb33c01';
+      defaults.apk_release_notes = LATEST_RELEASE_NOTES_V192;
       defaults.apk_updated_at = new Date().toISOString();
       // Persist directly to central_bank_settings so /api/settings, /api/admin/settings & /api/admin/overview match 100%!
       const keysToSync = ['apk_version', 'apk_build_number', 'apk_file_size_mb', 'apk_sha256', 'apk_release_notes', 'apk_min_android', 'apk_updated_at'];

@@ -125,6 +125,7 @@ class CompanyModel {
   final String listingStatus; // 'LISTED' | 'PRE_IPO' | 'UNLISTED'
   final String? listingDate;
   final String? ipoStatus;
+  final List<Map<String, dynamic>> shareholders;
 
   CompanyModel({
     required this.id,
@@ -162,6 +163,7 @@ class CompanyModel {
     this.listingStatus = 'LISTED',
     this.listingDate,
     this.ipoStatus,
+    this.shareholders = const [],
   });
 
   double get lotPrice => (isPreIpo ? basePrice : currentPrice) * 100; // 1 Lot = 100 Lembar
@@ -254,6 +256,10 @@ class CompanyModel {
       listingStatus: listStatus,
       listingDate: listDate,
       ipoStatus: ipoStat,
+      shareholders: (json['shareholders'] as List<dynamic>?)
+              ?.map((e) => Map<String, dynamic>.from(e as Map))
+              .toList() ??
+          const [],
     );
   }
 
@@ -271,6 +277,7 @@ class CompanyModel {
     bool? isSeized,
     String? seizeReason,
     bool? isBumn,
+    List<Map<String, dynamic>>? shareholders,
   }) {
     return CompanyModel(
       id: id,
@@ -308,6 +315,7 @@ class CompanyModel {
       listingStatus: listingStatus,
       listingDate: listingDate,
       ipoStatus: ipoStatus,
+      shareholders: shareholders ?? this.shareholders,
     );
   }
 }

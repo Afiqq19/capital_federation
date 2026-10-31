@@ -33,12 +33,51 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
   Map<int, int> _myOfferOrders = {};
   List<dynamic> _myActiveOrdersList = [];
 
+  List<Map<String, dynamic>> _companyShareholders = [];
+  bool _loadingShareholders = false;
+  List<Map<String, dynamic>> _stockRunningTrades = [];
+  bool _loadingRunningTrades = false;
+
   @override
   void initState() {
     super.initState();
     _fetchDetail();
     _fetchMyOrderSummary();
+    _fetchShareholders();
+    _fetchStockRunningTrades();
     _setupOrderSocketListener();
+  }
+
+  Future<void> _fetchShareholders() async {
+    if (!mounted) return;
+    setState(() => _loadingShareholders = true);
+    try {
+      final list = await ApiService.getShareholders(companyId: widget.company.id);
+      if (mounted) {
+        setState(() {
+          _companyShareholders = list;
+          _loadingShareholders = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loadingShareholders = false);
+    }
+  }
+
+  Future<void> _fetchStockRunningTrades() async {
+    if (!mounted) return;
+    setState(() => _loadingRunningTrades = true);
+    try {
+      final list = await ApiService.getRunningTrades(symbol: widget.company.symbol);
+      if (mounted) {
+        setState(() {
+          _stockRunningTrades = list;
+          _loadingRunningTrades = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loadingRunningTrades = false);
+    }
   }
 
   @override
@@ -149,6 +188,9 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
       if (mounted) {
         setState(() {
           _detailedCompany = detail ?? widget.company;
+          if (detail != null && detail.shareholders.isNotEmpty) {
+            _companyShareholders = detail.shareholders;
+          }
         });
       }
     } catch (_) {
@@ -387,6 +429,9 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
             priceChangePct: liveCompany.priceChangePct,
             status: liveCompany.status,
             orderbook: liveCompany.orderbook ?? _detailedCompany!.orderbook,
+            shareholders: _detailedCompany!.shareholders.isNotEmpty
+                ? _detailedCompany!.shareholders
+                : liveCompany.shareholders,
           )
         : liveCompany;
 
@@ -995,6 +1040,7 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                     if (c.status == 'SUSPENDED') _buildSuspendedBanner(context, c),
                     if (c.status == 'CRITICAL') _buildCriticalUmaBanner(context, c),
 
+                    if (_selectedSubTab == 'Orderbook') ...[
                     // ==========================================
                     // ORDERBOOK HEADER (STOCKBIT STYLE)
                     // ==========================================
@@ -1161,17 +1207,29 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                       ),
                     ),
 
-                    // KARTU POSISI KEPEMILIKAN SAHAM ANDA (DIBAWAH ORDERBOOK)
-                    _buildHoldingCard(
-                      ownedLots,
-                      ownedShares,
-                      isHoldingProfit,
-                      totalInvested,
-                      avgBuyPrice,
-                      profitLoss,
-                      profitLossPct,
-                      currentHoldingVal,
-                    ),
+
+                    ] else if (_selectedSubTab == 'Trade Activity') ...[
+                      _buildTradeActivityTab(c, provider),
+                    ] else if (_selectedSubTab == 'Informasi Broker') ...[
+                      _buildBrokerSummaryTab(c, provider),
+                    ] else if (_selectedSubTab == 'Insider') ...[
+                      _buildInsiderTab(c, provider),
+                    ],
+
+                    const SizedBox(height: 14),
+
+                    // KARTU POSISI KEPEMILIKAN SAHAM ANDA
+                    if (ownedLots > 0 || _selectedSubTab == 'Orderbook')
+                      _buildHoldingCard(
+                        ownedLots,
+                        ownedShares,
+                        isHoldingProfit,
+                        totalInvested,
+                        avgBuyPrice,
+                        profitLoss,
+                        profitLossPct,
+                        currentHoldingVal,
+                      ),
                     const SizedBox(height: 20),
 
                     // ==========================================
@@ -1818,7 +1876,14 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
           children: tabs.map((tab) {
             final isSel = _selectedSubTab == tab;
             return InkWell(
-              onTap: () => setState(() => _selectedSubTab = tab),
+              onTap: () {
+                setState(() => _selectedSubTab = tab);
+                if (tab == 'Trade Activity') {
+                  _fetchStockRunningTrades();
+                } else if (tab == 'Insider' && _companyShareholders.isEmpty) {
+                  _fetchShareholders();
+                }
+              },
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 decoration: BoxDecoration(
@@ -1826,13 +1891,28 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                       ? const Border(bottom: BorderSide(color: Color(0xFF38BDF8), width: 2.5))
                       : null,
                 ),
-                child: Text(
-                  tab,
-                  style: TextStyle(
-                    color: isSel ? const Color(0xFF38BDF8) : const Color(0xFF94A3B8),
-                    fontSize: 12,
-                    fontWeight: isSel ? FontWeight.w900 : FontWeight.w600,
-                  ),
+                child: Row(
+                  children: [
+                    Text(
+                      tab,
+                      style: TextStyle(
+                        color: isSel ? const Color(0xFF38BDF8) : const Color(0xFF94A3B8),
+                        fontSize: 12,
+                        fontWeight: isSel ? FontWeight.w900 : FontWeight.w600,
+                      ),
+                    ),
+                    if (tab == 'Trade Activity' && isSel) ...[
+                      const SizedBox(width: 5),
+                      Container(
+                        width: 5.5,
+                        height: 5.5,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF10B981),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
             );
@@ -2147,6 +2227,864 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                 ),
               ],
             ),
+    );
+  }
+
+  // ============================================================================
+  // SUB-TAB 1: TRADE ACTIVITY (RUNNING TRADE FEED KHUSUS EMITEN INI)
+  // ============================================================================
+  Widget _buildTradeActivityTab(CompanyModel c, GameProvider provider) {
+    final socketTrades = provider.runningTrades
+        .where((t) => (t['symbol'] ?? '').toString().toUpperCase() == c.symbol.toUpperCase())
+        .toList();
+
+    final allMap = <String, Map<String, dynamic>>{};
+    for (final t in _stockRunningTrades) {
+      final key = t['id']?.toString() ?? '${t['time']}-${t['price']}-${t['lots']}';
+      allMap[key] = t;
+    }
+    for (final t in socketTrades) {
+      final key = t['id']?.toString() ?? '${t['time']}-${t['price']}-${t['lots']}';
+      allMap[key] = t;
+    }
+
+    final trades = allMap.values.toList()
+      ..sort((a, b) {
+        final ta = a['timestamp']?.toString() ?? a['time']?.toString() ?? '';
+        final tb = b['timestamp']?.toString() ?? b['time']?.toString() ?? '';
+        return tb.compareTo(ta);
+      });
+
+    final int totalLots = trades.fold(0, (sum, t) => sum + ((t['lots'] as num?)?.toInt() ?? 0));
+    final int buyLots = trades.where((t) => (t['type']?.toString().toUpperCase() == 'BUY')).fold(0, (sum, t) => sum + ((t['lots'] as num?)?.toInt() ?? 0));
+    final int sellLots = totalLots - buyLots;
+    final int maxLot = trades.fold(1, (m, t) => max(m, (t['lots'] as num?)?.toInt() ?? 1));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                const Text(
+                  'Running Trade Feed',
+                  style: TextStyle(color: Colors.white, fontSize: 14.5, fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.4)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(width: 5, height: 5, decoration: const BoxDecoration(color: Color(0xFF34D399), shape: BoxShape.circle)),
+                      const SizedBox(width: 4),
+                      Text('LIVE ${c.symbol}', style: const TextStyle(color: Color(0xFF34D399), fontSize: 9.5, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            IconButton(
+              icon: _loadingRunningTrades
+                  ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF38BDF8)))
+                  : const Icon(Icons.refresh_rounded, color: Color(0xFF94A3B8), size: 18),
+              onPressed: _loadingRunningTrades ? null : _fetchStockRunningTrades,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0F172A),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFF1E293B)),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Total Transaksi Sesi:', style: TextStyle(color: Color(0xFF64748B), fontSize: 9.5)),
+                    const SizedBox(height: 2),
+                    Text('${trades.length} Order (${CurrencyFormatter.formatNumberOnly(totalLots)} Lot)', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              ),
+              Container(width: 1, height: 24, color: const Color(0xFF1E293B)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Beli: ${CurrencyFormatter.formatNumberOnly(buyLots)} Lot', style: const TextStyle(color: Color(0xFF34D399), fontSize: 9.5, fontWeight: FontWeight.bold)),
+                        Text('Jual: ${CurrencyFormatter.formatNumberOnly(sellLots)} Lot', style: const TextStyle(color: Color(0xFFF87171), fontSize: 9.5, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(3),
+                      child: SizedBox(
+                        height: 4,
+                        child: Row(
+                          children: [
+                            if (totalLots > 0 && buyLots > 0)
+                              Expanded(flex: max(1, buyLots), child: Container(color: const Color(0xFF10B981))),
+                            if (totalLots > 0 && sellLots > 0)
+                              Expanded(flex: max(1, sellLots), child: Container(color: const Color(0xFFEF4444))),
+                            if (totalLots <= 0)
+                              Expanded(child: Container(color: const Color(0xFF334155))),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+
+        Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF0F172A),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFF1E293B)),
+          ),
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF1E293B),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(11)),
+                ),
+                child: const Row(
+                  children: [
+                    SizedBox(width: 55, child: Text('Waktu', style: TextStyle(color: Color(0xFF64748B), fontSize: 9.5, fontWeight: FontWeight.bold))),
+                    SizedBox(width: 44, child: Text('Aksi', style: TextStyle(color: Color(0xFF64748B), fontSize: 9.5, fontWeight: FontWeight.bold))),
+                    Expanded(child: Text('Harga (IB)', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 9.5, fontWeight: FontWeight.bold))),
+                    SizedBox(width: 65, child: Text('Lot', textAlign: TextAlign.right, style: TextStyle(color: Color(0xFF94A3B8), fontSize: 9.5, fontWeight: FontWeight.bold))),
+                    SizedBox(width: 105, child: Text('Broker / Trader', textAlign: TextAlign.right, style: TextStyle(color: Color(0xFF64748B), fontSize: 9.5, fontWeight: FontWeight.bold))),
+                  ],
+                ),
+              ),
+
+              if (trades.isEmpty && _loadingRunningTrades)
+                const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF38BDF8))),
+                )
+              else if (trades.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Center(
+                    child: Column(
+                      children: [
+                        const Icon(Icons.analytics_outlined, color: Color(0xFF64748B), size: 28),
+                        const SizedBox(height: 6),
+                        Text('Belum ada transaksi sekunder untuk ${c.symbol}', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11)),
+                        const SizedBox(height: 4),
+                        const Text('Setiap transaksi beli & jual pemain atau pasar modal seketika tercatat di running trade ini.', style: TextStyle(color: Color(0xFF64748B), fontSize: 10), textAlign: TextAlign.center),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                ...trades.take(35).map((t) {
+                  final String time = t['time']?.toString() ?? '10:00:00';
+                  final String type = (t['type']?.toString().toUpperCase() == 'BUY') ? 'BUY' : 'SELL';
+                  final isBuy = type == 'BUY';
+                  final double price = ((t['price'] as num?)?.toDouble() ?? c.currentPrice);
+                  final int lots = ((t['lots'] as num?)?.toInt() ?? 1);
+                  final String username = t['username']?.toString() ?? (isBuy ? 'YP (Mirae)' : 'XL (Stockbit)');
+                  final double lotBarRatio = (lots / maxLot).clamp(0.05, 1.0);
+
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                    decoration: const BoxDecoration(
+                      border: Border(bottom: BorderSide(color: Color(0xFF131D31), width: 0.8)),
+                    ),
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 55,
+                          child: Text(time, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10, fontFamily: 'monospace')),
+                        ),
+                        SizedBox(
+                          width: 44,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
+                            decoration: BoxDecoration(
+                              color: (isBuy ? const Color(0xFF10B981) : const Color(0xFFEF4444)).withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              type,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: isBuy ? const Color(0xFF34D399) : const Color(0xFFF87171),
+                                fontSize: 8.5,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: Text(
+                            CurrencyFormatter.formatNumberOnly(price),
+                            style: TextStyle(
+                              color: isBuy ? const Color(0xFF34D399) : const Color(0xFFF87171),
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              fontFamily: 'monospace',
+                            ),
+                          ),
+                        ),
+                        SizedBox(
+                          width: 65,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                '${CurrencyFormatter.formatNumberOnly(lots)} Lot',
+                                style: const TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
+                              ),
+                              const SizedBox(height: 2),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(2),
+                                child: Container(
+                                  height: 2.5,
+                                  width: 40 * lotBarRatio,
+                                  color: isBuy ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        SizedBox(
+                          width: 105,
+                          child: Text(
+                            username,
+                            textAlign: TextAlign.right,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 10),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ============================================================================
+  // SUB-TAB 2: INFORMASI BROKER (BROKER SUMMARY BANDARMOLOGY)
+  // ============================================================================
+  Widget _buildBrokerSummaryTab(CompanyModel c, GameProvider provider) {
+    final ref = c.basePrice > 0 ? c.basePrice : c.currentPrice;
+    final int baseVol = max(1800, (c.circulatingShares / 80).floor());
+    final isBullish = c.priceChangePct >= 0;
+
+    final topBuyers = [
+      {'code': 'YP', 'name': 'Mirae Asset', 'lot': (baseVol * 0.28).round(), 'avg': (ref * (isBullish ? 1.004 : 0.998)).round()},
+      {'code': 'CC', 'name': 'Mandiri Sekuritas', 'lot': (baseVol * 0.22).round(), 'avg': (ref * (isBullish ? 1.002 : 0.996)).round()},
+      {'code': 'AK', 'name': 'UBS Sekuritas', 'lot': (baseVol * 0.18).round(), 'avg': (ref * (isBullish ? 1.006 : 1.000)).round()},
+      {'code': 'PD', 'name': 'Indo Premier', 'lot': (baseVol * 0.14).round(), 'avg': (ref * (isBullish ? 1.001 : 0.995)).round()},
+      {'code': 'BK', 'name': 'J.P. Morgan', 'lot': (baseVol * 0.10).round(), 'avg': (ref * (isBullish ? 1.008 : 1.002)).round()},
+    ];
+
+    final topSellers = [
+      {'code': 'XL', 'name': 'Stockbit Sekuritas', 'lot': (baseVol * (isBullish ? 0.24 : 0.30)).round(), 'avg': (ref * (isBullish ? 1.002 : 0.994)).round()},
+      {'code': 'NI', 'name': 'BNI Sekuritas', 'lot': (baseVol * (isBullish ? 0.20 : 0.25)).round(), 'avg': (ref * (isBullish ? 1.000 : 0.992)).round()},
+      {'code': 'DR', 'name': 'RHB Sekuritas', 'lot': (baseVol * 0.16).round(), 'avg': (ref * (isBullish ? 0.998 : 0.990)).round()},
+      {'code': 'SQ', 'name': 'BCA Sekuritas', 'lot': (baseVol * 0.13).round(), 'avg': (ref * (isBullish ? 1.003 : 0.995)).round()},
+      {'code': 'XC', 'name': 'Ajaib Sekuritas', 'lot': (baseVol * 0.11).round(), 'avg': (ref * (isBullish ? 0.997 : 0.989)).round()},
+    ];
+
+    final int totalBuyLot = topBuyers.fold(0, (s, b) => s + (b['lot'] as int));
+    final int totalSellLot = topSellers.fold(0, (s, b) => s + (b['lot'] as int));
+    final int netLot = totalBuyLot - totalSellLot;
+    final bool isNetAccum = netLot >= 0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Broker Summary (Bandarmology)',
+              style: TextStyle(color: Colors.white, fontSize: 14.5, fontWeight: FontWeight.w900),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: (isNetAccum ? const Color(0xFF10B981) : const Color(0xFFEF4444)).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: (isNetAccum ? const Color(0xFF10B981) : const Color(0xFFEF4444)).withValues(alpha: 0.4)),
+              ),
+              child: Text(
+                isNetAccum ? '🟢 AKUMULASI MASIF' : '🔴 DISTRIBUSI TERENCANA',
+                style: TextStyle(
+                  color: isNetAccum ? const Color(0xFF34D399) : const Color(0xFFF87171),
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0F172A),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFF1E293B)),
+          ),
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Top 5 Net Buy: ${CurrencyFormatter.formatNumberOnly(totalBuyLot)} Lot', style: const TextStyle(color: Color(0xFF34D399), fontSize: 11, fontWeight: FontWeight.bold)),
+                  Text('Top 5 Net Sell: ${CurrencyFormatter.formatNumberOnly(totalSellLot)} Lot', style: const TextStyle(color: Color(0xFFF87171), fontSize: 11, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              const SizedBox(height: 6),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: SizedBox(
+                  height: 6,
+                  child: Row(
+                    children: [
+                      Expanded(flex: max(1, totalBuyLot), child: Container(color: const Color(0xFF10B981))),
+                      Expanded(flex: max(1, totalSellLot), child: Container(color: const Color(0xFFEF4444))),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Selisih Arus Bersih (Net Flow):', style: TextStyle(color: Color(0xFF64748B), fontSize: 10)),
+                  Text(
+                    '${isNetAccum ? '+' : ''}${CurrencyFormatter.formatNumberOnly(netLot)} Lot (${CurrencyFormatter.formatFull(netLot.abs() * 100 * c.currentPrice)})',
+                    style: TextStyle(color: isNetAccum ? const Color(0xFF34D399) : const Color(0xFFF87171), fontSize: 10.5, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0F172A),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.3)),
+                ),
+                child: Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(9)),
+                      ),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('Buyer (Beli)', style: TextStyle(color: Color(0xFF34D399), fontSize: 10, fontWeight: FontWeight.bold)),
+                          Text('Lot / Avg', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 9.5)),
+                        ],
+                      ),
+                    ),
+                    ...topBuyers.map((b) => Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                      decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xFF131D31)))),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                decoration: BoxDecoration(color: const Color(0xFF1E293B), borderRadius: BorderRadius.circular(3)),
+                                child: Text(b['code'].toString(), style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 9.5, fontWeight: FontWeight.bold, fontFamily: 'monospace')),
+                              ),
+                              const SizedBox(width: 4),
+                              SizedBox(
+                                width: 45,
+                                child: Text(b['name'].toString(), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 9)),
+                              ),
+                            ],
+                          ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(CurrencyFormatter.formatNumberOnly(b['lot'] as num), style: const TextStyle(color: Color(0xFF34D399), fontSize: 10, fontWeight: FontWeight.bold, fontFamily: 'monospace')),
+                              Text('Avg ${CurrencyFormatter.formatNumberOnly(b['avg'] as num)}', style: const TextStyle(color: Color(0xFF64748B), fontSize: 8.5)),
+                            ],
+                          ),
+                        ],
+                      ),
+                    )),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+
+            Expanded(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0F172A),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.3)),
+                ),
+                child: Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEF4444).withValues(alpha: 0.15),
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(9)),
+                      ),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('Seller (Jual)', style: TextStyle(color: Color(0xFFF87171), fontSize: 10, fontWeight: FontWeight.bold)),
+                          Text('Lot / Avg', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 9.5)),
+                        ],
+                      ),
+                    ),
+                    ...topSellers.map((s) => Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                      decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xFF131D31)))),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                decoration: BoxDecoration(color: const Color(0xFF1E293B), borderRadius: BorderRadius.circular(3)),
+                                child: Text(s['code'].toString(), style: const TextStyle(color: Color(0xFFF87171), fontSize: 9.5, fontWeight: FontWeight.bold, fontFamily: 'monospace')),
+                              ),
+                              const SizedBox(width: 4),
+                              SizedBox(
+                                width: 45,
+                                child: Text(s['name'].toString(), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 9)),
+                              ),
+                            ],
+                          ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(CurrencyFormatter.formatNumberOnly(s['lot'] as num), style: const TextStyle(color: Color(0xFFF87171), fontSize: 10, fontWeight: FontWeight.bold, fontFamily: 'monospace')),
+                              Text('Avg ${CurrencyFormatter.formatNumberOnly(s['avg'] as num)}', style: const TextStyle(color: Color(0xFF64748B), fontSize: 8.5)),
+                            ],
+                          ),
+                        ],
+                      ),
+                    )),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  // ============================================================================
+  // SUB-TAB 3: INSIDER (PROFIL PEMILIK, CAP TABLE & STRUKTUR SAHAM TERBESAR)
+  // ============================================================================
+  Widget _buildInsiderTab(CompanyModel c, GameProvider provider) {
+    final String ownerName = (c.ownerUsername != null && c.ownerUsername!.trim().isNotEmpty)
+        ? c.ownerUsername!
+        : (c.isBot ? 'Algoritma Pengendali Bursa IPMC' : 'Investor Publik (Konsorsium)');
+    final String ownerHolding = (c.ownerPtName != null && c.ownerPtName!.trim().isNotEmpty)
+        ? c.ownerPtName!
+        : c.name;
+
+    List<Map<String, dynamic>> rawList = _companyShareholders.isNotEmpty
+        ? _companyShareholders
+        : c.shareholders;
+
+    if (rawList.isEmpty) {
+      rawList = provider.getShareholdersFor(c.id);
+    }
+
+    final List<Map<String, dynamic>> shareholders = rawList.isNotEmpty
+        ? List<Map<String, dynamic>>.from(rawList)
+        : [
+            {
+              'holder_name': '$ownerName (Pendiri & Pengendali)',
+              'holder_type': 'FOUNDER',
+              'percentage': 51.0,
+              'shares_count': (c.totalShares * 0.51).round(),
+            },
+            {
+              'holder_name': 'Konsorsium Mitra Usaha & Kemitraan',
+              'holder_type': 'INSTITUTION',
+              'percentage': 29.0,
+              'shares_count': (c.totalShares * 0.29).round(),
+            },
+            {
+              'holder_name': 'Publik Ritel (Bursa Efek IPMC)',
+              'holder_type': 'PUBLIC',
+              'percentage': 20.0,
+              'shares_count': (c.totalShares * 0.20).round(),
+            },
+          ];
+
+    shareholders.sort((a, b) {
+      final pa = (a['percentage'] as num?)?.toDouble() ?? 0.0;
+      final pb = (b['percentage'] as num?)?.toDouble() ?? 0.0;
+      return pb.compareTo(pa);
+    });
+
+    final double mktCap = c.currentPrice * c.totalShares;
+    final topShareholder = shareholders.isNotEmpty ? shareholders.first : null;
+    final topPct = (topShareholder?['percentage'] as num?)?.toDouble() ?? 51.0;
+    final bool hasMajority = topPct >= 50.0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 1. Profil Pemilik / Direktur Utama
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0F172A),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.3)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF38BDF8).withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.5)),
+                    ),
+                    child: const Center(
+                      child: Icon(Icons.person_rounded, color: Color(0xFF38BDF8), size: 22),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          ownerName,
+                          style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w900),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Entitas Induk: $ownerHolding',
+                          style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: (hasMajority ? const Color(0xFF10B981) : const Color(0xFFF59E0B)).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: (hasMajority ? const Color(0xFF10B981) : const Color(0xFFF59E0B)).withValues(alpha: 0.4)),
+                    ),
+                    child: Text(
+                      hasMajority ? '👑 PENGENDALI (PSP)' : 'MITRA KORPORASI',
+                      style: TextStyle(
+                        color: hasMajority ? const Color(0xFF34D399) : const Color(0xFFFBBF24),
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const Divider(color: Color(0xFF1E293B), height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Sektor Industri', style: TextStyle(color: Color(0xFF64748B), fontSize: 10)),
+                      const SizedBox(height: 2),
+                      Text(c.sector, style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Status Listing', style: TextStyle(color: Color(0xFF64748B), fontSize: 10)),
+                      const SizedBox(height: 2),
+                      Text(c.isIpo ? 'Tbk. (Bursa Saham)' : 'Tertutup (Pre-IPO)', style: const TextStyle(color: Color(0xFF34D399), fontSize: 11.5, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      const Text('Kapitalisasi Pasar', style: TextStyle(color: Color(0xFF64748B), fontSize: 10)),
+                      const SizedBox(height: 2),
+                      Text(CurrencyFormatter.formatFull(mktCap), style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 11.5, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+
+        // 2. Daftar Pemegang Saham Terbesar (Cap Table)
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Struktur Pemegang Saham (Cap Table)',
+              style: TextStyle(color: Colors.white, fontSize: 14.5, fontWeight: FontWeight.w900),
+            ),
+            IconButton(
+              icon: _loadingShareholders
+                  ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF38BDF8)))
+                  : const Icon(Icons.refresh_rounded, color: Color(0xFF94A3B8), size: 18),
+              onPressed: _loadingShareholders ? null : _fetchShareholders,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+
+        ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: SizedBox(
+            height: 10,
+            child: Row(
+              children: shareholders.map((sh) {
+                final pct = (sh['percentage'] as num?)?.toDouble() ?? 0.0;
+                final type = sh['holder_type']?.toString().toUpperCase() ?? 'PUBLIC';
+                Color col;
+                if (type == 'FOUNDER') {
+                  col = const Color(0xFF10B981);
+                } else if (type == 'INSTITUTION') {
+                  col = const Color(0xFF38BDF8);
+                } else {
+                  col = const Color(0xFFF59E0B);
+                }
+                final flexVal = max(1, (pct * 10).round());
+                return Expanded(
+                  flex: flexVal,
+                  child: Container(color: col),
+                );
+              }).toList(),
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+
+        ...shareholders.asMap().entries.map((entry) {
+          final idx = entry.key;
+          final sh = entry.value;
+          final String holderName = sh['holder_name']?.toString() ?? 'Pemegang Saham #${idx + 1}';
+          final double pct = (sh['percentage'] as num?)?.toDouble() ?? 0.0;
+          final int shares = (sh['shares_count'] as num?)?.toInt() ?? (c.totalShares * (pct / 100)).round();
+          final int lots = (shares / 100).floor();
+          final double val = shares * c.currentPrice;
+          final String holderType = sh['holder_type']?.toString().toUpperCase() ?? 'PUBLIC';
+
+          Color typeCol;
+          String typeLabel;
+          if (holderType == 'FOUNDER') {
+            typeCol = const Color(0xFF34D399);
+            typeLabel = 'PENDIRI / UTAMA';
+          } else if (holderType == 'INSTITUTION') {
+            typeCol = const Color(0xFF38BDF8);
+            typeLabel = 'INSTITUSI / KONSORSIUM';
+          } else {
+            typeCol = const Color(0xFFFBBF24);
+            typeLabel = 'PUBLIK RITEL';
+          }
+
+          return Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0F172A),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: idx == 0 ? const Color(0xFF10B981).withValues(alpha: 0.35) : const Color(0xFF1E293B),
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: idx == 0
+                        ? const Color(0xFF10B981).withValues(alpha: 0.2)
+                        : const Color(0xFF1E293B),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Text(
+                      '#${idx + 1}',
+                      style: TextStyle(
+                        color: idx == 0 ? const Color(0xFF34D399) : const Color(0xFF94A3B8),
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        holderName,
+                        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: typeCol.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(3),
+                            ),
+                            child: Text(
+                              typeLabel,
+                              style: TextStyle(color: typeCol, fontSize: 8.5, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            '${CurrencyFormatter.formatNumberOnly(shares)} lbr (${CurrencyFormatter.formatNumberOnly(lots)} Lot)',
+                            style: const TextStyle(color: Color(0xFF64748B), fontSize: 9.5),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      '${pct.toStringAsFixed(1)}%',
+                      style: TextStyle(
+                        color: idx == 0 ? const Color(0xFF34D399) : const Color(0xFF38BDF8),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w900,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      CurrencyFormatter.formatFull(val),
+                      style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 9.5),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        }),
+        const SizedBox(height: 10),
+
+        // 3. Card Panduan Akuisisi / M&A Tender Offer
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E1B4B).withValues(alpha: 0.4),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFF6366F1).withValues(alpha: 0.35)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.shield_outlined, color: Color(0xFFA5B4FC), size: 16),
+                  SizedBox(width: 6),
+                  Text(
+                    'Regulasi Hak Pengendali & RUPS (Statuta IPMC)',
+                    style: TextStyle(color: Color(0xFFA5B4FC), fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Investor yang memiliki >= 51.0% saham memiliki hak pengendali penuh atas perseroan, berhak menetapkan pembagian dividen, dan memegang kendali korporasi. Untuk mengambil alih saham pendiri ini, Anda dapat mengajukan Tender Offer di Bursa Negosiasi (P2P).',
+                style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 10.5, height: 1.35),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF4F46E5),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  icon: const Icon(Icons.handshake_rounded, size: 15),
+                  label: const Text('AJUKAN TENDER OFFER / AKUISISI P2P', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold)),
+                  onPressed: () => showTakeoverModalSheet(context, c),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 

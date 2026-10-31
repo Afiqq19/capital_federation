@@ -97,9 +97,9 @@ class ApiService {
     return null;
   }
 
-  static const String currentAppVersion = '1.9.1';
-  static const int currentBuildNumber = 27;
-  static const String currentApkDisplayVersion = 'v1.9.1-CFX Production (Build 27)';
+  static const String currentAppVersion = '1.9.2';
+  static const int currentBuildNumber = 28;
+  static const String currentApkDisplayVersion = 'v1.9.2-CFX Production (Build 28)';
 
   // Fetch Live Server Version & Update Detection Info
   static Future<Map<String, dynamic>?> getServerVersion() async {
@@ -863,12 +863,19 @@ class ApiService {
     }
   }
 
-  // Real-time Running Trades tape from server
-  static Future<List<Map<String, dynamic>>> getRunningTrades() async {
+  // Real-time Running Trades tape from server (Global or Filtered per Stock Symbol)
+  static Future<List<Map<String, dynamic>>> getRunningTrades({String? symbol}) async {
     try {
-      final response = await http.get(Uri.parse('$baseUrl/api/market/running-trade')).timeout(const Duration(seconds: 20));
+      String url = '$baseUrl/api/market/running-trade';
+      if (symbol != null && symbol.trim().isNotEmpty) {
+        url += '?symbol=${Uri.encodeComponent(symbol.trim().toUpperCase())}';
+      }
+      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
       if (response.statusCode == 200) {
-        return List<Map<String, dynamic>>.from(jsonDecode(response.body));
+        final raw = jsonDecode(response.body);
+        if (raw is List) {
+          return List<Map<String, dynamic>>.from(raw.map((e) => Map<String, dynamic>.from(e as Map)));
+        }
       }
     } catch (_) {}
     return [];
