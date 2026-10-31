@@ -621,7 +621,7 @@ app.post('/api/user/email/verify', async (req, res) => {
     res.json({
       success: true,
       email: targetEmail,
-      sender: 'projek.msyafiq19@gmail.com',
+      sender: 'capital.federation19@gmail.com',
       verificationToken: `CFX-AUTH-${Date.now()}`,
       verificationLink: `https://capitalfederation.xie.my.id/auth/verify?email=${encodeURIComponent(targetEmail)}&token=CFX-SECURE`,
       message: `Tautan verifikasi telah disahkan! Email ${targetEmail} resmi berstatus Terverifikasi di Otoritas Kustodian IPMC.`,
@@ -7757,18 +7757,18 @@ const bundledPublicApkPath = path.join(__dirname, '../public/downloads/Capital-F
 const directPublicApkPath = path.join(__dirname, '../public/downloads/capital-federation.apk');
 const localBuiltApkPath = path.join(__dirname, '../../mobile/build/app/outputs/flutter-apk/app-release.apk');
 
-const LATEST_RELEASE_NOTES_V194 = 'v1.9.4: AI Bot Cerdas & Reaktif (Bisa Menolak Tawaran Murah, Menuntut Balik Pencemaran Nama Baik di PNAF, Mengalahkan Penggugat Ceroboh), dan Tombol Akses Cepat Akuisisi M&A / Tender Offer di Layar Detail Saham.';
+const LATEST_RELEASE_NOTES_V195 = 'v1.9.5: Pembaruan Email Resmi Kustodian & Pusat Bantuan ke capital.federation19@gmail.com, Verifikasi Notariat Otomatis, serta Optimalisasi Kinerja & Keamanan.';
 
 async function getApkSettingsMap() {
   const defaults = {
-    apk_version: '1.9.4',
-    apk_build_number: '30',
+    apk_version: '1.9.5',
+    apk_build_number: '31',
     apk_min_android: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
     apk_file_size_mb: '56.9 MB',
-    apk_release_notes: LATEST_RELEASE_NOTES_V194,
+    apk_release_notes: LATEST_RELEASE_NOTES_V195,
     apk_external_url: '',
-    apk_download_count: '345',
-    apk_sha256: 'f7f22cbc07073e154f2e9e3d87c919121d5abf56968d11069e52660ce1eb2ea1',
+    apk_download_count: '350',
+    apk_sha256: 'b0ef438872edbd86bd9ca44d86b8870ccc93a13eaf23f8b1afadc0e4ef8d00a4',
     apk_updated_at: new Date().toISOString(),
   };
   try {
@@ -7778,12 +7778,12 @@ async function getApkSettingsMap() {
         defaults[r.key] = String(r.value);
       }
     }
-    if (parseInt(defaults.apk_build_number || '0', 10) < 30) {
-      defaults.apk_version = '1.9.4';
-      defaults.apk_build_number = '30';
+    if (parseInt(defaults.apk_build_number || '0', 10) < 31) {
+      defaults.apk_version = '1.9.5';
+      defaults.apk_build_number = '31';
       defaults.apk_file_size_mb = '56.9 MB';
-      defaults.apk_sha256 = 'f7f22cbc07073e154f2e9e3d87c919121d5abf56968d11069e52660ce1eb2ea1';
-      defaults.apk_release_notes = LATEST_RELEASE_NOTES_V194;
+      defaults.apk_sha256 = 'b0ef438872edbd86bd9ca44d86b8870ccc93a13eaf23f8b1afadc0e4ef8d00a4';
+      defaults.apk_release_notes = LATEST_RELEASE_NOTES_V195;
       defaults.apk_updated_at = new Date().toISOString();
       // Persist directly to central_bank_settings so /api/settings, /api/admin/settings & /api/admin/overview match 100%!
       const keysToSync = ['apk_version', 'apk_build_number', 'apk_file_size_mb', 'apk_sha256', 'apk_release_notes', 'apk_min_android', 'apk_updated_at'];
