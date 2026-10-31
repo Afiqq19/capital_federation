@@ -1212,7 +1212,7 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                                       onPressed: () => showTakeoverModalSheet(context, c),
                                       icon: const Icon(Icons.handshake_rounded, size: 14),
                                       label: const Text(
-                                        '🤝 AJUKAN TENDER OFFER / AKUISISI PENGENDALI',
+                                        '🤝 AKUISISI SAHAM PENGENDALI',
                                         style: TextStyle(fontWeight: FontWeight.w900, fontSize: 10.5),
                                       ),
                                       style: ElevatedButton.styleFrom(
@@ -1572,36 +1572,6 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                 ),
                 child: Row(
                   children: [
-                    // M&A / Takeover Shortcut
-                    InkWell(
-                      onTap: () => showTakeoverModalSheet(context, c),
-                      borderRadius: BorderRadius.circular(12),
-                      child: Container(
-                        height: 48,
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFFF59E0B), width: 1.2),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.handshake_rounded, color: Color(0xFFF59E0B), size: 18),
-                            SizedBox(width: 4),
-                            Text(
-                              'AKUISISI',
-                              style: TextStyle(
-                                color: Color(0xFFF59E0B),
-                                fontWeight: FontWeight.w900,
-                                fontSize: 11,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
                     // Buy Button
                     Expanded(
                       child: SizedBox(
@@ -3113,8 +3083,8 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
-                  icon: const Icon(Icons.handshake_rounded, size: 15),
-                  label: const Text('AJUKAN TENDER OFFER / AKUISISI P2P', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold)),
+                  icon: const Icon(Icons.handshake_rounded, size: 16),
+                  label: const Text('AKUISISI PERSEROAN', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, letterSpacing: 0.3)),
                   onPressed: () => showTakeoverModalSheet(context, c),
                 ),
               ),
