@@ -87,6 +87,35 @@ const query = {
         else resolve();
       });
     });
+  },
+  transaction: async (workFn) => {
+    return new Promise((resolve, reject) => {
+      db.serialize(async () => {
+        db.run('BEGIN IMMEDIATE TRANSACTION', async (beginErr) => {
+          if (beginErr) return reject(beginErr);
+          const txRun = (sql, params = []) =>
+            new Promise((resRun, rejRun) => {
+              db.run(sql, params, function (err) {
+                if (err) rejRun(err);
+                else resRun({ lastID: this.lastID, changes: this.changes });
+              });
+            });
+          try {
+            const result = await workFn({ run: txRun });
+            db.run('COMMIT', (commitErr) => {
+              if (commitErr) {
+                db.run('ROLLBACK', () => reject(commitErr));
+              } else {
+                scheduleMariaDbSync('UPDATE');
+                resolve(result);
+              }
+            });
+          } catch (workErr) {
+            db.run('ROLLBACK', () => reject(workErr));
+          }
+        });
+      });
+    });
   }
 };
 
@@ -752,60 +781,24 @@ async function initDb() {
         daily_low = CASE WHEN daily_low IS NULL OR daily_low <= 0 THEN current_price * 0.98 ELSE daily_low END;
   `);
 
-  // Otomatisasi Perbaikan Inkonsistensi Status Kepemilikan & PT Utama Pasca-Akuisisi M&A
-  try {
-    // 1. Cek jika ada user yang PT Utamanya sudah beralih kepemilikan (owner_id bukan dirinya lagi)
-    const usersWithPt = await query.all("SELECT id, username, pt_name, pt_symbol, has_pt FROM users WHERE has_pt = 1 AND role != 'ADMIN'");
-    for (const u of (usersWithPt || [])) {
-      const primaryOwned = await query.get(
-        "SELECT id, name, symbol, sector, is_ipo, company_balance_ib, founder_shares_sold FROM companies WHERE owner_id = ? AND (symbol = ? OR name = ?)",
-        [u.id, u.pt_symbol, u.pt_name]
-      );
-      if (!primaryOwned) {
-        // PT Utama user ini rupanya telah diakuisisi pihak lain! Cari anak perusahaan pengganti milik user ini
-        const substituteSub = await query.get(
-          "SELECT id, name, symbol, sector, is_ipo, company_balance_ib, founder_shares_sold FROM companies WHERE owner_id = ? ORDER BY founded_at ASC, id ASC LIMIT 1",
-          [u.id]
-        );
-        if (substituteSub) {
-          console.log(`🔄 [Auto-Healing] Mempromosikan ${substituteSub.name} (${substituteSub.symbol}) menjadi PT Utama baru bagi @${u.username}...`);
-          await query.run(
-            `UPDATE users 
-             SET pt_name = ?, pt_symbol = ?, sector = ?, is_ipo = ?, company_balance_ib = ?, founder_shares_sold = ?, has_pt = 1
-             WHERE id = ?`,
-            [substituteSub.name, substituteSub.symbol, substituteSub.sector, substituteSub.is_ipo || 0, substituteSub.company_balance_ib || 0, substituteSub.founder_shares_sold || 0, u.id]
-          );
-        } else {
-          // Jika tidak ada PT lain yang dimiliki, set has_pt = 0 agar pemain bisa mendirikan PT baru
-          console.log(`🔄 [Auto-Healing] Seluruh PT @${u.username} telah diakuisisi, mereset status PT Utama (bisa dirikan PT baru)...`);
-          await query.run(
-            "UPDATE users SET has_pt = 0, pt_name = '', pt_symbol = '', is_ipo = 0, company_balance_ib = 0 WHERE id = ?",
-            [u.id]
-          );
-        }
-      }
-    }
+  // High-speed SQLite indexes for sub-50ms API latency on 1,000+ users & 500+ companies
+  await query.exec(`
+    CREATE INDEX IF NOT EXISTS idx_portfolios_user_comp ON portfolios(user_id, company_id);
+    CREATE INDEX IF NOT EXISTS idx_portfolios_comp ON portfolios(company_id);
+    CREATE INDEX IF NOT EXISTS idx_companies_owner ON companies(owner_id);
+    CREATE INDEX IF NOT EXISTS idx_companies_symbol ON companies(symbol);
+    CREATE INDEX IF NOT EXISTS idx_companies_listing ON companies(listing_status, is_ipo, is_bot);
+    CREATE INDEX IF NOT EXISTS idx_shareholders_company ON company_shareholders(company_id);
+    CREATE INDEX IF NOT EXISTS idx_shareholders_user ON company_shareholders(user_id, holder_type);
+    CREATE INDEX IF NOT EXISTS idx_transactions_created ON transactions(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_transactions_user ON transactions(user_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_price_history_comp_ts ON price_history(company_id, timestamp DESC);
+    CREATE INDEX IF NOT EXISTS idx_cash_flow_user ON cash_flow_ledger(user_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_market_orders_status ON market_orders(status, created_at ASC);
+  `);
 
-    // 2. Pulihkan sisa 19% saham (19.000 lot) PT. Syafiq Furniture Tbk. (SYFU) ke portofolio msyafiq19
-    const msyafiqUser = await query.get("SELECT id, username FROM users WHERE username = 'msyafiq19'");
-    const syfuComp = await query.get("SELECT id, total_shares, current_price FROM companies WHERE symbol = 'SYFU' OR name LIKE '%Syafiq Furniture%'");
-    if (msyafiqUser && syfuComp) {
-      const portRow = await query.get("SELECT id, lots_owned FROM portfolios WHERE user_id = ? AND company_id = ?", [msyafiqUser.id, syfuComp.id]);
-      if (!portRow) {
-        const { v4: uuidv4 } = require('uuid');
-        await query.run(
-          "INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price) VALUES (?, ?, ?, 19000, ?)",
-          [uuidv4(), msyafiqUser.id, syfuComp.id, syfuComp.current_price || 927]
-        );
-        console.log(`✅ [Auto-Healing] Portofolio sisa 19% saham (19.000 Lot) SYFU berhasil dipulihkan untuk @msyafiq19.`);
-      } else if (portRow.lots_owned < 19000) {
-        await query.run("UPDATE portfolios SET lots_owned = 19000 WHERE id = ?", [portRow.id]);
-        console.log(`✅ [Auto-Healing] Portofolio sisa 19% saham (19.000 Lot) SYFU berhasil diupdate menjadi 19.000 Lot untuk @msyafiq19.`);
-      }
-    }
-  } catch (healErr) {
-    console.error("Auto-healing error (non-fatal):", healErr.message);
-  }
+  // Otomatisasi Perbaikan Inkonsistensi Status Kepemilikan & Pemulihan PT Pemain Asli
+  await healRealPlayerCompanies();
 
   // Seed Initial Sample E-IPO Offerings if empty
   const existingIpo = await query.get('SELECT COUNT(*) as count FROM ipo_offerings');
@@ -1104,6 +1097,223 @@ async function initDb() {
 }
 
 // ============================================================================
+// REAL-PLAYER COMPANY RECOVERY & OWNERSHIP INTEGRITY ENGINE
+// Ensures no real player's founder/majority PT is ever hijacked by a bot or
+// desynced between `users` and `companies`.
+// ============================================================================
+async function healRealPlayerCompanies() {
+  try {
+    // 1. Recover any company where a REAL user (non-bot) is recorded in company_shareholders
+    //    as FOUNDER or majority owner (>= 50%), e.g. PT. Syafiq Capital Tbk. (SYCA) -> msyafiq19
+    const realFounderRows = await query.all(`
+      SELECT cs.company_id, cs.user_id, cs.holder_type, cs.percentage,
+             u.username, u.has_pt, u.pt_name, u.pt_symbol, u.sector as user_sector,
+             u.company_balance_ib as user_comp_bal, u.rd_level as user_rd,
+             u.marketing_level as user_mkt, u.hr_level as user_hr,
+             u.capacity_level as user_cap, u.pt_level as user_pt_lvl,
+             u.employees_count as user_emp, u.ceo_level as user_ceo,
+             u.cfo_level as user_cfo, u.cmo_level as user_cmo,
+             u.fundamental_score as user_fund,
+             c.name as comp_name, c.symbol as comp_symbol, c.sector as comp_sector,
+             c.owner_id as comp_owner_id, c.is_bot as comp_is_bot, c.is_ipo as comp_is_ipo,
+             c.company_balance_ib as comp_bal, c.rd_level as comp_rd,
+             c.marketing_level as comp_mkt, c.hr_level as comp_hr,
+             c.capacity_level as comp_cap, c.pt_level as comp_pt_lvl,
+             c.employees_count as comp_emp, c.ceo_level as comp_ceo,
+             c.cfo_level as comp_cfo, c.cmo_level as comp_cmo,
+             c.fundamental_score as comp_fund, c.founder_shares_sold as comp_founder_sold
+      FROM company_shareholders cs
+      JOIN users u ON cs.user_id = u.id
+      JOIN companies c ON cs.company_id = c.id
+      WHERE cs.user_id IS NOT NULL
+        AND cs.user_id NOT LIKE 'bot-user-%'
+        AND cs.user_id NOT LIKE 'user-bot-%'
+        AND u.role != 'ADMIN'
+        AND (
+          (cs.holder_type = 'FOUNDER' AND COALESCE(cs.percentage, 0) > 0)
+          OR COALESCE(cs.percentage, 0) >= 50.0
+        )
+      ORDER BY CASE WHEN cs.holder_type = 'FOUNDER' THEN 0 ELSE 1 END ASC, cs.percentage DESC
+    `);
+
+    const restoredPrimaryUsers = new Set();
+
+    for (const row of (realFounderRows || [])) {
+      const prevOwner = String(row.comp_owner_id || '');
+      const wasHijackedByBotOrNull = !prevOwner || prevOwner.startsWith('bot-user-') || prevOwner.startsWith('user-bot-');
+
+      // Only reclaim if currently owned by this user, NULL, or mistakenly assigned to a bot
+      if (prevOwner !== row.user_id && !wasHijackedByBotOrNull) {
+        continue;
+      }
+
+      if (prevOwner && prevOwner !== row.user_id && (prevOwner.startsWith('bot-user-') || prevOwner.startsWith('user-bot-'))) {
+        await query.run(
+          "UPDATE users SET pt_name = '', pt_symbol = '' WHERE id = ? AND pt_name = ?",
+          [prevOwner, row.comp_name]
+        );
+      }
+
+      // Check if user already has a DIFFERENT active primary PT owned by them
+      const existingOtherPrimary = await query.get(
+        'SELECT id, symbol, name FROM companies WHERE owner_id = ? AND id != ? AND (symbol = ? OR name = ?)',
+        [row.user_id, row.company_id, row.pt_symbol || '---', row.pt_name || '---']
+      );
+
+      const shouldBePrimary =
+        !restoredPrimaryUsers.has(row.user_id) &&
+        (!existingOtherPrimary || row.pt_symbol === row.comp_symbol || row.pt_name === row.comp_name || !row.has_pt);
+
+      if (shouldBePrimary) {
+        restoredPrimaryUsers.add(row.user_id);
+        const bestBal = (Number(row.comp_bal || 0) < 0 && Number(row.user_comp_bal || 0) === 0)
+          ? Number(row.comp_bal)
+          : Math.max(Number(row.comp_bal || 0), Number(row.user_comp_bal || 0));
+        const bestRd = Math.max(Number(row.comp_rd || 1), Number(row.user_rd || 1));
+        const bestMkt = Math.max(Number(row.comp_mkt || 1), Number(row.user_mkt || 1));
+        const bestHr = Math.max(Number(row.comp_hr || 1), Number(row.user_hr || 1));
+        const bestCap = Math.max(Number(row.comp_cap || 1), Number(row.user_cap || 1));
+        const bestPtLvl = Math.max(
+          Number(row.comp_pt_lvl || 1),
+          Number(row.user_pt_lvl || 1),
+          Math.floor((bestRd + bestMkt + bestHr + bestCap + 1) / 4) + 1
+        );
+        const bestEmp = Math.max(Number(row.comp_emp || 0), Number(row.user_emp || 0));
+        const bestCeo = Math.max(Number(row.comp_ceo || 0), Number(row.user_ceo || 0));
+        const bestCfo = Math.max(Number(row.comp_cfo || 0), Number(row.user_cfo || 0));
+        const bestCmo = Math.max(Number(row.comp_cmo || 0), Number(row.user_cmo || 0));
+        const bestFund = Math.min(100, Math.max(Number(row.comp_fund || 70), Number(row.user_fund || 70)));
+
+        await query.run(
+          `UPDATE companies
+           SET owner_id = ?, founder_name = ?, is_bot = 0,
+               company_balance_ib = ?, rd_level = ?, marketing_level = ?, hr_level = ?, capacity_level = ?,
+               pt_level = ?, operational_level = ?, employees_count = ?,
+               ceo_level = ?, cfo_level = ?, cmo_level = ?, fundamental_score = ?
+           WHERE id = ?`,
+          [
+            row.user_id, row.username,
+            bestBal, bestRd, bestMkt, bestHr, bestCap,
+            bestPtLvl, bestPtLvl, bestEmp,
+            bestCeo, bestCfo, bestCmo, bestFund,
+            row.company_id
+          ]
+        );
+
+        await query.run(
+          `UPDATE users
+           SET has_pt = 1, pt_name = ?, pt_symbol = ?, sector = ?, is_ipo = ?,
+               company_balance_ib = ?, rd_level = ?, marketing_level = ?, hr_level = ?, capacity_level = ?,
+               pt_level = ?, employees_count = ?, ceo_level = ?, cfo_level = ?, cmo_level = ?,
+               fundamental_score = ?, founder_shares_sold = COALESCE(?, founder_shares_sold, 0)
+           WHERE id = ?`,
+          [
+            row.comp_name, row.comp_symbol, row.comp_sector || row.user_sector || 'Teknologi', row.comp_is_ipo || 0,
+            bestBal, bestRd, bestMkt, bestHr, bestCap,
+            bestPtLvl, bestEmp, bestCeo, bestCfo, bestCmo,
+            bestFund, row.comp_founder_sold || 0,
+            row.user_id
+          ]
+        );
+
+        if (prevOwner !== row.user_id || !row.has_pt) {
+          console.log(`🛡️ [Auto-Healing] Memulihkan kepemilikan PT Utama ${row.comp_name} (${row.comp_symbol}) ke @${row.username} (Kas: IB ${Math.round(bestBal).toLocaleString('id-ID')}, R&D Lvl ${bestRd})!`);
+        }
+      } else {
+        // Subsidiary or acquired company where real user holds >= 50%
+        await query.run(
+          `UPDATE companies
+           SET owner_id = ?,
+               is_bot = CASE WHEN ? = 'FOUNDER' THEN 0 ELSE is_bot END,
+               founder_name = CASE WHEN ? = 'FOUNDER' THEN ? ELSE founder_name END
+           WHERE id = ?`,
+          [row.user_id, row.holder_type, row.holder_type, row.username, row.company_id]
+        );
+      }
+    }
+
+    // 2. Sync all real users who already have has_pt = 1 with their primary company row
+    const realUsersWithPt = await query.all(`
+      SELECT * FROM users
+      WHERE has_pt = 1
+        AND role != 'ADMIN'
+        AND id NOT LIKE 'bot-user-%'
+        AND id NOT LIKE 'user-bot-%'
+    `);
+
+    for (const u of (realUsersWithPt || [])) {
+      const primaryOwned = await query.get(
+        'SELECT * FROM companies WHERE owner_id = ? AND (symbol = ? OR name = ?)',
+        [u.id, u.pt_symbol || '---', u.pt_name || '---']
+      ) || await query.get(
+        'SELECT * FROM companies WHERE owner_id = ? ORDER BY is_bot ASC, founded_at ASC, id ASC LIMIT 1',
+        [u.id]
+      );
+
+      if (primaryOwned) {
+        const bestBal = (Number(primaryOwned.company_balance_ib || 0) < 0 && Number(u.company_balance_ib || 0) === 0)
+          ? Number(primaryOwned.company_balance_ib)
+          : Math.max(Number(primaryOwned.company_balance_ib || 0), Number(u.company_balance_ib || 0));
+        const bestRd = Math.max(Number(primaryOwned.rd_level || 1), Number(u.rd_level || 1));
+        const bestMkt = Math.max(Number(primaryOwned.marketing_level || 1), Number(u.marketing_level || 1));
+        const bestHr = Math.max(Number(primaryOwned.hr_level || 1), Number(u.hr_level || 1));
+        const bestCap = Math.max(Number(primaryOwned.capacity_level || 1), Number(u.capacity_level || 1));
+        const bestPtLvl = Math.max(Number(primaryOwned.pt_level || 1), Number(u.pt_level || 1));
+        const bestEmp = Math.max(Number(primaryOwned.employees_count || 0), Number(u.employees_count || 0));
+        const bestCeo = Math.max(Number(primaryOwned.ceo_level || 0), Number(u.ceo_level || 0));
+        const bestCfo = Math.max(Number(primaryOwned.cfo_level || 0), Number(u.cfo_level || 0));
+        const bestCmo = Math.max(Number(primaryOwned.cmo_level || 0), Number(u.cmo_level || 0));
+        const bestFund = Math.min(100, Math.max(Number(primaryOwned.fundamental_score || 70), Number(u.fundamental_score || 70)));
+
+        await query.run(
+          `UPDATE companies
+           SET company_balance_ib = ?, rd_level = ?, marketing_level = ?, hr_level = ?, capacity_level = ?,
+               pt_level = ?, operational_level = ?, employees_count = ?,
+               ceo_level = ?, cfo_level = ?, cmo_level = ?, fundamental_score = ?
+           WHERE id = ?`,
+          [bestBal, bestRd, bestMkt, bestHr, bestCap, bestPtLvl, bestPtLvl, bestEmp, bestCeo, bestCfo, bestCmo, bestFund, primaryOwned.id]
+        );
+        await query.run(
+          `UPDATE users
+           SET pt_name = ?, pt_symbol = ?, sector = ?, is_ipo = ?,
+               company_balance_ib = ?, rd_level = ?, marketing_level = ?, hr_level = ?, capacity_level = ?,
+               pt_level = ?, employees_count = ?, ceo_level = ?, cfo_level = ?, cmo_level = ?, fundamental_score = ?
+           WHERE id = ?`,
+          [
+            primaryOwned.name, primaryOwned.symbol, primaryOwned.sector || u.sector, primaryOwned.is_ipo || 0,
+            bestBal, bestRd, bestMkt, bestHr, bestCap, bestPtLvl, bestEmp, bestCeo, bestCfo, bestCmo, bestFund, u.id
+          ]
+        );
+      } else {
+        // Check if user still holds >= 50% in portfolios on any company before resetting has_pt
+        const portMajority = await query.get(`
+          SELECT c.* FROM portfolios p
+          JOIN companies c ON p.company_id = c.id
+          WHERE p.user_id = ? AND ((p.lots_owned * 100.0) / COALESCE(NULLIF(c.total_shares, 0), 10000000)) >= 0.50
+          ORDER BY p.lots_owned DESC LIMIT 1
+        `, [u.id]);
+
+        if (portMajority) {
+          await query.run('UPDATE companies SET owner_id = ? WHERE id = ?', [u.id, portMajority.id]);
+          await query.run(
+            'UPDATE users SET pt_name = ?, pt_symbol = ?, sector = ?, is_ipo = ?, company_balance_ib = ?, has_pt = 1 WHERE id = ?',
+            [portMajority.name, portMajority.symbol, portMajority.sector, portMajority.is_ipo || 0, portMajority.company_balance_ib || 0, u.id]
+          );
+        } else {
+          console.log(`🔄 [Auto-Healing] Seluruh PT @${u.username} telah beralih kepemilikan sah, mereset status PT Utama...`);
+          await query.run(
+            "UPDATE users SET has_pt = 0, pt_name = '', pt_symbol = '', is_ipo = 0, company_balance_ib = 0 WHERE id = ?",
+            [u.id]
+          );
+        }
+      }
+    }
+  } catch (healErr) {
+    console.error('Auto-healing error (non-fatal):', healErr.message);
+  }
+}
+
+// ============================================================================
 // MARIADB MSS PANEL BRIDGE (mss-db:3306 / db_capitalfederation)
 // Automatically creates & synchronizes all tables with MariaDB on Linux Server
 // while maintaining 100% SQLite speed & query compatibility.
@@ -1112,6 +1322,8 @@ let mysqlPool = null;
 let mariaDbConnected = false;
 let syncTimer = null;
 let isSyncing = false;
+let lastMariaSyncCompletedAt = 0;
+const MIN_MARIADB_SYNC_INTERVAL_MS = 45000;
 
 const SYNC_TABLES_ORDER = [
   'central_bank_settings',
@@ -1225,10 +1437,10 @@ async function connectAndInitMariaDb() {
     mariaDbConnected = true;
     console.log(`🗄️  Connected & Verified MariaDB MSS Panel (${host}:${port}/${database})`);
 
-    // Periodic background sync every 25s
+    // Periodic background sync every 60s (non-blocking)
     setInterval(() => {
       syncAllToMariaDb().catch(() => {});
-    }, 25000);
+    }, 60000);
   } catch (err) {
     mariaDbConnected = false;
     console.log(
@@ -1277,9 +1489,14 @@ async function syncAllToMariaDb() {
   isSyncing = true;
   try {
     for (const table of SYNC_TABLES_ORDER) {
+      // Yield to Node event loop between tables so live HTTP/Socket requests stay <50ms!
+      await new Promise((r) => setImmediate(r));
+
       let limitClause = '';
-      if (table === 'price_history') limitClause = ' ORDER BY timestamp DESC LIMIT 500';
+      if (table === 'price_history') limitClause = ' ORDER BY timestamp DESC LIMIT 400';
       else if (table === 'cash_flow_ledger') limitClause = ' ORDER BY created_at DESC LIMIT 500';
+      else if (table === 'transactions') limitClause = ' ORDER BY created_at DESC LIMIT 1000';
+      else if (table === 'state_treasury_ledger') limitClause = ' ORDER BY rowid DESC LIMIT 1000';
 
       const rows = await query.all(`SELECT * FROM ${table}${limitClause}`);
       if (!rows || rows.length === 0) continue;
@@ -1294,6 +1511,7 @@ async function syncAllToMariaDb() {
         await mysqlPool.query(`REPLACE INTO \`${table}\` (${quotedCols}) VALUES ?`, [chunk]);
       }
     }
+    lastMariaSyncCompletedAt = Date.now();
   } catch (err) {
     // Non-fatal background sync error
   } finally {
@@ -1302,15 +1520,18 @@ async function syncAllToMariaDb() {
 }
 
 function scheduleMariaDbSync(sql = '') {
-  if (!mariaDbConnected || !mysqlPool) return;
+  if (!mariaDbConnected || !mysqlPool || isSyncing) return;
   const upper = String(sql).trim().toUpperCase();
   if (!upper.startsWith('INSERT') && !upper.startsWith('UPDATE') && !upper.startsWith('DELETE') && !upper.startsWith('REPLACE')) {
     return;
   }
-  if (syncTimer) clearTimeout(syncTimer);
+  if (syncTimer) return;
+  const elapsed = Date.now() - lastMariaSyncCompletedAt;
+  const delayMs = Math.max(8000, MIN_MARIADB_SYNC_INTERVAL_MS - elapsed);
   syncTimer = setTimeout(() => {
+    syncTimer = null;
     syncAllToMariaDb().catch(() => {});
-  }, 1500);
+  }, delayMs);
 }
 
 module.exports = {
@@ -1318,5 +1539,6 @@ module.exports = {
   query,
   initDb,
   recordCashFlow,
-  syncAllToMariaDb
+  syncAllToMariaDb,
+  healRealPlayerCompanies
 };

@@ -27,9 +27,9 @@ export default function DeedRegistryPage() {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [selectedDeed, setSelectedDeed] = useState(null);
 
-  const fetchDeeds = async () => {
+  const fetchDeeds = async (silent = false) => {
     try {
-      setLoading(true);
+      if (silent !== true) setLoading(true);
       const data = await adminApi.allDeeds();
       setDeeds(data || []);
     } catch (err) {
@@ -40,7 +40,7 @@ export default function DeedRegistryPage() {
   };
 
   useEffect(() => {
-    fetchDeeds();
+    fetchDeeds(false);
   }, []);
 
   const filteredDeeds = deeds.filter((d) => {

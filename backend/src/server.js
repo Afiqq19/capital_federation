@@ -7,7 +7,7 @@ const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 require('dotenv').config();
 
-const { query, initDb, recordCashFlow, syncAllToMariaDb } = require('./db');
+const { query, initDb, recordCashFlow, syncAllToMariaDb, healRealPlayerCompanies } = require('./db');
 const MarketSimulationEngine = require('./engine/simulation');
 const SurveillanceService = require('./services/surveillance.service');
 const CommunitySimulationService = require('./services/communitySimulation.service');
@@ -528,6 +528,92 @@ app.post('/api/company/found', async (req, res) => {
   }
 });
 
+// ============================================================================
+// AUTHORITATIVE COMPANY OWNERSHIP & PRIMARY PT RESOLVERS
+// ============================================================================
+let _leaderboardCache = { data: null, ts: 0 };
+let _rankMapCache = { data: null, ts: 0 };
+let _companiesListCache = { data: null, ts: 0 };
+
+function invalidateMarketCaches() {
+  _leaderboardCache.ts = 0;
+  _rankMapCache.ts = 0;
+  _companiesListCache.ts = 0;
+}
+
+async function findUserPrimaryCompany(userId, userRow = null) {
+  const user = userRow || (await query.get('SELECT * FROM users WHERE id = ?', [userId]));
+  if (!user) return null;
+
+  let primaryComp = null;
+  if (user.pt_symbol || user.pt_name) {
+    primaryComp = await query.get(
+      'SELECT * FROM companies WHERE owner_id = ? AND (symbol = ? OR name = ?)',
+      [userId, user.pt_symbol || '---', user.pt_name || '---']
+    );
+  }
+  if (!primaryComp) {
+    primaryComp = await query.get(
+      'SELECT * FROM companies WHERE owner_id = ? ORDER BY is_bot ASC, founded_at ASC, id ASC LIMIT 1',
+      [userId]
+    );
+  }
+
+  // Fallback recovery: check company_shareholders if a real player's founder PT lost owner_id to NULL or a bot
+  if (!primaryComp && !String(userId).startsWith('bot-user-') && !String(userId).startsWith('user-bot-')) {
+    const founderSh = await query.get(`
+      SELECT c.*
+      FROM company_shareholders cs
+      JOIN companies c ON cs.company_id = c.id
+      WHERE cs.user_id = ?
+        AND ((cs.holder_type = 'FOUNDER' AND COALESCE(cs.percentage, 0) > 0) OR COALESCE(cs.percentage, 0) >= 50.0)
+        AND (c.owner_id IS NULL OR c.owner_id = ? OR c.owner_id LIKE 'bot-user-%' OR c.owner_id LIKE 'user-bot-%')
+      ORDER BY CASE WHEN cs.holder_type = 'FOUNDER' THEN 0 ELSE 1 END ASC, cs.percentage DESC
+      LIMIT 1
+    `, [userId, userId]);
+
+    if (founderSh) {
+      await query.run(
+        'UPDATE companies SET owner_id = ?, founder_name = ?, is_bot = 0 WHERE id = ?',
+        [userId, user.username, founderSh.id]
+      );
+      primaryComp = await query.get('SELECT * FROM companies WHERE id = ?', [founderSh.id]);
+    }
+  }
+  return primaryComp;
+}
+
+async function userControlsCompany(userId, comp) {
+  if (!comp || !userId) return false;
+  if (comp.owner_id === userId) return true;
+
+  const totalShares = comp.total_shares || 10000000;
+  const port = await query.get('SELECT lots_owned FROM portfolios WHERE user_id = ? AND company_id = ?', [userId, comp.id]);
+  const portPct = port ? ((Number(port.lots_owned || 0) * 100.0) / totalShares) * 100.0 : 0;
+
+  const shRow = await query.get(
+    'SELECT COALESCE(SUM(percentage), 0) as pct FROM company_shareholders WHERE company_id = ? AND user_id = ?',
+    [comp.id, userId]
+  );
+  const shPct = Number(shRow?.pct || 0);
+
+  if (portPct >= 50.0 || shPct >= 50.0 || (portPct + shPct) >= 50.0) {
+    if (!comp.owner_id || String(comp.owner_id).startsWith('bot-user-') || String(comp.owner_id).startsWith('user-bot-')) {
+      await query.run('UPDATE companies SET owner_id = ? WHERE id = ?', [userId, comp.id]);
+    }
+    return true;
+  }
+  return false;
+}
+
+function resolveSyncedBalance(userBal, compBal) {
+  const u = Number(userBal || 0);
+  const c = Number(compBal || 0);
+  if (c < 0 && u === 0) return c;
+  if (u < 0 && c === 0) return u;
+  return Math.max(u, c);
+}
+
 // Suntik Modal Investasi (Kas Pribadi -> Kas Perusahaan)
 app.post('/api/company/fund', async (req, res) => {
   try {
@@ -542,7 +628,10 @@ app.post('/api/company/fund', async (req, res) => {
       return res.status(400).json({ error: 'Saldo kas pribadi tidak mencukupi untuk suntik modal' });
     }
 
-    if (companyId && companyId !== 'primary') {
+    const primaryComp = await findUserPrimaryCompany(userId, user);
+    const isTargetPrimary = !companyId || companyId === 'primary' || (primaryComp && companyId === primaryComp.id);
+
+    if (!isTargetPrimary) {
       const comp = await query.get('SELECT * FROM companies WHERE id = ?', [companyId]);
       if (!comp) return res.status(404).json({ error: 'Perusahaan tidak ditemukan' });
 
@@ -601,7 +690,8 @@ app.post('/api/company/fund', async (req, res) => {
         ]);
       }
 
-      io.emit('user:balance_updated', { userId, newBalance: updatedUser.balance_ib, companyBalance: updatedComp.company_balance_ib });
+      invalidateMarketCaches();
+      io.emit('user:balance_updated', { userId, companyId, newBalance: updatedUser.balance_ib, companyBalance: updatedComp.company_balance_ib });
 
       return res.json({
         success: true,
@@ -613,30 +703,32 @@ app.post('/api/company/fund', async (req, res) => {
         rescued,
       });
     } else {
-      if (!user.has_pt) return res.status(400).json({ error: 'Anda belum mendirikan PT' });
+      if (!user.has_pt && !primaryComp) return res.status(400).json({ error: 'Anda belum mendirikan PT' });
 
-      const primaryComp = await query.get('SELECT * FROM companies WHERE owner_id = ? AND is_bot = 0', [userId]);
+      const baseCompBalance = resolveSyncedBalance(user.company_balance_ib, primaryComp?.company_balance_ib);
+      const nextCompBalance = baseCompBalance + numAmount;
+      const nextPersonalBalance = user.balance_ib - numAmount;
 
       await query.run(
-        'UPDATE users SET balance_ib = balance_ib - ?, company_balance_ib = company_balance_ib + ? WHERE id = ?',
-        [numAmount, numAmount, userId]
+        'UPDATE users SET balance_ib = ?, company_balance_ib = ?, has_pt = 1 WHERE id = ?',
+        [nextPersonalBalance, nextCompBalance, userId]
       );
       if (primaryComp) {
-        await query.run('UPDATE companies SET company_balance_ib = COALESCE(company_balance_ib, 0) + ? WHERE id = ?', [numAmount, primaryComp.id]);
+        await query.run('UPDATE companies SET company_balance_ib = ? WHERE id = ?', [nextCompBalance, primaryComp.id]);
       }
 
-      const updatedUser = await query.get('SELECT balance_ib, company_balance_ib FROM users WHERE id = ?', [userId]);
       const updatedComp = primaryComp ? await query.get('SELECT * FROM companies WHERE id = ?', [primaryComp.id]) : null;
+      const ptLabel = primaryComp?.name || user.pt_name || 'PT Utama';
 
       await recordCashFlow({
         userId,
         companyId: primaryComp?.id || null,
         accountType: 'PERSONAL',
         category: 'CAPITAL_INJECTION',
-        title: `Suntik Modal ke PT ${user.pt_name}`,
+        title: `Suntik Modal ke ${ptLabel}`,
         amountIb: numAmount,
         direction: 'EXPENSE',
-        balanceAfter: updatedUser.balance_ib,
+        balanceAfter: nextPersonalBalance,
         notes: `Injeksi modal tunai dari tabungan pribadi ke Kas PT Utama`
       });
       await recordCashFlow({
@@ -647,12 +739,12 @@ app.post('/api/company/fund', async (req, res) => {
         title: `Penerimaan Modal Disetor dari Pendiri`,
         amountIb: numAmount,
         direction: 'INCOME',
-        balanceAfter: updatedUser.company_balance_ib,
+        balanceAfter: nextCompBalance,
         notes: `Injeksi modal kerja tambahan masuk ke Kas PT Utama`
       });
 
       let rescued = false;
-      if (updatedComp && (updatedComp.is_seized === 1 || updatedComp.status === 'BANKRUPT') && (updatedComp.seize_reason || '').toUpperCase().includes('PAILIT') && updatedUser.company_balance_ib > -50000000) {
+      if (updatedComp && (updatedComp.is_seized === 1 || updatedComp.status === 'BANKRUPT') && (updatedComp.seize_reason || '').toUpperCase().includes('PAILIT') && nextCompBalance > -50000000) {
         await query.run(`
           UPDATE companies 
           SET is_seized = 0, 
@@ -669,23 +761,24 @@ app.post('/api/company/fund', async (req, res) => {
           VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
         `, [
           uuidv4(),
-          `🚑 RESTRUKTURISASI SUKSES: PT ${user.pt_name} Bangkit dari Kepailitan!`,
-          `Setelah menerima suntikan modal talangan dari pendiri perseroan, Kepaniteraan Niaga resmi mencabut status pailit PT ${user.pt_name}. Operasional perseroan dibuka kembali secara normal.`,
+          `🚑 RESTRUKTURISASI SUKSES: ${ptLabel} Bangkit dari Kepailitan!`,
+          `Setelah menerima suntikan modal talangan dari pendiri perseroan, Kepaniteraan Niaga resmi mencabut status pailit ${ptLabel}. Operasional perseroan dibuka kembali secara normal.`,
           user.sector || 'GENERAL',
           'POSITIVE',
           1.2
         ]);
       }
 
-      io.emit('user:balance_updated', { userId, newBalance: updatedUser.balance_ib, companyBalance: updatedUser.company_balance_ib });
+      invalidateMarketCaches();
+      io.emit('user:balance_updated', { userId, newBalance: nextPersonalBalance, companyBalance: nextCompBalance });
 
       return res.json({
         success: true,
         message: rescued
-          ? `Selamat! Suntikan modal IB ${numAmount.toLocaleString('id-ID')} berhasil menyelamatkan PT ${user.pt_name} dari kepailitan! Operasional perseroan kembali normal.`
-          : `Berhasil menyuntikkan modal IB ${numAmount.toLocaleString('id-ID')} ke Kas PT ${user.pt_name}!`,
-        newPersonalBalance: updatedUser.balance_ib,
-        newCompanyBalance: updatedUser.company_balance_ib,
+          ? `Selamat! Suntikan modal IB ${numAmount.toLocaleString('id-ID')} berhasil menyelamatkan ${ptLabel} dari kepailitan! Operasional perseroan kembali normal.`
+          : `Berhasil menyuntikkan modal IB ${numAmount.toLocaleString('id-ID')} ke Kas ${ptLabel}!`,
+        newPersonalBalance: nextPersonalBalance,
+        newCompanyBalance: nextCompBalance,
         rescued,
       });
     }
@@ -704,9 +797,17 @@ app.post('/api/company/withdraw', async (req, res) => {
     const user = await query.get('SELECT * FROM users WHERE id = ?', [userId]);
     if (!user) return res.status(404).json({ error: 'User tidak ditemukan' });
 
-    if (companyId && companyId !== 'primary') {
+    const primaryComp = await findUserPrimaryCompany(userId, user);
+    const isTargetPrimary = !companyId || companyId === 'primary' || (primaryComp && companyId === primaryComp.id);
+
+    if (!isTargetPrimary) {
       const comp = await query.get('SELECT * FROM companies WHERE id = ?', [companyId]);
       if (!comp) return res.status(404).json({ error: 'Perusahaan tidak ditemukan' });
+
+      const controls = await userControlsCompany(userId, comp);
+      if (!controls) {
+        return res.status(403).json({ error: 'Anda bukan pemegang kendali mayoritas perusahaan ini' });
+      }
 
       if (comp.is_seized === 1) {
         return res.status(403).json({ error: `Perusahaan ${comp.name} sedang DISITA oleh Negara/PNAF! Seluruh penarikan kas dibekukan.` });
@@ -746,7 +847,8 @@ app.post('/api/company/withdraw', async (req, res) => {
         notes: `Hasil penarikan keuntungan anak perusahaan ${comp.name}`
       });
 
-      io.emit('user:balance_updated', { userId, newBalance: updatedUser.balance_ib, companyBalance: updatedComp.company_balance_ib });
+      invalidateMarketCaches();
+      io.emit('user:balance_updated', { userId, companyId, newBalance: updatedUser.balance_ib, companyBalance: updatedComp.company_balance_ib });
 
       return res.json({
         success: true,
@@ -755,34 +857,38 @@ app.post('/api/company/withdraw', async (req, res) => {
         newCompanyBalance: updatedComp.company_balance_ib,
       });
     } else {
-      if (!user.has_pt) return res.status(400).json({ error: 'Anda belum mendirikan PT' });
-      const primaryComp = await query.get('SELECT is_seized, name FROM companies WHERE owner_id = ? AND is_bot = 0', [userId]);
+      if (!user.has_pt && !primaryComp) return res.status(400).json({ error: 'Anda belum mendirikan PT' });
       if (primaryComp && primaryComp.is_seized === 1) {
         return res.status(403).json({ error: `PT Utama ${primaryComp.name} sedang DISITA oleh Negara/PNAF! Seluruh penarikan kas dibekukan.` });
       }
-      if (user.company_balance_ib < numAmount) {
+
+      const availableCompBalance = resolveSyncedBalance(user.company_balance_ib, primaryComp?.company_balance_ib);
+      if (availableCompBalance < numAmount) {
         return res.status(400).json({ error: 'Saldo kas perusahaan tidak mencukupi untuk penarikan' });
       }
 
+      const nextCompBalance = availableCompBalance - numAmount;
+      const nextPersonalBalance = user.balance_ib + numAmount;
+
       await query.run(
-        'UPDATE users SET company_balance_ib = company_balance_ib - ?, balance_ib = balance_ib + ? WHERE id = ?',
-        [numAmount, numAmount, userId]
+        'UPDATE users SET company_balance_ib = ?, balance_ib = ? WHERE id = ?',
+        [nextCompBalance, nextPersonalBalance, userId]
       );
-      if (user.is_ipo === 1) {
-        await query.run('UPDATE companies SET company_balance_ib = MAX(0, COALESCE(company_balance_ib, 0) - ?) WHERE owner_id = ? AND is_bot = 0', [numAmount, userId]);
+      if (primaryComp) {
+        await query.run('UPDATE companies SET company_balance_ib = ? WHERE id = ?', [nextCompBalance, primaryComp.id]);
       }
 
-      const updatedUser = await query.get('SELECT balance_ib, company_balance_ib FROM users WHERE id = ?', [userId]);
+      const ptLabel = primaryComp?.name || user.pt_name || 'PT Utama';
 
       await recordCashFlow({
         userId,
         companyId: primaryComp?.id || null,
         accountType: 'COMPANY',
         category: 'DIVIDEND_WITHDRAW',
-        title: `Penarikan Dividen / Prive PT ${user.pt_name}`,
+        title: `Penarikan Dividen / Prive ${ptLabel}`,
         amountIb: numAmount,
         direction: 'EXPENSE',
-        balanceAfter: updatedUser.company_balance_ib,
+        balanceAfter: nextCompBalance,
         notes: `Dividen ditarik oleh pendiri ke rekening pribadi`
       });
       await recordCashFlow({
@@ -790,20 +896,21 @@ app.post('/api/company/withdraw', async (req, res) => {
         companyId: primaryComp?.id || null,
         accountType: 'PERSONAL',
         category: 'DIVIDEND_INCOME',
-        title: `Penerimaan Dividen PT ${user.pt_name}`,
+        title: `Penerimaan Dividen ${ptLabel}`,
         amountIb: numAmount,
         direction: 'INCOME',
-        balanceAfter: updatedUser.balance_ib,
+        balanceAfter: nextPersonalBalance,
         notes: `Hasil penarikan keuntungan kas PT Utama`
       });
 
-      io.emit('user:balance_updated', { userId, newBalance: updatedUser.balance_ib, companyBalance: updatedUser.company_balance_ib });
+      invalidateMarketCaches();
+      io.emit('user:balance_updated', { userId, newBalance: nextPersonalBalance, companyBalance: nextCompBalance });
 
       return res.json({
         success: true,
         message: `Berhasil menarik dividen IB ${numAmount.toLocaleString('id-ID')} ke rekening pribadi!`,
-        newPersonalBalance: updatedUser.balance_ib,
-        newCompanyBalance: updatedUser.company_balance_ib,
+        newPersonalBalance: nextPersonalBalance,
+        newCompanyBalance: nextCompBalance,
       });
     }
   } catch (err) {
@@ -811,7 +918,7 @@ app.post('/api/company/withdraw', async (req, res) => {
   }
 });
 
-// Upgrade Bisnis & R&D (Biaya dipotong dari Kas Perusahaan)
+// Upgrade Bisnis & R&D (Biaya dipotong dari Kas Perusahaan — Sinkron Penuh PT Utama & Anak Perusahaan)
 app.post('/api/company/upgrade', async (req, res) => {
   try {
     const { userId, type, companyId } = req.body;
@@ -825,86 +932,121 @@ app.post('/api/company/upgrade', async (req, res) => {
     else if (type === 'capacity') col = 'capacity_level';
     else return res.status(400).json({ error: 'Tipe upgrade tidak valid' });
 
-    const isPrimary = !companyId || companyId === 'primary';
+    const primaryComp = await findUserPrimaryCompany(userId, user);
+    const isPrimary = !companyId || companyId === 'primary' || (primaryComp && companyId === primaryComp.id);
 
     if (isPrimary) {
-      if (!user.has_pt) return res.status(400).json({ error: 'Harap dirikan PT terlebih dahulu' });
-      const currentLvl = user[col] || 1;
+      if (!user.has_pt && !primaryComp) return res.status(400).json({ error: 'Harap dirikan PT terlebih dahulu' });
+      if (primaryComp && primaryComp.is_seized === 1) {
+        return res.status(403).json({ error: `PT Utama ${primaryComp.name} sedang DISITA/PAILIT. Silakan suntik modal penyelamatan terlebih dahulu.` });
+      }
+
+      const currentLvl = Math.max(Number(user[col] || 1), Number(primaryComp?.[col] || 1));
       const cost = 5000000 * currentLvl;
-      if (user.company_balance_ib < cost) {
+      const availableBalance = resolveSyncedBalance(user.company_balance_ib, primaryComp?.company_balance_ib);
+
+      if (availableBalance < cost) {
         return res.status(400).json({
-          error: `Saldo Kas Perusahaan tidak cukup. Butuh IB ${cost.toLocaleString('id-ID')}. Anda bisa suntik modal dari tabungan pribadi.`
+          error: `Saldo Kas Perusahaan tidak cukup. Butuh IB ${cost.toLocaleString('id-ID')} (Kas saat ini: IB ${Math.round(availableBalance).toLocaleString('id-ID')}). Anda bisa suntik modal dari tabungan pribadi.`
         });
       }
 
       const nextLvl = currentLvl + 1;
-      const currentRd = col === 'rd_level' ? nextLvl : (user.rd_level || 1);
-      const currentMkt = col === 'marketing_level' ? nextLvl : (user.marketing_level || 1);
-      const currentHr = col === 'hr_level' ? nextLvl : (user.hr_level || 1);
-      const currentCap = col === 'capacity_level' ? nextLvl : (user.capacity_level || 1);
+      const baseRd = Math.max(Number(user.rd_level || 1), Number(primaryComp?.rd_level || 1));
+      const baseMkt = Math.max(Number(user.marketing_level || 1), Number(primaryComp?.marketing_level || 1));
+      const baseHr = Math.max(Number(user.hr_level || 1), Number(primaryComp?.hr_level || 1));
+      const baseCap = Math.max(Number(user.capacity_level || 1), Number(primaryComp?.capacity_level || 1));
+
+      const currentRd = col === 'rd_level' ? nextLvl : baseRd;
+      const currentMkt = col === 'marketing_level' ? nextLvl : baseMkt;
+      const currentHr = col === 'hr_level' ? nextLvl : baseHr;
+      const currentCap = col === 'capacity_level' ? nextLvl : baseCap;
       const nextPtLvl = Math.floor((currentRd + currentMkt + currentHr + currentCap + 1) / 4) + 1;
-      const boostFundamental = Math.min(100.0, user.fundamental_score + 6.0);
+      const baseFund = Math.max(Number(user.fundamental_score || 70), Number(primaryComp?.fundamental_score || 70));
+      const boostFundamental = Math.min(100.0, baseFund + 6.0);
+      const newBalance = availableBalance - cost;
 
       await query.run(
         `UPDATE users
-         SET company_balance_ib = company_balance_ib - ?, ${col} = ?, pt_level = ?, fundamental_score = ?
+         SET company_balance_ib = ?, rd_level = ?, marketing_level = ?, hr_level = ?, capacity_level = ?,
+             pt_level = ?, fundamental_score = ?, has_pt = 1
          WHERE id = ?`,
-        [cost, nextLvl, nextPtLvl, boostFundamental, userId]
+        [newBalance, currentRd, currentMkt, currentHr, currentCap, nextPtLvl, boostFundamental, userId]
       );
+
+      if (primaryComp) {
+        await query.run(
+          `UPDATE companies
+           SET company_balance_ib = ?, rd_level = ?, marketing_level = ?, hr_level = ?, capacity_level = ?,
+               pt_level = ?, operational_level = ?, fundamental_score = ?
+           WHERE id = ?`,
+          [newBalance, currentRd, currentMkt, currentHr, currentCap, nextPtLvl, nextPtLvl, boostFundamental, primaryComp.id]
+        );
+      }
 
       await recordCashFlow({
         userId,
+        companyId: primaryComp?.id || null,
         accountType: 'COMPANY',
         category: 'CAPEX_UPGRADE',
         title: `Belanja Modal Upgrade ${type.toUpperCase()} Lvl ${nextLvl}`,
         amountIb: cost,
         direction: 'EXPENSE',
-        balanceAfter: user.company_balance_ib - cost,
-        notes: `Investasi pengembangan divisi ${type.toUpperCase()} PT Utama ke level ${nextLvl}`
+        balanceAfter: newBalance,
+        notes: `Investasi pengembangan divisi ${type.toUpperCase()} ${primaryComp?.name || 'PT Utama'} ke level ${nextLvl}`
       });
 
-      io.emit('user:balance_updated', { userId, newBalance: user.balance_ib, companyBalance: user.company_balance_ib - cost });
+      invalidateMarketCaches();
+      io.emit('user:balance_updated', { userId, newBalance: user.balance_ib, companyBalance: newBalance });
 
       return res.json({
         success: true,
         message: `Upgrade ${type.toUpperCase()} ke level ${nextLvl} berhasil! Pendapatan pasif PT meningkat.`,
+        type,
+        companyId: 'primary',
+        newLevel: nextLvl,
         newPtLevel: nextPtLvl,
-        newCompanyBalance: user.company_balance_ib - cost,
+        fundamentalScore: boostFundamental,
+        newCompanyBalance: newBalance,
       });
     } else {
       const comp = await query.get('SELECT * FROM companies WHERE id = ?', [companyId]);
       if (!comp) return res.status(404).json({ error: 'Perusahaan tidak ditemukan' });
 
-      // Verifikasi kepemilikan (owner_id atau portofolio >= 50%)
-      const port = await query.get('SELECT lots_owned FROM portfolios WHERE user_id = ? AND company_id = ?', [userId, companyId]);
-      const ownsMajority = comp.owner_id === userId || (port && (port.lots_owned * 100.0 / comp.total_shares) >= 50.0);
-      if (!ownsMajority) {
-        return res.status(403).json({ error: 'Anda bukan pemilik mayoritas perusahaan ini' });
+      if (comp.is_seized === 1) {
+        return res.status(403).json({ error: `${comp.name} sedang DISITA/PAILIT. Silakan suntik modal penyelamatan terlebih dahulu.` });
       }
 
-      const currentLvl = comp[col] || 1;
+      // Verifikasi kepemilikan (owner_id, portofolio >= 50%, atau company_shareholders >= 50%)
+      const ownsMajority = await userControlsCompany(userId, comp);
+      if (!ownsMajority) {
+        return res.status(403).json({ error: 'Anda bukan pemilik mayoritas (>=50%) perusahaan ini' });
+      }
+
+      const currentLvl = Number(comp[col] || (col === 'rd_level' ? comp.operational_level : 1) || 1);
       const cost = 5000000 * currentLvl;
-      const currentBalance = comp.company_balance_ib || 0;
+      const currentBalance = Number(comp.company_balance_ib || 0);
       if (currentBalance < cost) {
         return res.status(400).json({
-          error: `Saldo Kas ${comp.name} tidak cukup. Butuh IB ${cost.toLocaleString('id-ID')}. Kas saat ini: IB ${currentBalance.toLocaleString('id-ID')}. Silakan suntik modal terlebih dahulu.`
+          error: `Saldo Kas ${comp.name} tidak cukup. Butuh IB ${cost.toLocaleString('id-ID')}. Kas saat ini: IB ${Math.round(currentBalance).toLocaleString('id-ID')}. Silakan suntik modal terlebih dahulu.`
         });
       }
 
       const nextLvl = currentLvl + 1;
-      const currentRd = col === 'rd_level' ? nextLvl : (comp.rd_level || 1);
-      const currentMkt = col === 'marketing_level' ? nextLvl : (comp.marketing_level || 1);
-      const currentHr = col === 'hr_level' ? nextLvl : (comp.hr_level || 1);
-      const currentCap = col === 'capacity_level' ? nextLvl : (comp.capacity_level || 1);
+      const currentRd = col === 'rd_level' ? nextLvl : Number(comp.rd_level || comp.operational_level || 1);
+      const currentMkt = col === 'marketing_level' ? nextLvl : Number(comp.marketing_level || 1);
+      const currentHr = col === 'hr_level' ? nextLvl : Number(comp.hr_level || 1);
+      const currentCap = col === 'capacity_level' ? nextLvl : Number(comp.capacity_level || 1);
       const nextPtLvl = Math.floor((currentRd + currentMkt + currentHr + currentCap + 1) / 4) + 1;
-      const boostFundamental = Math.min(100.0, (comp.fundamental_score || 70.0) + 4.0);
+      const boostFundamental = Math.min(100.0, Number(comp.fundamental_score || 70.0) + 4.0);
       const newBalance = currentBalance - cost;
 
       await query.run(
         `UPDATE companies
-         SET company_balance_ib = ?, ${col} = ?, pt_level = ?, operational_level = ?, fundamental_score = ?
+         SET company_balance_ib = ?, rd_level = ?, marketing_level = ?, hr_level = ?, capacity_level = ?,
+             pt_level = ?, operational_level = ?, fundamental_score = ?
          WHERE id = ?`,
-        [newBalance, nextLvl, nextPtLvl, nextPtLvl, boostFundamental, companyId]
+        [newBalance, currentRd, currentMkt, currentHr, currentCap, nextPtLvl, nextPtLvl, boostFundamental, companyId]
       );
 
       await recordCashFlow({
@@ -919,12 +1061,17 @@ app.post('/api/company/upgrade', async (req, res) => {
         notes: `Investasi pengembangan divisi ${type.toUpperCase()} ${comp.name} ke level ${nextLvl}`
       });
 
-      io.emit('user:balance_updated', { userId, newBalance: user.balance_ib, companyBalance: newBalance });
+      invalidateMarketCaches();
+      io.emit('user:balance_updated', { userId, companyId, newBalance: user.balance_ib, companyBalance: newBalance });
 
       return res.json({
         success: true,
         message: `Upgrade ${type.toUpperCase()} pada ${comp.name} ke level ${nextLvl} berhasil!`,
+        type,
+        companyId,
+        newLevel: nextLvl,
         newPtLevel: nextPtLvl,
+        fundamentalScore: boostFundamental,
         newCompanyBalance: newBalance,
       });
     }
@@ -933,17 +1080,23 @@ app.post('/api/company/upgrade', async (req, res) => {
   }
 });
 
-// Rekrut Karyawan & Angkat Direksi (CEO, CFO, CMO)
+// Rekrut Karyawan & Angkat Direksi (CEO, CFO, CMO) — Sinkron Penuh PT Utama & Anak Perusahaan
 app.post('/api/company/staff/hire', async (req, res) => {
   try {
     const { userId, type, companyId } = req.body;
     const user = await query.get('SELECT * FROM users WHERE id = ?', [userId]);
     if (!user) return res.status(404).json({ error: 'User tidak ditemukan' });
 
-    // If hiring for an acquired company in conglomerate
-    if (companyId && companyId !== 'primary') {
-      const comp = await query.get('SELECT * FROM companies WHERE id = ? AND owner_id = ?', [companyId, userId]);
-      if (!comp) return res.status(403).json({ error: 'Anda bukan pemegang kendali emiten ini' });
+    const primaryComp = await findUserPrimaryCompany(userId, user);
+    const isTargetPrimary = !companyId || companyId === 'primary' || (primaryComp && companyId === primaryComp.id);
+
+    // If hiring for an acquired company / subsidiary in conglomerate
+    if (!isTargetPrimary) {
+      const comp = await query.get('SELECT * FROM companies WHERE id = ?', [companyId]);
+      if (!comp) return res.status(404).json({ error: 'Perusahaan tidak ditemukan' });
+
+      const controls = await userControlsCompany(userId, comp);
+      if (!controls) return res.status(403).json({ error: 'Anda bukan pemegang kendali mayoritas (>=50%) emiten ini' });
 
       let cost = 0;
       let updateSql = '';
@@ -962,7 +1115,7 @@ app.post('/api/company/staff/hire', async (req, res) => {
         if ((comp.company_balance_ib || 0) < cost) {
           return res.status(400).json({ error: `Kas emiten tidak cukup. Butuh IB ${cost.toLocaleString('id-ID')}.` });
         }
-        updateSql = 'UPDATE companies SET company_balance_ib = company_balance_ib - ?, ceo_level = 1, fundamental_score = MIN(100, fundamental_score + 15) WHERE id = ?';
+        updateSql = 'UPDATE companies SET company_balance_ib = company_balance_ib - ?, ceo_level = 1, fundamental_score = MIN(100, COALESCE(fundamental_score, 75) + 15) WHERE id = ?';
         successMsg = `👔 Berhasil mengangkat CEO untuk ${comp.name}!`;
       } else if (type === 'cfo') {
         cost = 15000000;
@@ -986,9 +1139,12 @@ app.post('/api/company/staff/hire', async (req, res) => {
 
       await query.run(updateSql, [cost, companyId]);
       const updated = await query.get('SELECT * FROM companies WHERE id = ?', [companyId]);
+      invalidateMarketCaches();
+      io.emit('user:balance_updated', { userId, companyId, companyBalance: updated.company_balance_ib });
       return res.json({
         success: true,
         message: successMsg,
+        companyId,
         employeesCount: updated.employees_count,
         ceoLevel: updated.ceo_level,
         cfoLevel: updated.cfo_level,
@@ -997,65 +1153,82 @@ app.post('/api/company/staff/hire', async (req, res) => {
       });
     }
 
-    if (!user.has_pt) return res.status(400).json({ error: 'Harap dirikan PT terlebih dahulu' });
+    if (!user.has_pt && !primaryComp) return res.status(400).json({ error: 'Harap dirikan PT terlebih dahulu' });
+
+    const availableBalance = resolveSyncedBalance(user.company_balance_ib, primaryComp?.company_balance_ib);
+    let nextEmp = Math.max(Number(user.employees_count || 0), Number(primaryComp?.employees_count || 0));
+    let nextCeo = Math.max(Number(user.ceo_level || 0), Number(primaryComp?.ceo_level || 0));
+    let nextCfo = Math.max(Number(user.cfo_level || 0), Number(primaryComp?.cfo_level || 0));
+    let nextCmo = Math.max(Number(user.cmo_level || 0), Number(primaryComp?.cmo_level || 0));
+    let nextFund = Math.max(Number(user.fundamental_score || 70), Number(primaryComp?.fundamental_score || 70));
 
     let cost = 0;
-    let updateSql = '';
-    let updateParams = [];
     let successMsg = '';
 
     if (type === 'staff') {
-      cost = 5000000; // IB 5 Juta untuk 5 Staf Operasional
-      if (user.company_balance_ib < cost) {
+      cost = 5000000;
+      if (availableBalance < cost) {
         return res.status(400).json({ error: `Saldo Kas PT tidak mencukupi. Butuh IB ${cost.toLocaleString('id-ID')} untuk merekrut 5 Staf Operasional.` });
       }
-      updateSql = 'UPDATE users SET company_balance_ib = company_balance_ib - ?, employees_count = COALESCE(employees_count, 0) + 5 WHERE id = ?';
-      updateParams = [cost, userId];
+      nextEmp += 5;
       successMsg = '🎉 Berhasil merekrut 5 Staf Operasional baru! Kapasitas produksi dan penjualan bertambah.';
     } else if (type === 'ceo') {
-      cost = 25000000; // IB 25 Juta
-      if (user.ceo_level > 0) return res.status(400).json({ error: 'Perusahaan Anda sudah memiliki Direktur Utama (CEO)' });
-      if (user.company_balance_ib < cost) {
+      cost = 25000000;
+      if (nextCeo > 0) return res.status(400).json({ error: 'Perusahaan Anda sudah memiliki Direktur Utama (CEO)' });
+      if (availableBalance < cost) {
         return res.status(400).json({ error: `Saldo Kas PT tidak mencukupi. Butuh IB ${cost.toLocaleString('id-ID')} untuk mengangkat CEO.` });
       }
-      updateSql = 'UPDATE users SET company_balance_ib = company_balance_ib - ?, ceo_level = 1, fundamental_score = MIN(100, fundamental_score + 15) WHERE id = ?';
-      updateParams = [cost, userId];
+      nextCeo = 1;
+      nextFund = Math.min(100, nextFund + 15);
       successMsg = '👔 Berhasil mengangkat CEO Profesional! Omzet meningkat 30% dan skor fundamental naik +15 poin.';
     } else if (type === 'cfo') {
-      cost = 15000000; // IB 15 Juta
-      if (user.cfo_level > 0) return res.status(400).json({ error: 'Perusahaan Anda sudah memiliki Direktur Keuangan (CFO)' });
-      if (user.company_balance_ib < cost) {
+      cost = 15000000;
+      if (nextCfo > 0) return res.status(400).json({ error: 'Perusahaan Anda sudah memiliki Direktur Keuangan (CFO)' });
+      if (availableBalance < cost) {
         return res.status(400).json({ error: `Saldo Kas PT tidak mencukupi. Butuh IB ${cost.toLocaleString('id-ID')} untuk mengangkat CFO.` });
       }
-      updateSql = 'UPDATE users SET company_balance_ib = company_balance_ib - ?, cfo_level = 1 WHERE id = ?';
-      updateParams = [cost, userId];
+      nextCfo = 1;
       successMsg = '📊 Berhasil mengangkat CFO Profesional! Pengelolaan keuangan lebih efisien dan beban operasional hemat 25%.';
     } else if (type === 'cmo') {
-      cost = 15000000; // IB 15 Juta
-      if (user.cmo_level > 0) return res.status(400).json({ error: 'Perusahaan Anda sudah memiliki Direktur Pemasaran (CMO)' });
-      if (user.company_balance_ib < cost) {
+      cost = 15000000;
+      if (nextCmo > 0) return res.status(400).json({ error: 'Perusahaan Anda sudah memiliki Direktur Pemasaran (CMO)' });
+      if (availableBalance < cost) {
         return res.status(400).json({ error: `Saldo Kas PT tidak mencukupi. Butuh IB ${cost.toLocaleString('id-ID')} untuk mengangkat CMO.` });
       }
-      updateSql = 'UPDATE users SET company_balance_ib = company_balance_ib - ?, cmo_level = 1 WHERE id = ?';
-      updateParams = [cost, userId];
+      nextCmo = 1;
       successMsg = '📢 Berhasil mengangkat CMO Profesional! Kampanye pemasaran masif mendongkrak omzet penjualan 35%.';
     } else {
       return res.status(400).json({ error: 'Tipe rekrutmen tidak valid' });
     }
 
-    await query.run(updateSql, updateParams);
-    const updated = await query.get('SELECT * FROM users WHERE id = ?', [userId]);
+    const nextBalance = availableBalance - cost;
+    await query.run(
+      `UPDATE users
+       SET company_balance_ib = ?, employees_count = ?, ceo_level = ?, cfo_level = ?, cmo_level = ?, fundamental_score = ?
+       WHERE id = ?`,
+      [nextBalance, nextEmp, nextCeo, nextCfo, nextCmo, nextFund, userId]
+    );
+    if (primaryComp) {
+      await query.run(
+        `UPDATE companies
+         SET company_balance_ib = ?, employees_count = ?, ceo_level = ?, cfo_level = ?, cmo_level = ?, fundamental_score = ?
+         WHERE id = ?`,
+        [nextBalance, nextEmp, nextCeo, nextCfo, nextCmo, nextFund, primaryComp.id]
+      );
+    }
 
-    io.emit('user:balance_updated', { userId, newBalance: updated.balance_ib, companyBalance: updated.company_balance_ib });
+    invalidateMarketCaches();
+    io.emit('user:balance_updated', { userId, newBalance: user.balance_ib, companyBalance: nextBalance });
 
     res.json({
       success: true,
       message: successMsg,
-      employeesCount: updated.employees_count,
-      ceoLevel: updated.ceo_level,
-      cfoLevel: updated.cfo_level,
-      cmoLevel: updated.cmo_level,
-      newCompanyBalance: updated.company_balance_ib
+      companyId: 'primary',
+      employeesCount: nextEmp,
+      ceoLevel: nextCeo,
+      cfoLevel: nextCfo,
+      cmoLevel: nextCmo,
+      newCompanyBalance: nextBalance
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -2419,102 +2592,152 @@ app.get('/api/user/conglomerate/:userId', async (req, res) => {
     if (!user) return res.status(404).json({ error: 'User tidak ditemukan' });
 
     const list = [];
-    let primaryComp = null;
-    if (user.has_pt) {
-      // 1. Cari PT Utama: Utamakan perusahaan yang owner_id-nya adalah user dan simbol/namanya cocok
-      primaryComp = await query.get(
-        'SELECT * FROM companies WHERE owner_id = ? AND (symbol = ? OR name = ?)',
-        [userId, user.pt_symbol, user.pt_name]
-      ) || await query.get(
-        'SELECT * FROM companies WHERE owner_id = ? ORDER BY founded_at ASC, id ASC LIMIT 1',
-        [userId]
-      );
+    let primaryComp = await findUserPrimaryCompany(userId, user);
 
-      // Jika user.has_pt == 1 tapi di database perusahaan tidak ditemukan sama sekali di tangan user:
-      if (!primaryComp) {
-        // Cek apakah user punya anak perusahaan lain
-        const anyOwnedComp = await query.get('SELECT * FROM companies WHERE owner_id = ? LIMIT 1', [userId]);
-        if (anyOwnedComp) {
-          primaryComp = anyOwnedComp;
-          await query.run(
-            'UPDATE users SET pt_name = ?, pt_symbol = ?, sector = ?, is_ipo = ?, company_balance_ib = ?, founder_shares_sold = ? WHERE id = ?',
-            [primaryComp.name, primaryComp.symbol, primaryComp.sector, primaryComp.is_ipo || 0, primaryComp.company_balance_ib || 0, primaryComp.founder_shares_sold || 0, userId]
-          );
-        } else {
-          // User tidak memiliki PT apapun lagi (semua sudah dijual/diakuisisi)
-          await query.run("UPDATE users SET has_pt = 0, pt_name = '', pt_symbol = '', is_ipo = 0, company_balance_ib = 0 WHERE id = ?", [userId]);
-          user.has_pt = 0;
-        }
+    if (primaryComp) {
+      const syncedBalance = resolveSyncedBalance(user.company_balance_ib, primaryComp.company_balance_ib);
+      const syncedRd = Math.max(Number(primaryComp.rd_level || 1), Number(user.rd_level || 1));
+      const syncedMkt = Math.max(Number(primaryComp.marketing_level || 1), Number(user.marketing_level || 1));
+      const syncedHr = Math.max(Number(primaryComp.hr_level || 1), Number(user.hr_level || 1));
+      const syncedCap = Math.max(Number(primaryComp.capacity_level || 1), Number(user.capacity_level || 1));
+      const syncedPtLvl = Math.max(
+        Number(primaryComp.pt_level || 1),
+        Number(user.pt_level || 1),
+        Math.floor((syncedRd + syncedMkt + syncedHr + syncedCap + 1) / 4) + 1
+      );
+      const syncedEmp = Math.max(Number(primaryComp.employees_count || 0), Number(user.employees_count || 0));
+      const syncedCeo = Math.max(Number(primaryComp.ceo_level || 0), Number(user.ceo_level || 0));
+      const syncedCfo = Math.max(Number(primaryComp.cfo_level || 0), Number(user.cfo_level || 0));
+      const syncedCmo = Math.max(Number(primaryComp.cmo_level || 0), Number(user.cmo_level || 0));
+      const syncedFund = Math.min(100, Math.max(Number(primaryComp.fundamental_score || 70), Number(user.fundamental_score || 70)));
+
+      // Auto-sync user & primaryComp if any field drifted
+      if (
+        !user.has_pt ||
+        user.pt_symbol !== primaryComp.symbol ||
+        user.pt_name !== primaryComp.name ||
+        Number(user.company_balance_ib || 0) !== syncedBalance ||
+        Number(primaryComp.company_balance_ib || 0) !== syncedBalance ||
+        Number(primaryComp.rd_level || 1) !== syncedRd ||
+        Number(user.rd_level || 1) !== syncedRd
+      ) {
+        await query.run(
+          `UPDATE users
+           SET has_pt = 1, pt_name = ?, pt_symbol = ?, sector = ?, is_ipo = ?,
+               company_balance_ib = ?, rd_level = ?, marketing_level = ?, hr_level = ?, capacity_level = ?,
+               pt_level = ?, employees_count = ?, ceo_level = ?, cfo_level = ?, cmo_level = ?, fundamental_score = ?
+           WHERE id = ?`,
+          [
+            primaryComp.name, primaryComp.symbol, primaryComp.sector || user.sector, primaryComp.is_ipo || 0,
+            syncedBalance, syncedRd, syncedMkt, syncedHr, syncedCap,
+            syncedPtLvl, syncedEmp, syncedCeo, syncedCfo, syncedCmo, syncedFund,
+            userId
+          ]
+        );
+        await query.run(
+          `UPDATE companies
+           SET company_balance_ib = ?, rd_level = ?, marketing_level = ?, hr_level = ?, capacity_level = ?,
+               pt_level = ?, operational_level = ?, employees_count = ?, ceo_level = ?, cfo_level = ?, cmo_level = ?, fundamental_score = ?
+           WHERE id = ?`,
+          [
+            syncedBalance, syncedRd, syncedMkt, syncedHr, syncedCap,
+            syncedPtLvl, syncedPtLvl, syncedEmp, syncedCeo, syncedCfo, syncedCmo, syncedFund,
+            primaryComp.id
+          ]
+        );
+        user.has_pt = 1;
       }
 
-      if (user.has_pt && primaryComp) {
-        const isIpo = primaryComp.is_ipo === 1;
-        const officialPtName = formatCorporateName(primaryComp.name, isIpo);
-        const founderSold = primaryComp.founder_shares_sold || user.founder_shares_sold || 0;
-        let founderPct = Math.max(0, 100.0 - (isIpo ? (40.0 + founderSold) : founderSold));
-        try {
-          const shList = await getCompanyShareholders(primaryComp.id, user, primaryComp);
-          const ownFounderRow = shList.find(r => r.user_id === userId || r.holder_type === 'FOUNDER');
-          if (ownFounderRow && Number(ownFounderRow.percentage) >= 0) {
-            founderPct = Number(ownFounderRow.percentage);
-          }
-        } catch (_) {}
-
-        // Jika founder melakukan buyback saham sendiri di pasar sekunder, tambahkan ke kepemilikan PT Utama
-        const ownPort = await query.get('SELECT lots_owned FROM portfolios WHERE user_id = ? AND company_id = ?', [userId, primaryComp.id]);
-        if (ownPort && ownPort.lots_owned > 0) {
-          const buybackPct = ((ownPort.lots_owned * 100.0) / (primaryComp.total_shares || 10000000)) * 100.0;
-          founderPct = Math.min(100.0, founderPct + buybackPct);
+      const isIpo = primaryComp.is_ipo === 1;
+      const officialPtName = formatCorporateName(primaryComp.name, isIpo);
+      const founderSold = primaryComp.founder_shares_sold || user.founder_shares_sold || 0;
+      let founderPct = Math.max(0, 100.0 - (isIpo ? (40.0 + founderSold) : founderSold));
+      try {
+        const shList = await getCompanyShareholders(primaryComp.id, user, primaryComp);
+        const ownFounderRow = shList.find(r => r.user_id === userId || r.holder_type === 'FOUNDER');
+        if (ownFounderRow && Number(ownFounderRow.percentage) >= 0) {
+          founderPct = Number(ownFounderRow.percentage);
         }
+      } catch (_) {}
 
-        list.push({
-          id: 'primary',
-          companyDbId: primaryComp.id,
-          name: officialPtName,
-          symbol: primaryComp.symbol,
-          sector: primaryComp.sector || user.sector,
-          isPrimary: true,
-          isAcquired: false,
-          isSubsidiary: false,
-          companyBalance: primaryComp.company_balance_ib || user.company_balance_ib || 0.0,
-          employeesCount: primaryComp.employees_count || user.employees_count || 0,
-          ceoLevel: primaryComp.ceo_level || user.ceo_level || 0,
-          cfoLevel: primaryComp.cfo_level || user.cfo_level || 0,
-          cmoLevel: primaryComp.cmo_level || user.cmo_level || 0,
-          rdLevel: primaryComp.rd_level || user.rd_level || 1,
-          marketingLevel: primaryComp.marketing_level || user.marketing_level || 1,
-          hrLevel: primaryComp.hr_level || user.hr_level || 1,
-          capacityLevel: primaryComp.capacity_level || user.capacity_level || 1,
-          ptLevel: primaryComp.pt_level || user.pt_level || 1,
-          fundamentalScore: primaryComp.fundamental_score || user.fundamental_score || 70,
-          isIpo,
-          currentPrice: primaryComp.current_price || 2500.0,
-          description: primaryComp.description || `PT ${primaryComp.name} beroperasi di sektor ${primaryComp.sector}.`,
-          ownershipPct: parseFloat(founderPct.toFixed(1)),
-          founderSharesSold: founderSold,
-          isSeized: primaryComp.is_seized === 1,
-          status: primaryComp.status || 'HEALTHY',
-          seizeReason: primaryComp.seize_reason || null,
-          seizedBy: primaryComp.seized_by || null,
-          isUma: primaryComp.uma_flag === 1,
-          umaReason: primaryComp.uma_reason || null
-        });
+      // Jika founder melakukan buyback saham sendiri di pasar sekunder, tambahkan ke kepemilikan PT Utama
+      const ownPort = await query.get('SELECT lots_owned FROM portfolios WHERE user_id = ? AND company_id = ?', [userId, primaryComp.id]);
+      if (ownPort && ownPort.lots_owned > 0) {
+        const buybackPct = ((ownPort.lots_owned * 100.0) / (primaryComp.total_shares || 10000000)) * 100.0;
+        founderPct = Math.min(100.0, founderPct + buybackPct);
+      }
+
+      list.push({
+        id: 'primary',
+        companyDbId: primaryComp.id,
+        name: officialPtName,
+        symbol: primaryComp.symbol,
+        sector: primaryComp.sector || user.sector,
+        isPrimary: true,
+        isAcquired: false,
+        isSubsidiary: false,
+        companyBalance: syncedBalance,
+        employeesCount: syncedEmp,
+        ceoLevel: syncedCeo,
+        cfoLevel: syncedCfo,
+        cmoLevel: syncedCmo,
+        rdLevel: syncedRd,
+        marketingLevel: syncedMkt,
+        hrLevel: syncedHr,
+        capacityLevel: syncedCap,
+        ptLevel: syncedPtLvl,
+        fundamentalScore: syncedFund,
+        isIpo,
+        currentPrice: primaryComp.current_price || 2500.0,
+        description: primaryComp.description || `${officialPtName} beroperasi di sektor ${primaryComp.sector || user.sector}.`,
+        ownershipPct: parseFloat(founderPct.toFixed(1)),
+        founderSharesSold: founderSold,
+        isSeized: primaryComp.is_seized === 1,
+        status: primaryComp.status || 'HEALTHY',
+        seizeReason: primaryComp.seize_reason || null,
+        seizedBy: primaryComp.seized_by || null,
+        isUma: primaryComp.uma_flag === 1,
+        umaReason: primaryComp.uma_reason || null
+      });
+    } else if (user.has_pt) {
+      // Double check if user holds >= 50% in portfolios before clearing has_pt
+      const portMajority = await query.get(`
+        SELECT c.* FROM portfolios p
+        JOIN companies c ON p.company_id = c.id
+        WHERE p.user_id = ? AND ((p.lots_owned * 100.0) / COALESCE(NULLIF(c.total_shares, 0), 10000000)) >= 0.50
+        ORDER BY p.lots_owned DESC LIMIT 1
+      `, [userId]);
+      if (!portMajority) {
+        await query.run("UPDATE users SET has_pt = 0, pt_name = '', pt_symbol = '', is_ipo = 0, company_balance_ib = 0 WHERE id = ?", [userId]);
+        user.has_pt = 0;
       }
     }
 
     // Perusahaan anak (Subsidiary) & hasil akuisisi selain PT Utama sendiri
-    // HANYA yang benar-benar DIMILIKI oleh user (owner_id = userId) ATAU porsi saham mayoritas (>= 50%)!
+    // HANYA yang benar-benar DIMILIKI oleh user (owner_id = userId), portofolio >= 50%, ATAU company_shareholders >= 50%!
     const primaryCompId = primaryComp ? primaryComp.id : '---none---';
     const acquired = await query.all(`
       SELECT c.*, COALESCE(p.lots_owned, 0) as lots_owned,
-             CASE WHEN c.owner_id = ? AND (p.lots_owned IS NULL OR p.lots_owned = 0) THEN 100.0
-                  ELSE ((COALESCE(p.lots_owned, 0) * 100.0) / c.total_shares * 100.0)
+             COALESCE(sh.sh_pct, 0) as direct_sh_pct,
+             CASE
+               WHEN c.owner_id = ? AND COALESCE(p.lots_owned, 0) = 0 AND COALESCE(sh.sh_pct, 0) = 0 THEN 100.0
+               ELSE MIN(100.0, (((COALESCE(p.lots_owned, 0) * 100.0) / COALESCE(NULLIF(c.total_shares, 0), 10000000)) * 100.0) + COALESCE(sh.sh_pct, 0))
              END as calculated_ownership_pct
       FROM companies c
       LEFT JOIN portfolios p ON c.id = p.company_id AND p.user_id = ?
-      WHERE c.id != ? 
-        AND (c.owner_id = ? OR ((COALESCE(p.lots_owned, 0) * 100.0) / c.total_shares) >= 50.0)
-    `, [userId, userId, primaryCompId, userId]);
+      LEFT JOIN (
+        SELECT company_id, SUM(percentage) as sh_pct
+        FROM company_shareholders
+        WHERE user_id = ?
+        GROUP BY company_id
+      ) sh ON c.id = sh.company_id
+      WHERE c.id != ?
+        AND (
+          c.owner_id = ?
+          OR (((COALESCE(p.lots_owned, 0) * 100.0) / COALESCE(NULLIF(c.total_shares, 0), 10000000)) * 100.0) >= 50.0
+          OR COALESCE(sh.sh_pct, 0) >= 50.0
+        )
+    `, [userId, userId, userId, primaryCompId, userId]);
 
     for (const a of acquired) {
       const isAcquired = a.is_acquired === 1 || a.is_bot === 1;
@@ -3350,6 +3573,11 @@ app.post('/api/ipo/update-schedule', async (req, res) => {
 app.get('/api/companies', async (req, res) => {
   try {
     const { sector, status, search } = req.query;
+    const isUnfiltered = (!sector || sector === 'ALL') && !status && !search;
+    if (isUnfiltered && _companiesListCache.data && (Date.now() - _companiesListCache.ts) < 2000) {
+      return res.json(_companiesListCache.data);
+    }
+
     let sql = `
       SELECT *,
         ROUND(((current_price - CASE WHEN prev_close > 0 THEN prev_close ELSE base_price END) / 
@@ -3381,6 +3609,9 @@ app.get('/api/companies', async (req, res) => {
         regular_quota_lots: Math.max(1, Math.floor(regShares / 100)),
       };
     });
+    if (isUnfiltered) {
+      _companiesListCache = { data: enriched, ts: Date.now() };
+    }
     res.json(enriched);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -3863,12 +4094,27 @@ app.post('/api/trade/order', async (req, res) => {
         await query.run('UPDATE portfolios SET lots_owned = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [remainingLots, portfolio.id]);
       }
 
-      // If user sells below 51%, release majority ownership
-      if (remainingLots === 0 || ((remainingLots * 100) / company.total_shares < 0.51)) {
-        if (company.owner_id === userId) {
+      // Only release majority ownership if combined (portfolios + company_shareholders) drops below 50%
+      // AND seller is NOT the registered FOUNDER of a player-founded company!
+      if (company.owner_id === userId) {
+        const totalSharesCount = company.total_shares || 10000000;
+        const remainingPortPct = ((remainingLots * 100.0) / totalSharesCount) * 100.0;
+        const shRow = await query.get(
+          `SELECT COALESCE(SUM(percentage), 0) as pct,
+                  MAX(CASE WHEN holder_type = 'FOUNDER' AND COALESCE(percentage, 0) > 0 THEN 1 ELSE 0 END) as is_founder
+           FROM company_shareholders
+           WHERE company_id = ? AND user_id = ?`,
+          [companyId, userId]
+        );
+        const directFounderPct = Number(shRow?.pct || 0);
+        const isActiveFounder = Number(shRow?.is_founder || 0) === 1 || (company.is_bot === 0 && directFounderPct > 0);
+        const combinedOwnershipPct = remainingPortPct + directFounderPct;
+
+        if (!isActiveFounder && combinedOwnershipPct < 50.0) {
           await query.run('UPDATE companies SET owner_id = NULL, is_acquired = 0 WHERE id = ?', [companyId]);
         }
       }
+      invalidateMarketCaches();
 
       // Market Impact: Selling lots creates dump pressure and drops price
       const priceDropPct = Math.min(0.08, (lots / 1000) * 0.05);
@@ -4262,6 +4508,25 @@ app.get('/api/portfolio/:userId', async (req, res) => {
     const user = await query.get('SELECT * FROM users WHERE id = ?', [userId]);
     if (!user) return res.status(404).json({ error: 'User tidak ditemukan' });
 
+    const primaryComp = await findUserPrimaryCompany(userId, user);
+    const hasPt = Boolean(user.has_pt || primaryComp);
+    const syncedCompBalance = primaryComp
+      ? resolveSyncedBalance(user.company_balance_ib, primaryComp.company_balance_ib)
+      : (user.company_balance_ib || 0.0);
+    const syncedRd = primaryComp ? Math.max(Number(primaryComp.rd_level || 1), Number(user.rd_level || 1)) : (user.rd_level || 1);
+    const syncedMkt = primaryComp ? Math.max(Number(primaryComp.marketing_level || 1), Number(user.marketing_level || 1)) : (user.marketing_level || 1);
+    const syncedHr = primaryComp ? Math.max(Number(primaryComp.hr_level || 1), Number(user.hr_level || 1)) : (user.hr_level || 1);
+    const syncedCap = primaryComp ? Math.max(Number(primaryComp.capacity_level || 1), Number(user.capacity_level || 1)) : (user.capacity_level || 1);
+    const syncedPtLvl = primaryComp ? Math.max(Number(primaryComp.pt_level || 1), Number(user.pt_level || 1)) : (user.pt_level || 1);
+    const syncedEmp = primaryComp ? Math.max(Number(primaryComp.employees_count || 0), Number(user.employees_count || 0)) : (user.employees_count || 0);
+    const syncedCeo = primaryComp ? Math.max(Number(primaryComp.ceo_level || 0), Number(user.ceo_level || 0)) : (user.ceo_level || 0);
+    const syncedCfo = primaryComp ? Math.max(Number(primaryComp.cfo_level || 0), Number(user.cfo_level || 0)) : (user.cfo_level || 0);
+    const syncedCmo = primaryComp ? Math.max(Number(primaryComp.cmo_level || 0), Number(user.cmo_level || 0)) : (user.cmo_level || 0);
+    const syncedFund = primaryComp ? Math.min(100, Math.max(Number(primaryComp.fundamental_score || 70), Number(user.fundamental_score || 70))) : (user.fundamental_score || 70);
+    const syncedPtName = primaryComp?.name || user.pt_name || '';
+    const syncedSector = primaryComp?.sector || user.sector || '';
+    const syncedIsIpo = primaryComp ? Boolean(primaryComp.is_ipo) : Boolean(user.is_ipo);
+
     const holdings = await query.all(`
       SELECT p.*, c.symbol, c.name, c.current_price, c.sector, c.status, c.dividend_rate
       FROM portfolios p
@@ -4292,48 +4557,48 @@ app.get('/api/portfolio/:userId', async (req, res) => {
       };
     });
 
-    const netWorth = user.balance_ib + user.company_balance_ib + totalStockValue;
+    const netWorth = user.balance_ib + syncedCompBalance + totalStockValue;
     const overallPl = totalStockValue - totalInvested;
     const overallPlPct = totalInvested > 0 ? parseFloat(((overallPl / totalInvested) * 100).toFixed(2)) : 0;
 
     const rateRow = await query.get("SELECT value FROM central_bank_settings WHERE key = 'interest_rate'");
     const centralBankInterestRate = parseFloat(rateRow ? rateRow.value : 6.5);
 
-    // Hitung Estimasi Arus Kas PT per Siklus (20 Detik)
-    let grossRev = (user.pt_level * 150000) + 
-                   ((user.rd_level || 1) * 250000) + 
-                   ((user.marketing_level || 1) * 180000) + 
-                   ((user.capacity_level || 1) * 200000) + 
-                   ((user.employees_count || 0) * 350000);
-    if (user.ceo_level > 0) grossRev *= 1.30;
-    if (user.cmo_level > 0) grossRev *= 1.35;
-    const multiplier = (user.fundamental_score / 100);
+    // Hitung Estimasi Arus Kas PT per Siklus
+    let grossRev = (syncedPtLvl * 350000) +
+                   (syncedRd * 550000) +
+                   (syncedMkt * 400000) +
+                   (syncedCap * 300000) +
+                   (syncedEmp * 180000);
+    if (syncedCeo > 0) grossRev *= 1.35;
+    if (syncedCmo > 0) grossRev *= 1.30;
+    const multiplier = (syncedFund / 100);
     const estimatedGrossRevenue = Math.round(grossRev * multiplier);
 
-    const staffSalaries = (user.employees_count || 0) * 100000;
-    const ceoSalary = user.ceo_level > 0 ? 1500000 : 0;
-    const cfoSalary = user.cfo_level > 0 ? 1000000 : 0;
-    const cmoSalary = user.cmo_level > 0 ? 1000000 : 0;
-    let estimatedSalaries = staffSalaries + ceoSalary + cfoSalary + cmoSalary;
-    if (user.cfo_level > 0) estimatedSalaries = Math.round(estimatedSalaries * 0.75);
+    const staffSalaries = syncedEmp * 100000;
+    const ceoSalary = syncedCeo > 0 ? 1500000 : 0;
+    const cfoSalary = syncedCfo > 0 ? 1000000 : 0;
+    const cmoSalary = syncedCmo > 0 ? 1000000 : 0;
+    let estimatedSalaries = 3000000 + staffSalaries + ceoSalary + cfoSalary + cmoSalary;
+    if (syncedCfo > 0) estimatedSalaries = Math.round(estimatedSalaries * 0.75);
 
     const estimatedNetRevenue = Math.max(0, estimatedGrossRevenue - estimatedSalaries);
 
     res.json({
-      cashBalance: user.balance_ib,                   // Kas Pribadi
-      companyBalance: user.company_balance_ib || 0.0, // Kas Perusahaan (PT)
-      hasPt: Boolean(user.has_pt),
-      ptName: user.pt_name || '',
-      sector: user.sector || '',
-      isIpo: Boolean(user.is_ipo),
-      rdLevel: user.rd_level || 1,
-      marketingLevel: user.marketing_level || 1,
-      hrLevel: user.hr_level || 1,
-      capacityLevel: user.capacity_level || 1,
-      employeesCount: user.employees_count || 0,
-      ceoLevel: user.ceo_level || 0,
-      cfoLevel: user.cfo_level || 0,
-      cmoLevel: user.cmo_level || 0,
+      cashBalance: user.balance_ib,          // Kas Pribadi
+      companyBalance: syncedCompBalance,     // Kas Perusahaan (PT)
+      hasPt,
+      ptName: syncedPtName,
+      sector: syncedSector,
+      isIpo: syncedIsIpo,
+      rdLevel: syncedRd,
+      marketingLevel: syncedMkt,
+      hrLevel: syncedHr,
+      capacityLevel: syncedCap,
+      employeesCount: syncedEmp,
+      ceoLevel: syncedCeo,
+      cfoLevel: syncedCfo,
+      cmoLevel: syncedCmo,
       estimatedGrossRevenue,
       estimatedSalaries,
       estimatedNetRevenue,
@@ -4342,8 +4607,8 @@ app.get('/api/portfolio/:userId', async (req, res) => {
       overallPl,
       overallPlPct,
       creditScore: user.credit_score,
-      ptLevel: user.pt_level,
-      fundamentalScore: user.fundamental_score,
+      ptLevel: syncedPtLvl,
+      fundamentalScore: syncedFund,
       isBlueChip: Boolean(user.is_blue_chip),
       centralBankInterestRate,
       holdings: detailedHoldings
@@ -5269,16 +5534,23 @@ function formatCleanPtName(rawPtName, hasPt) {
   return stripped ? `PT. ${stripped}` : 'Investor Mandiri';
 }
 
-// Helper menghitung Peringkat Konglomerat Live (Top 12 Naga, Taipan, VIP)
+// Helper menghitung Peringkat Konglomerat Live (Top 12 Naga, Taipan, VIP) — Cached 3.5s
 async function getUserRankMap() {
+  if (_rankMapCache.data && (Date.now() - _rankMapCache.ts) < 3500) {
+    return _rankMapCache.data;
+  }
   const rows = await query.all(`
     SELECT u.id, u.role, u.is_blue_chip,
-           (u.balance_ib + u.company_balance_ib + COALESCE(SUM(p.lots_owned * 100 * c.current_price), 0)) as net_worth
+           (u.balance_ib + u.company_balance_ib + COALESCE(pv.stock_val, 0)) as net_worth
     FROM users u
-    LEFT JOIN portfolios p ON u.id = p.user_id
-    LEFT JOIN companies c ON p.company_id = c.id
+    LEFT JOIN (
+      SELECT p.user_id, SUM(p.lots_owned * 100 * c.current_price) as stock_val
+      FROM portfolios p
+      JOIN companies c ON p.company_id = c.id
+      WHERE p.lots_owned > 0
+      GROUP BY p.user_id
+    ) pv ON u.id = pv.user_id
     WHERE u.role != 'ADMIN'
-    GROUP BY u.id
     ORDER BY net_worth DESC
     LIMIT 250
   `);
@@ -5292,21 +5564,30 @@ async function getUserRankMap() {
     else if (isVipUser) badge = 'VIP';
     map.set(r.id, { rank, role: r.role, isBlueChip: Boolean(r.is_blue_chip), isVip: isVipUser || rank <= 12, badge, netWorth: r.net_worth });
   });
+  _rankMapCache = { data: map, ts: Date.now() };
   return map;
 }
 
-// Leaderboard Top 100
+// Leaderboard Top 100 — Fast Subquery Aggregation + 3.5s In-Memory Cache
 app.get('/api/leaderboard', async (req, res) => {
   try {
+    if (_leaderboardCache.data && (Date.now() - _leaderboardCache.ts) < 3500) {
+      return res.json(_leaderboardCache.data);
+    }
+
     const users = await query.all(`
       SELECT u.id, u.username, u.pt_name, u.has_pt, u.sector, u.balance_ib, u.company_balance_ib, u.pt_level, u.is_blue_chip, u.role,
-             COALESCE(SUM(p.lots_owned * 100 * c.current_price), 0) as stock_valuation
+             COALESCE(pv.stock_valuation, 0) as stock_valuation
       FROM users u
-      LEFT JOIN portfolios p ON u.id = p.user_id
-      LEFT JOIN companies c ON p.company_id = c.id
+      LEFT JOIN (
+        SELECT p.user_id, SUM(p.lots_owned * 100 * c.current_price) as stock_valuation
+        FROM portfolios p
+        JOIN companies c ON p.company_id = c.id
+        WHERE p.lots_owned > 0
+        GROUP BY p.user_id
+      ) pv ON u.id = pv.user_id
       WHERE u.role != 'ADMIN'
-      GROUP BY u.id
-      ORDER BY (u.balance_ib + u.company_balance_ib + COALESCE(SUM(p.lots_owned * 100 * c.current_price), 0)) DESC
+      ORDER BY (u.balance_ib + u.company_balance_ib + COALESCE(pv.stock_valuation, 0)) DESC
       LIMIT 100
     `);
 
@@ -5334,6 +5615,7 @@ app.get('/api/leaderboard', async (req, res) => {
       };
     });
 
+    _leaderboardCache = { data: leaderboard, ts: Date.now() };
     res.json(leaderboard);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -6479,14 +6761,14 @@ const localBuiltApkPath = path.join(__dirname, '../../mobile/build/app/outputs/f
 
 async function getApkSettingsMap() {
   const defaults = {
-    apk_version: '1.6.8',
-    apk_build_number: '22',
+    apk_version: '1.6.9',
+    apk_build_number: '23',
     apk_min_android: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
     apk_file_size_mb: '25.3 MB',
-    apk_release_notes: 'v1.6.8: Sinkronisasi penuh Putusan Ketuk Palu PNAF (Approved/PKPU/Pailit/Ditolak) & Brankas Akta Notaris, Majelis Hakim & Panitera Bot Otomatis 24/7 dengan sakelar ON/OFF Manual, serta modernisasi tampilan siap launching.',
+    apk_release_notes: 'v1.6.9: Pemulihan & Proteksi Permanen Kepemilikan PT Pendiri, Perbaikan Penuh Investasi R&D PT Utama & Anak Perusahaan, Akselerasi Server <100ms, serta Refresh Halus Latar Belakang Tanpa Kedip di Mobile & Website.',
     apk_external_url: '',
     apk_download_count: '315',
-    apk_sha256: '2f98c82e172ae1d484ffe15c3f32b539812f8d203b45d780b899f28baa38a2d8',
+    apk_sha256: 'd636724b056f458dc06a0737439ae047a54a8f9c198becd89e2fe15325ebc609',
     apk_updated_at: new Date().toISOString(),
   };
   try {
@@ -6496,12 +6778,12 @@ async function getApkSettingsMap() {
         defaults[r.key] = String(r.value);
       }
     }
-    if (parseInt(defaults.apk_build_number || '0', 10) < 22) {
-      defaults.apk_version = '1.6.8';
-      defaults.apk_build_number = '22';
+    if (parseInt(defaults.apk_build_number || '0', 10) < 23) {
+      defaults.apk_version = '1.6.9';
+      defaults.apk_build_number = '23';
       defaults.apk_file_size_mb = '25.3 MB';
-      defaults.apk_sha256 = '2f98c82e172ae1d484ffe15c3f32b539812f8d203b45d780b899f28baa38a2d8';
-      defaults.apk_release_notes = 'v1.6.8: Sinkronisasi penuh Putusan Ketuk Palu PNAF (Approved/PKPU/Pailit/Ditolak) & Brankas Akta Notaris, Majelis Hakim & Panitera Bot Otomatis 24/7 dengan sakelar ON/OFF Manual, serta modernisasi tampilan siap launching.';
+      defaults.apk_sha256 = 'd636724b056f458dc06a0737439ae047a54a8f9c198becd89e2fe15325ebc609';
+      defaults.apk_release_notes = 'v1.6.9: Pemulihan & Proteksi Permanen Kepemilikan PT Pendiri, Perbaikan Penuh Investasi R&D PT Utama & Anak Perusahaan, Akselerasi Server <100ms, serta Refresh Halus Latar Belakang Tanpa Kedip di Mobile & Website.';
     }
   } catch (_) {}
   return defaults;
@@ -6886,6 +7168,7 @@ async function start() {
       // Pastikan 250+ emiten Tbk. dan 265 bot konglomerat/ritel aktif di database yang sudah berjalan
       const { ensureMarketPopulation } = require('./seed');
       await ensureMarketPopulation();
+      await healRealPlayerCompanies();
       await healAllCorruptedCapTables();
       await healExistingCourtCases();
       await syncAllToMariaDb();

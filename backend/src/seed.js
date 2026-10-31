@@ -443,12 +443,27 @@ async function ensureMarketPopulation() {
     console.log(`✅ ${addedBots} bot pemain baru berhasil dimasukkan ke bursa (Total ${BOT_ROSTER.length} Bot).`);
   }
 
-  // 5B. SINKRONISASI 1-KE-1: Hubungkan Perusahaan Tbk. di Bursa Saham dengan Bot Pemilik PT di Peringkat!
-  // Dengan demikian, setiap PT yang tampil di bawah nama pemain/bot di Peringkat 100% ADA di Bursa Saham (Tbk.)!
+  // 5B. SINKRONISASI 1-KE-1: Hubungkan Perusahaan Tbk. BOT di Bursa Saham dengan Bot Pemilik PT di Peringkat!
+  // PENTING: JANGAN PERNAH menyentuh PT milik pemain asli (is_bot = 0, owner non-bot, atau tercatat sebagai FOUNDER/mayoritas di company_shareholders & portfolios)!
   const allBotCompanies = await query.all(`
     SELECT c.* FROM companies c
-    LEFT JOIN users u ON c.owner_id = u.id
-    WHERE c.is_bot = 1 OR c.owner_id IS NULL OR c.owner_id LIKE 'bot-user-%'
+    WHERE c.is_bot = 1
+      AND (c.owner_id IS NULL OR c.owner_id LIKE 'bot-user-%' OR c.owner_id LIKE 'user-bot-%')
+      AND NOT EXISTS (
+        SELECT 1 FROM company_shareholders cs
+        WHERE cs.company_id = c.id
+          AND cs.user_id IS NOT NULL
+          AND cs.user_id NOT LIKE 'bot-user-%'
+          AND cs.user_id NOT LIKE 'user-bot-%'
+          AND ((cs.holder_type = 'FOUNDER' AND COALESCE(cs.percentage, 0) > 0) OR COALESCE(cs.percentage, 0) >= 50.0)
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM portfolios p
+        WHERE p.company_id = c.id
+          AND p.user_id NOT LIKE 'bot-user-%'
+          AND p.user_id NOT LIKE 'user-bot-%'
+          AND ((p.lots_owned * 100.0) / COALESCE(NULLIF(c.total_shares, 0), 10000000)) >= 0.50
+      )
     ORDER BY c.base_price DESC, c.current_price DESC
   `);
 
@@ -475,7 +490,7 @@ async function ensureMarketPopulation() {
 
   for (let idx = 0; idx < BOT_ROSTER.length; idx++) {
     const b = BOT_ROSTER[idx];
-    const botRow = await query.get('SELECT id, username FROM users WHERE username = ?', [b.username]);
+    const botRow = await query.get('SELECT id, username, has_pt, pt_name FROM users WHERE username = ?', [b.username]);
     if (!botRow) continue;
 
     if (idx < orderedCompaniesForBots.length && idx < 600) {
@@ -484,21 +499,25 @@ async function ensureMarketPopulation() {
       const botRd = b.rd_level || (idx < 12 ? 14 : (idx < 35 ? 7 : 3));
       const botPtLvl = b.pt_level || (idx < 12 ? 5 : (idx < 35 ? 4 : 2));
 
-      // Hubungkan perusahaan Tbk. di Bursa Saham ke Bot ini sebagai Pendiri & Pemilik
-      await query.run(
-        `UPDATE companies 
-         SET owner_id = ?, founder_name = ?, employees_count = ?,
-             rd_level = ?,
-             pt_level = ?,
-             is_ipo = 1,
-             listing_status = 'LISTED'
-         WHERE id = ?`,
-        [botRow.id, botRow.username, botEmp, botRd, botPtLvl, comp.id]
-      );
-      await query.run(
-        'UPDATE users SET has_pt = 1, pt_name = ?, sector = ? WHERE id = ?',
-        [comp.name, comp.sector, botRow.id]
-      );
+      if (comp.owner_id !== botRow.id || comp.listing_status !== 'LISTED') {
+        // Hubungkan perusahaan Tbk. Bot di Bursa Saham ke Bot ini sebagai Pendiri & Pemilik
+        await query.run(
+          `UPDATE companies 
+           SET owner_id = ?, founder_name = ?, employees_count = COALESCE(NULLIF(employees_count, 0), ?),
+               rd_level = MAX(COALESCE(rd_level, 1), ?),
+               pt_level = MAX(COALESCE(pt_level, 1), ?),
+               is_ipo = 1,
+               listing_status = 'LISTED'
+           WHERE id = ? AND is_bot = 1`,
+          [botRow.id, botRow.username, botEmp, botRd, botPtLvl, comp.id]
+        );
+      }
+      if (!botRow.has_pt || botRow.pt_name !== comp.name) {
+        await query.run(
+          'UPDATE users SET has_pt = 1, pt_name = ?, sector = ? WHERE id = ?',
+          [comp.name, comp.sector, botRow.id]
+        );
+      }
 
       // Pastikan susunan pemegang saham (Cap Table) mencatat Bot ini sebagai Pendiri & Pemegang Saham Terbesar (60%)
       const existingSh = await query.get('SELECT COUNT(*) as count FROM company_shareholders WHERE company_id = ?', [comp.id]);

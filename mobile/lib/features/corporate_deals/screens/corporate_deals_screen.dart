@@ -35,7 +35,7 @@ class _CorporateDealsScreenState extends State<CorporateDealsScreen> with Single
 
   void _onCourtSocketEvent(dynamic _) {
     if (mounted) {
-      _loadAllData();
+      _loadAllData(silent: true);
     }
   }
 
@@ -47,21 +47,26 @@ class _CorporateDealsScreenState extends State<CorporateDealsScreen> with Single
     super.dispose();
   }
 
-  Future<void> _loadAllData() async {
+  Future<void> _loadAllData({bool silent = false}) async {
     final user = context.read<GameProvider>().user;
     if (user == null) return;
 
-    setState(() => _isLoading = true);
+    final hasData = _globalDeals.isNotEmpty || _inboxDeals.isNotEmpty || _userDeeds.isNotEmpty;
+    if (!silent && !hasData) {
+      setState(() => _isLoading = true);
+    }
     try {
-      final globals = await DealsService.getGlobalDeals();
-      final inboxes = await DealsService.getInboxDeals(user.id);
-      final deeds = await DealsService.getUserDeeds(user.id);
+      final results = await Future.wait([
+        DealsService.getGlobalDeals(),
+        DealsService.getInboxDeals(user.id),
+        DealsService.getUserDeeds(user.id),
+      ]);
 
       if (mounted) {
         setState(() {
-          _globalDeals = globals;
-          _inboxDeals = inboxes;
-          _userDeeds = deeds;
+          _globalDeals = results[0] as List<PrivateDealModel>;
+          _inboxDeals = results[1] as List<PrivateDealModel>;
+          _userDeeds = results[2] as List<DealDeedModel>;
           _isLoading = false;
         });
       }
@@ -76,7 +81,7 @@ class _CorporateDealsScreenState extends State<CorporateDealsScreen> with Single
       MaterialPageRoute(builder: (_) => CourtLiveRoomScreen(caseId: caseId)),
     );
     if (mounted) {
-      _loadAllData();
+      _loadAllData(silent: true);
     }
   }
 

@@ -28,8 +28,10 @@ class _IpoManageScreenState extends State<IpoManageScreen> {
     _fetchBids();
   }
 
-  Future<void> _fetchBids() async {
-    setState(() => _isLoading = true);
+  Future<void> _fetchBids({bool silent = false}) async {
+    if (!silent && _bids.isEmpty) {
+      setState(() => _isLoading = true);
+    }
     try {
       final ipoId = widget.ipoOffering['id']?.toString() ?? '';
       final res = await ApiService.getIpoBids(ipoId);

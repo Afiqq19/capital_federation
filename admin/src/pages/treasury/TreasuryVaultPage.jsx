@@ -40,9 +40,9 @@ export default function TreasuryVaultPage() {
   const [isDividenOpen, setIsDividenOpen] = useState(false);
   const [isWithdrawOpen, setIsWithdrawOpen] = useState(false);
 
-  const fetchTreasury = async () => {
+  const fetchTreasury = async (silent = false) => {
     try {
-      setLoading(true);
+      if (silent !== true) setLoading(true);
       const [sumData, legData] = await Promise.all([
         adminApi.treasurySummary(),
         adminApi.treasuryLedger(),
@@ -57,9 +57,9 @@ export default function TreasuryVaultPage() {
   };
 
   useEffect(() => {
-    fetchTreasury();
+    fetchTreasury(false);
     const handleUpdate = () => {
-      fetchTreasury();
+      fetchTreasury(true);
     };
     socket.on('treasury:updated', handleUpdate);
     socket.on('company:seized_status', handleUpdate);
@@ -73,7 +73,7 @@ export default function TreasuryVaultPage() {
     try {
       const res = await adminApi.treasuryBailout(payload);
       if (notify) notify(res.message || 'Dana talangan kas negara berhasil disalurkan!', 'success');
-      await fetchTreasury();
+      await fetchTreasury(true);
     } catch (err) {
       if (notify) notify('Gagal menyalurkan bailout: ' + err.message, 'error');
       else alert('Gagal menyalurkan bailout: ' + err.message);
@@ -84,7 +84,7 @@ export default function TreasuryVaultPage() {
     try {
       const res = await adminApi.treasuryDistributeDividend(payload);
       if (notify) notify(res.message || 'Dividen nasional berhasil dicairkan ke seluruh pemain!', 'success');
-      await fetchTreasury();
+      await fetchTreasury(true);
     } catch (err) {
       if (notify) notify('Gagal membagikan dividen: ' + err.message, 'error');
       else alert('Gagal membagikan dividen: ' + err.message);
@@ -95,7 +95,7 @@ export default function TreasuryVaultPage() {
     try {
       const res = await adminApi.treasuryWithdrawFunds(payload);
       if (notify) notify(res.message || 'Dana Kas Negara berhasil dicairkan!', 'success');
-      await fetchTreasury();
+      await fetchTreasury(true);
     } catch (err) {
       if (notify) notify('Gagal mencairkan dana: ' + err.message, 'error');
       else alert('Gagal mencairkan dana: ' + err.message);

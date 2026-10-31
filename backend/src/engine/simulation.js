@@ -264,6 +264,8 @@ class MarketSimulationEngine {
 
       const companies = await query.all("SELECT * FROM companies WHERE (listing_status = 'LISTED' OR (listing_status IS NULL AND is_bot = 1)) AND (listing_status != 'PRE_IPO' AND listing_status != 'UNLISTED')");
       const updatedList = [];
+      const pendingPriceUpdates = [];
+      const pendingHistoryInserts = [];
       const now = new Date().toISOString();
 
       let totalCapCurrent = 0;
@@ -353,11 +355,8 @@ class MarketSimulationEngine {
         const dailyHigh = Math.max(comp.daily_high || newPrice, newPrice);
         const dailyLow = Math.min(comp.daily_low || newPrice, newPrice);
 
-        // Update database
-        await query.run(
-          'UPDATE companies SET current_price = ?, daily_high = ?, daily_low = ? WHERE id = ?',
-          [newPrice, dailyHigh, dailyLow, comp.id]
-        );
+        // Queue price update for single atomic transaction commit
+        pendingPriceUpdates.push([newPrice, dailyHigh, dailyLow, comp.id]);
 
         // Breadth counters
         if (priceChangePct > 0.1) up++;
@@ -411,19 +410,14 @@ class MarketSimulationEngine {
           sellPressurePct
         };
 
-        // Record history tick every 4 cycles
+        // Queue history tick every 4 cycles
         if (this.tickCount % 4 === 0) {
           const open = comp.current_price;
           const close = newPrice;
           const high = Math.max(open, close) + Math.round(Math.random() * (open * 0.002));
           const low = Math.min(open, close) - Math.round(Math.random() * (open * 0.002));
           const vol = Math.floor(Math.random() * 3000) + 300;
-
-          await query.run(
-            `INSERT INTO price_history (id, company_id, price, open, close, high, low, volume, timestamp)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [uuidv4(), comp.id, close, open, close, high, low, vol, now]
-          );
+          pendingHistoryInserts.push([uuidv4(), comp.id, close, open, close, high, low, vol, now]);
         }
 
         updatedList.push({
@@ -442,6 +436,26 @@ class MarketSimulationEngine {
           dividend_rate: comp.dividend_rate,
           is_bot: comp.is_bot,
           orderbook: liveOrderbook
+        });
+      }
+
+      // Commit all price & history updates in ONE ultra-fast SQLite transaction (<5ms total!)
+      if (pendingPriceUpdates.length > 0 || pendingHistoryInserts.length > 0) {
+        const shouldPruneHistory = this.tickCount % 150 === 0;
+        await query.transaction(async (tx) => {
+          for (const p of pendingPriceUpdates) {
+            await tx.run('UPDATE companies SET current_price = ?, daily_high = ?, daily_low = ? WHERE id = ?', p);
+          }
+          for (const h of pendingHistoryInserts) {
+            await tx.run(
+              `INSERT INTO price_history (id, company_id, price, open, close, high, low, volume, timestamp)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              h
+            );
+          }
+          if (shouldPruneHistory) {
+            await tx.run("DELETE FROM price_history WHERE timestamp < datetime('now', '-2 days')");
+          }
         });
       }
 
@@ -547,6 +561,7 @@ class MarketSimulationEngine {
             } catch (_) {}
           }
 
+          const botTraderUsername = randomBot ? randomBot.username : (isBuy ? 'haziq' : 'ritel');
           const bgTrade = {
             id: uuidv4(),
             time: timeStr,
@@ -554,8 +569,10 @@ class MarketSimulationEngine {
             price: randComp.current_price,
             lots: lotSize,
             type: isBuy ? 'BUY' : 'SELL',
-            username: randomBot ? randomBot.username : (isBuy ? 'haziq' : 'ritel'),
+            username: botTraderUsername,
+            userName: botTraderUsername,
             isUser: false,
+            isBotTrade: true,
             timestamp: nowObj.toISOString(),
           };
           this.recordTrade(bgTrade);
@@ -1157,6 +1174,7 @@ class MarketSimulationEngine {
       for (const sc of subComps) {
         if (processedCompanyIds.has(sc.id)) continue;
         processedCompanyIds.add(sc.id);
+        const isBotSubOwner = String(sc.owner_id || '').startsWith('bot-user-') || String(sc.owner_id || '').startsWith('user-bot-');
 
         const staffSalaries = (sc.employees_count || 10) * salaryPerHead;
         const ceoSalary = (sc.ceo_level || 0) > 0 ? 1500000 : 0;
@@ -1181,51 +1199,53 @@ class MarketSimulationEngine {
           const corporateTax = Math.round(net * taxMultiplier); // PPh Badan dinamis
           const netAfterTax = net - corporateTax;
 
-          await query.run(
-            'INSERT INTO state_treasury_ledger (id, source_type, title, amount_ib, direction, reference_id, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [uuidv4(), 'CORPORATE_TAX', `Penerimaan PPh Badan (${taxRatePct}%) - ${sc.name}`, corporateTax, 'INCOME', sc.id, `Setoran PPh Badan ${taxRatePct}% anak perusahaan periode ${intervalDesc}`]
-          );
-          this.io.emit('treasury:updated');
-
           await query.run('UPDATE companies SET company_balance_ib = COALESCE(company_balance_ib, 0) + ? WHERE id = ?', [netAfterTax, sc.id]);
           const updatedBal = (sc.company_balance_ib || 0) + netAfterTax;
 
-          await recordCashFlow({
-            userId: sc.owner_id,
-            companyId: sc.id,
-            accountType: 'COMPANY',
-            category: 'REVENUE',
-            title: `Laba Bersih Omzet ${sc.name} (Siklus ${intervalDesc})`,
-            amountIb: netAfterTax,
-            direction: 'INCOME',
-            balanceAfter: updatedBal,
-            notes: `Omzet Kotor: +IB ${totalGross.toLocaleString('id-ID')} | Beban: -IB ${expenses.toLocaleString('id-ID')}`
-          });
-          await recordCashFlow({
-            userId: sc.owner_id,
-            companyId: sc.id,
-            accountType: 'COMPANY',
-            category: 'TAX',
-            title: `Setoran PPh Badan ${taxRatePct}% - ${sc.name}`,
-            amountIb: corporateTax,
-            direction: 'EXPENSE',
-            balanceAfter: updatedBal,
-            notes: `Setoran Pajak Penghasilan Badan ${taxRatePct}% ke Kas Negara`
-          });
+          if (!isBotSubOwner) {
+            await query.run(
+              'INSERT INTO state_treasury_ledger (id, source_type, title, amount_ib, direction, reference_id, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
+              [uuidv4(), 'CORPORATE_TAX', `Penerimaan PPh Badan (${taxRatePct}%) - ${sc.name}`, corporateTax, 'INCOME', sc.id, `Setoran PPh Badan ${taxRatePct}% anak perusahaan periode ${intervalDesc}`]
+            );
+            this.io.emit('treasury:updated');
 
-          this.io.emit('user:balance_updated', { userId: sc.owner_id, companyId: sc.id, companyBalance: updatedBal });
-          this.io.to(sc.owner_id).emit('company:revenue', {
-            companyId: sc.id,
-            companyName: sc.name,
-            amount: netAfterTax,
-            grossRevenue: totalGross,
-            expenses: expenses,
-            tax: corporateTax,
-            netRevenue: netAfterTax,
-            newCompanyBalance: updatedBal,
-            isSub: true,
-          });
-        } else if (net < 0) {
+            await recordCashFlow({
+              userId: sc.owner_id,
+              companyId: sc.id,
+              accountType: 'COMPANY',
+              category: 'REVENUE',
+              title: `Laba Bersih Omzet ${sc.name} (Siklus ${intervalDesc})`,
+              amountIb: netAfterTax,
+              direction: 'INCOME',
+              balanceAfter: updatedBal,
+              notes: `Omzet Kotor: +IB ${totalGross.toLocaleString('id-ID')} | Beban: -IB ${expenses.toLocaleString('id-ID')}`
+            });
+            await recordCashFlow({
+              userId: sc.owner_id,
+              companyId: sc.id,
+              accountType: 'COMPANY',
+              category: 'TAX',
+              title: `Setoran PPh Badan ${taxRatePct}% - ${sc.name}`,
+              amountIb: corporateTax,
+              direction: 'EXPENSE',
+              balanceAfter: updatedBal,
+              notes: `Setoran Pajak Penghasilan Badan ${taxRatePct}% ke Kas Negara`
+            });
+
+            this.io.emit('user:balance_updated', { userId: sc.owner_id, companyId: sc.id, companyBalance: updatedBal });
+            this.io.to(sc.owner_id).emit('company:revenue', {
+              companyId: sc.id,
+              companyName: sc.name,
+              amount: netAfterTax,
+              grossRevenue: totalGross,
+              expenses: expenses,
+              tax: corporateTax,
+              netRevenue: netAfterTax,
+              newCompanyBalance: updatedBal,
+              isSub: true,
+            });
+          }
+        } else if (net < 0 && !isBotSubOwner) {
           const currentBal = sc.company_balance_ib || 0;
           const candidateBal = currentBal + net;
 

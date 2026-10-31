@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -35,6 +36,23 @@ class GameProvider extends ChangeNotifier {
   List<Map<String, dynamic>> _myBondHoldings = [];
   List<Map<String, dynamic>> _activeSubsidies = [];
   List<Map<String, dynamic>> _governmentTenders = [];
+  Timer? _bgSyncTimer;
+  DateTime? _lastBgPortfolioSync;
+
+  void _scheduleSilentPortfolioSync({Duration delay = const Duration(milliseconds: 2500)}) {
+    if (_user == null) return;
+    if (_bgSyncTimer?.isActive ?? false) return;
+    final now = DateTime.now();
+    if (_lastBgPortfolioSync != null && now.difference(_lastBgPortfolioSync!) < delay) {
+      _bgSyncTimer = Timer(delay, () {
+        _lastBgPortfolioSync = DateTime.now();
+        unawaited(refreshPortfolio());
+      });
+      return;
+    }
+    _lastBgPortfolioSync = now;
+    unawaited(refreshPortfolio());
+  }
 
   List<Map<String, dynamic>> get userLoans => _userLoans;
   Map<String, dynamic>? get activeLoan => _activeLoan;
@@ -90,6 +108,18 @@ class GameProvider extends ChangeNotifier {
         if (raw != null) {
           _user = UserModel.fromJson(Map<String, dynamic>.from(jsonDecode(raw)));
         }
+        final cg = await LocalCache.read('conglomerate');
+        if (cg != null) {
+          final parsed = jsonDecode(cg);
+          if (parsed is List) {
+            _conglomerate = parsed.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+          }
+        }
+        final pf = await LocalCache.read('portfolio');
+        if (pf != null) {
+          _portfolio = PortfolioSummaryModel.fromJson(Map<String, dynamic>.from(jsonDecode(pf)));
+        }
+        _syncUserWithPrimaryConglomerate();
       }
       final c = await LocalCache.read('companies');
       if (c != null) {
@@ -124,6 +154,35 @@ class GameProvider extends ChangeNotifier {
     return withUser ? _user != null : true;
   }
 
+  void _syncUserWithPrimaryConglomerate() {
+    if (_user == null || _conglomerate.isEmpty) return;
+    final primary = _conglomerate.firstWhere(
+      (e) => e['isPrimary'] == true,
+      orElse: () => <String, dynamic>{},
+    );
+    if (primary.isEmpty) return;
+    final rawName = (primary['name'] ?? '').toString().trim();
+    final cleanName = rawName.replaceFirst(RegExp(r'^(PT\.?\s*)+', caseSensitive: false), '').trim();
+    final double? compBal = (primary['companyBalance'] as num?)?.toDouble();
+    _user = _user!.copyWith(
+      hasPt: true,
+      ptName: cleanName.isNotEmpty ? cleanName : _user!.ptName,
+      sector: (primary['sector']?.toString().isNotEmpty == true) ? primary['sector'].toString() : _user!.sector,
+      isIpo: primary['isIpo'] == true || primary['isIpo'] == 1 || _user!.isIpo,
+      companyBalanceIb: compBal ?? _user!.companyBalanceIb,
+      rdLevel: (primary['rdLevel'] as num?)?.toInt() ?? _user!.rdLevel,
+      marketingLevel: (primary['marketingLevel'] as num?)?.toInt() ?? _user!.marketingLevel,
+      hrLevel: (primary['hrLevel'] as num?)?.toInt() ?? _user!.hrLevel,
+      capacityLevel: (primary['capacityLevel'] as num?)?.toInt() ?? _user!.capacityLevel,
+      ptLevel: (primary['ptLevel'] as num?)?.toInt() ?? _user!.ptLevel,
+      employeesCount: (primary['employeesCount'] as num?)?.toInt() ?? _user!.employeesCount,
+      ceoLevel: (primary['ceoLevel'] as num?)?.toInt() ?? _user!.ceoLevel,
+      cfoLevel: (primary['cfoLevel'] as num?)?.toInt() ?? _user!.cfoLevel,
+      cmoLevel: (primary['cmoLevel'] as num?)?.toInt() ?? _user!.cmoLevel,
+      fundamentalScore: (primary['fundamentalScore'] as num?)?.toDouble() ?? _user!.fundamentalScore,
+    );
+  }
+
   Future<void> initGame() async {
     _isLoading = true;
     notifyListeners();
@@ -147,12 +206,16 @@ class GameProvider extends ChangeNotifier {
         final res = await ApiService.login(username: savedUsername, password: savedPassword);
         if (res['user'] != null) {
           _user = UserModel.fromJson(res['user']);
+          _syncUserWithPrimaryConglomerate();
           LocalCache.write('user', jsonEncode(res['user']));
         } else if (res['error'] != null && !res['error'].toString().startsWith('Koneksi')) {
           // Server menolak sesi (mis. akun diblokir / sandi berubah): keluarkan
           _user = null;
           _portfolio = null;
+          _conglomerate = [];
           await LocalCache.remove('user');
+          await LocalCache.remove('conglomerate');
+          await LocalCache.remove('portfolio');
         }
       }
 
@@ -217,9 +280,16 @@ class GameProvider extends ChangeNotifier {
         notifyListeners();
       },
       onTradeExecuted: (data) {
-        if (_user != null) {
-          refreshPortfolio();
+        if (_user == null) return;
+        if (data is Map) {
+          if (data['isBotTrade'] == true) return;
+          final uid = data['userId']?.toString();
+          final uname = (data['userName'] ?? data['username'])?.toString();
+          final isMyTrade = (uid != null && uid == _user!.id) ||
+              (uname != null && uname == _user!.username);
+          if (!isMyTrade) return;
         }
+        _scheduleSilentPortfolioSync();
       },
       onRunningTrade: (data) {
         if (data is Map) {
@@ -255,12 +325,48 @@ class GameProvider extends ChangeNotifier {
       },
       onBalanceUpdated: (data) {
         if (data is Map && _user != null && data['userId'] == _user!.id) {
-          refreshPortfolio();
+          final double? nextPersonal = (data['newBalance'] as num?)?.toDouble();
+          final double? nextComp = (data['companyBalance'] as num?)?.toDouble();
+          final String? targetCompId = data['companyId']?.toString();
+          bool changed = false;
+          if (nextPersonal != null) {
+            _user = _user!.copyWith(balanceIb: nextPersonal);
+            changed = true;
+          }
+          if (nextComp != null) {
+            if (targetCompId == null || targetCompId == 'primary') {
+              _user = _user!.copyWith(companyBalanceIb: nextComp);
+            }
+            _conglomerate = _conglomerate.map((e) {
+              final eId = (e['companyDbId'] ?? e['id'])?.toString();
+              final matchPrimary = (targetCompId == null || targetCompId == 'primary') && e['isPrimary'] == true;
+              if (matchPrimary || (targetCompId != null && (eId == targetCompId || e['id']?.toString() == targetCompId))) {
+                return {...e, 'companyBalance': nextComp};
+              }
+              return e;
+            }).toList();
+            changed = true;
+          }
+          if (changed) notifyListeners();
+          _scheduleSilentPortfolioSync();
         }
       },
       onCompanyRevenue: (data) {
         if (_user != null) {
-          refreshPortfolio();
+          if (data is Map && data['userId'] == _user!.id) {
+            final double? nextComp = ((data['newCompanyBalance'] ?? data['companyBalance']) as num?)?.toDouble();
+            if (nextComp != null) {
+              _user = _user!.copyWith(companyBalanceIb: nextComp);
+              _conglomerate = _conglomerate.map((e) {
+                if (e['isPrimary'] == true) {
+                  return {...e, 'companyBalance': nextComp};
+                }
+                return e;
+              }).toList();
+              notifyListeners();
+            }
+          }
+          _scheduleSilentPortfolioSync(delay: const Duration(seconds: 4));
         }
       },
       onCompanyStatusChanged: (data) {
@@ -363,14 +469,12 @@ class GameProvider extends ChangeNotifier {
       }
     }
 
-    await fetchBonds();
-    await fetchSubsidies();
-    await fetchTenders();
-
-    if (_user != null) {
-      await refreshPortfolio();
-      await fetchConglomerate();
-    }
+    await Future.wait([
+      fetchBonds(),
+      fetchSubsidies(),
+      fetchTenders(),
+      if (_user != null) refreshPortfolio(),
+    ]);
     notifyListeners();
 
     // Jaringan lambat: jika pasar/peringkat masih kosong, coba ulang otomatis di latar belakang
@@ -392,18 +496,26 @@ class GameProvider extends ChangeNotifier {
 
   Future<void> fetchConglomerate() async {
     if (_user == null) return;
+    final uid = _user!.id;
     try {
-      final list = await ApiService.getConglomerate(_user!.id);
+      final list = await ApiService.getConglomerate(uid);
+      if (list == null) return; // Pertahankan data terakhir di layar bila jaringan sesaat terganggu
       _conglomerate = list;
-      // Fetch shareholders for each company in background
-      for (final comp in list) {
+      _syncUserWithPrimaryConglomerate();
+      notifyListeners();
+
+      // Muat struktur pemegang saham (Cap Table) secara paralel di latar belakang tanpa menahan layar
+      unawaited(Future.wait(list.map((comp) async {
         final cid = comp['companyDbId']?.toString() ?? comp['id']?.toString() ?? 'primary';
         try {
-          final shList = await ApiService.getShareholders(companyId: cid, userId: _user!.id);
-          _shareholders[cid] = shList;
+          final shList = await ApiService.getShareholders(companyId: cid, userId: uid);
+          if (shList.isNotEmpty) {
+            _shareholders[cid] = shList;
+          }
         } catch (_) {}
-      }
-      notifyListeners();
+      })).then((_) {
+        if (_user?.id == uid) notifyListeners();
+      }));
     } catch (e) {
       debugPrint('Error fetching conglomerate: $e');
     }
@@ -411,14 +523,19 @@ class GameProvider extends ChangeNotifier {
 
   Future<void> refreshPortfolio() async {
     if (_user == null) return;
-    final p = await ApiService.getPortfolio(_user!.id);
-    if (p != null) {
+    final uid = _user!.id;
+    final results = await Future.wait([
+      ApiService.getPortfolio(uid),
+      fetchConglomerate(),
+    ]);
+    final p = results[0] as PortfolioSummaryModel?;
+    if (p != null && _user != null && _user!.id == uid) {
       _portfolio = p;
       _centralBankInterestRate = p.centralBankInterestRate;
       _user = _user!.copyWith(
         balanceIb: p.cashBalance,
         companyBalanceIb: p.companyBalance,
-        hasPt: p.hasPt,
+        hasPt: p.hasPt || _conglomerate.any((e) => e['isPrimary'] == true),
         ptName: p.ptName.isNotEmpty ? p.ptName : _user!.ptName,
         sector: p.sector.isNotEmpty ? p.sector : _user!.sector,
         isIpo: p.isIpo,
@@ -434,9 +551,9 @@ class GameProvider extends ChangeNotifier {
         creditScore: p.creditScore,
         isBlueChip: p.isBlueChip,
       );
+      _syncUserWithPrimaryConglomerate();
     }
-    await fetchConglomerate();
-    await fetchUserLoans();
+    unawaited(fetchUserLoans());
     notifyListeners();
   }
 
@@ -516,8 +633,12 @@ class GameProvider extends ChangeNotifier {
     await prefs.remove('saved_username');
     await prefs.remove('saved_password');
     await LocalCache.remove('user');
+    await LocalCache.remove('conglomerate');
+    await LocalCache.remove('portfolio');
     _user = null;
     _portfolio = null;
+    _conglomerate = [];
+    _shareholders.clear();
     notifyListeners();
   }
 
@@ -543,8 +664,7 @@ class GameProvider extends ChangeNotifier {
       );
       if (res['success'] == true) {
         await refreshPortfolio();
-        await fetchConglomerate();
-        await loadInitialData();
+        unawaited(loadInitialData());
         return null;
       }
       return res['error'] ?? 'Gagal mendirikan PT';
@@ -553,15 +673,48 @@ class GameProvider extends ChangeNotifier {
     }
   }
 
+  bool _matchesEntity(Map<String, dynamic> entity, String? companyId) {
+    final isTargetPrimary = companyId == null || companyId == 'primary';
+    if (isTargetPrimary) return entity['isPrimary'] == true;
+    return entity['id']?.toString() == companyId || entity['companyDbId']?.toString() == companyId;
+  }
+
   // Suntik Modal Kas Pribadi -> Kas Perusahaan
   Future<String?> fundCompany(double amount, {String? companyId}) async {
     if (_user == null) return 'Silakan login terlebih dahulu';
     try {
       final res = await ApiService.fundCompany(userId: _user!.id, amount: amount, companyId: companyId);
       if (res['success'] == true) {
-        await refreshPortfolio();
-        await fetchConglomerate();
-        await loadInitialData();
+        final double? nextPersonal = (res['newPersonalBalance'] as num?)?.toDouble();
+        final double? nextComp = (res['newCompanyBalance'] as num?)?.toDouble();
+        final bool isPrimaryTarget = companyId == null ||
+            companyId == 'primary' ||
+            _conglomerate.any((e) => e['isPrimary'] == true && _matchesEntity(e, companyId));
+
+        if (_user != null) {
+          _user = _user!.copyWith(
+            balanceIb: nextPersonal ?? (_user!.balanceIb - amount),
+            companyBalanceIb: isPrimaryTarget
+                ? (nextComp ?? (_user!.companyBalanceIb + amount))
+                : _user!.companyBalanceIb,
+          );
+        }
+        if (nextComp != null && _conglomerate.isNotEmpty) {
+          _conglomerate = _conglomerate.map((e) {
+            if (_matchesEntity(e, companyId)) {
+              return {
+                ...e,
+                'companyBalance': nextComp,
+                if (res['rescued'] == true) 'isSeized': false,
+                if (res['rescued'] == true) 'status': 'HEALTHY',
+              };
+            }
+            return e;
+          }).toList();
+          unawaited(LocalCache.write('conglomerate', jsonEncode(_conglomerate)));
+        }
+        notifyListeners();
+        _scheduleSilentPortfolioSync(delay: const Duration(milliseconds: 800));
         return null;
       }
       return res['error'] ?? 'Gagal menyuntik modal';
@@ -576,9 +729,31 @@ class GameProvider extends ChangeNotifier {
     try {
       final res = await ApiService.withdrawCompany(userId: _user!.id, amount: amount, companyId: companyId);
       if (res['success'] == true) {
-        await refreshPortfolio();
-        await fetchConglomerate();
-        await loadInitialData();
+        final double? nextPersonal = (res['newPersonalBalance'] as num?)?.toDouble();
+        final double? nextComp = (res['newCompanyBalance'] as num?)?.toDouble();
+        final bool isPrimaryTarget = companyId == null ||
+            companyId == 'primary' ||
+            _conglomerate.any((e) => e['isPrimary'] == true && _matchesEntity(e, companyId));
+
+        if (_user != null) {
+          _user = _user!.copyWith(
+            balanceIb: nextPersonal ?? (_user!.balanceIb + amount),
+            companyBalanceIb: isPrimaryTarget
+                ? (nextComp ?? (_user!.companyBalanceIb - amount))
+                : _user!.companyBalanceIb,
+          );
+        }
+        if (nextComp != null && _conglomerate.isNotEmpty) {
+          _conglomerate = _conglomerate.map((e) {
+            if (_matchesEntity(e, companyId)) {
+              return {...e, 'companyBalance': nextComp};
+            }
+            return e;
+          }).toList();
+          unawaited(LocalCache.write('conglomerate', jsonEncode(_conglomerate)));
+        }
+        notifyListeners();
+        _scheduleSilentPortfolioSync(delay: const Duration(milliseconds: 800));
         return null;
       }
       return res['error'] ?? 'Gagal menarik dividen';
@@ -593,8 +768,47 @@ class GameProvider extends ChangeNotifier {
     try {
       final res = await ApiService.upgradeCompany(userId: _user!.id, type: type, companyId: companyId);
       if (res['success'] == true) {
-        await refreshPortfolio();
-        await fetchConglomerate();
+        final int? nextLvl = (res['newLevel'] as num?)?.toInt();
+        final int? nextPtLvl = (res['newPtLevel'] as num?)?.toInt();
+        final double? nextCompBal = (res['newCompanyBalance'] as num?)?.toDouble();
+        final double? nextFund = (res['fundamentalScore'] as num?)?.toDouble();
+        final bool isPrimaryTarget = companyId == null ||
+            companyId == 'primary' ||
+            res['companyId'] == 'primary' ||
+            _conglomerate.any((e) => e['isPrimary'] == true && _matchesEntity(e, companyId));
+
+        if (isPrimaryTarget && _user != null) {
+          _user = _user!.copyWith(
+            companyBalanceIb: nextCompBal ?? _user!.companyBalanceIb,
+            ptLevel: nextPtLvl ?? _user!.ptLevel,
+            fundamentalScore: nextFund ?? _user!.fundamentalScore,
+            rdLevel: type == 'rd' ? (nextLvl ?? (_user!.rdLevel + 1)) : _user!.rdLevel,
+            marketingLevel: type == 'marketing' ? (nextLvl ?? (_user!.marketingLevel + 1)) : _user!.marketingLevel,
+            hrLevel: type == 'hr' ? (nextLvl ?? (_user!.hrLevel + 1)) : _user!.hrLevel,
+            capacityLevel: type == 'capacity' ? (nextLvl ?? (_user!.capacityLevel + 1)) : _user!.capacityLevel,
+          );
+        }
+
+        if (_conglomerate.isNotEmpty) {
+          _conglomerate = _conglomerate.map((e) {
+            if (_matchesEntity(e, companyId)) {
+              final updated = <String, dynamic>{...e};
+              if (nextCompBal != null) updated['companyBalance'] = nextCompBal;
+              if (nextPtLvl != null) updated['ptLevel'] = nextPtLvl;
+              if (nextFund != null) updated['fundamentalScore'] = nextFund;
+              if (type == 'rd' && nextLvl != null) updated['rdLevel'] = nextLvl;
+              if (type == 'marketing' && nextLvl != null) updated['marketingLevel'] = nextLvl;
+              if (type == 'hr' && nextLvl != null) updated['hrLevel'] = nextLvl;
+              if (type == 'capacity' && nextLvl != null) updated['capacityLevel'] = nextLvl;
+              return updated;
+            }
+            return e;
+          }).toList();
+          unawaited(LocalCache.write('conglomerate', jsonEncode(_conglomerate)));
+        }
+
+        notifyListeners();
+        _scheduleSilentPortfolioSync(delay: const Duration(milliseconds: 1200));
         return null;
       }
       return res['error'] ?? 'Gagal upgrade';
@@ -609,8 +823,45 @@ class GameProvider extends ChangeNotifier {
     try {
       final res = await ApiService.hireStaff(userId: _user!.id, type: type, companyId: companyId);
       if (res['success'] == true) {
-        await refreshPortfolio();
-        await fetchConglomerate();
+        final double? nextCompBal = (res['newCompanyBalance'] as num?)?.toDouble();
+        final int? nextEmp = (res['employeesCount'] as num?)?.toInt();
+        final int? nextCeo = (res['ceoLevel'] as num?)?.toInt();
+        final int? nextCfo = (res['cfoLevel'] as num?)?.toInt();
+        final int? nextCmo = (res['cmoLevel'] as num?)?.toInt();
+        final bool isPrimaryTarget = companyId == null ||
+            companyId == 'primary' ||
+            res['companyId'] == 'primary' ||
+            _conglomerate.any((e) => e['isPrimary'] == true && _matchesEntity(e, companyId));
+
+        if (isPrimaryTarget && _user != null) {
+          _user = _user!.copyWith(
+            companyBalanceIb: nextCompBal ?? _user!.companyBalanceIb,
+            employeesCount: nextEmp ?? _user!.employeesCount,
+            ceoLevel: nextCeo ?? _user!.ceoLevel,
+            cfoLevel: nextCfo ?? _user!.cfoLevel,
+            cmoLevel: nextCmo ?? _user!.cmoLevel,
+          );
+        }
+
+        if (_conglomerate.isNotEmpty) {
+          _conglomerate = _conglomerate.map((e) {
+            if (_matchesEntity(e, companyId)) {
+              return {
+                ...e,
+                if (nextCompBal != null) 'companyBalance': nextCompBal,
+                if (nextEmp != null) 'employeesCount': nextEmp,
+                if (nextCeo != null) 'ceoLevel': nextCeo,
+                if (nextCfo != null) 'cfoLevel': nextCfo,
+                if (nextCmo != null) 'cmoLevel': nextCmo,
+              };
+            }
+            return e;
+          }).toList();
+          unawaited(LocalCache.write('conglomerate', jsonEncode(_conglomerate)));
+        }
+
+        notifyListeners();
+        _scheduleSilentPortfolioSync(delay: const Duration(milliseconds: 1200));
         return null;
       }
       return res['error'] ?? 'Gagal merekrut';

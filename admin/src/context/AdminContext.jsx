@@ -73,8 +73,18 @@ export function AdminProvider({ children }) {
     };
   }, [refreshAll]);
 
-  // ---------- Realtime ----------
+  // ---------- Realtime (Throttled Silent Background Sync) ----------
+  const throttleTimers = useRef({});
+  const scheduleSilent = useCallback((key, fn, delayMs = 3500) => {
+    if (throttleTimers.current[key]) return;
+    throttleTimers.current[key] = setTimeout(() => {
+      delete throttleTimers.current[key];
+      if (mounted.current) fn();
+    }, delayMs);
+  }, []);
+
   useEffect(() => {
+    const timersMap = throttleTimers.current;
     const onConnect = () => setOnline(true);
     const onDisconnect = () => setOnline(false);
 
@@ -84,12 +94,16 @@ export function AdminProvider({ children }) {
       setCompanies((prev) => prev.map((c) => (map.has(c.id) ? { ...c, ...map.get(c.id) } : c)));
     };
     const onTrade = (t) => {
-      pushFeed(`💰 ${t.userName} ${t.type} ${t.lots} lot ${t.symbol}`, 'info');
-      refreshTransactions();
+      if (!t) return;
+      const trader = t.userName || t.username || 'Investor';
+      if (!t.isBotTrade) {
+        pushFeed(`💰 ${trader} ${t.type} ${t.lots} lot ${t.symbol}`, 'info');
+      }
+      scheduleSilent('transactions', refreshTransactions, 4000);
     };
     const onMacro = (ev) => {
       pushFeed(`📢 Event makro aktif: ${ev.title} (${ev.priceImpactPct > 0 ? '+' : ''}${ev.priceImpactPct}%)`, 'info');
-      refreshOverview();
+      scheduleSilent('overview', refreshOverview, 1500);
     };
     const onRate = (d) => {
       const rate = d.interestRate ?? d.rate;
@@ -98,16 +112,30 @@ export function AdminProvider({ children }) {
         pushFeed(`🏛️ Suku bunga acuan ditetapkan ${rate}% p.a.`, 'info');
       }
     };
-    const onStatus = () => { refreshCompanies(); refreshOversight(); };
+    const onStatus = () => {
+      scheduleSilent('companies', refreshCompanies, 2000);
+      scheduleSilent('oversight', refreshOversight, 2000);
+    };
     const onUma = (d) => {
       pushFeed(d?.uma ? `⚠️ UMA ${d.source === 'AUTO' ? 'otomatis' : 'manual'}: ${d.symbol}` : `✅ UMA dicabut: ${d?.symbol || ''}`, 'info');
-      refreshCompanies(); refreshOversight();
+      scheduleSilent('companies', refreshCompanies, 1500);
+      scheduleSilent('oversight', refreshOversight, 1500);
     };
     const onNews = (n) => n?.title && pushFeed(n.title, 'info');
     const onIntervention = (d) => { pushFeed(`🏛️ QE: ${d.symbol} disuntik likuiditas`, 'info'); };
-    const onSeized = () => { refreshCompanies(); refreshOversight(); refreshOverview(); };
-    const onUserUpdate = () => { refreshUsers(); refreshOverview(); };
-    const onTreasury = () => { refreshOverview(); refreshBank(); };
+    const onSeized = () => {
+      scheduleSilent('companies', refreshCompanies, 1000);
+      scheduleSilent('oversight', refreshOversight, 1000);
+      scheduleSilent('overview', refreshOverview, 1000);
+    };
+    const onUserUpdate = () => {
+      scheduleSilent('users', refreshUsers, 3500);
+      scheduleSilent('overview', refreshOverview, 3500);
+    };
+    const onTreasury = () => {
+      scheduleSilent('overview', refreshOverview, 3500);
+      scheduleSilent('bank', refreshBank, 3500);
+    };
 
     socket.on('connect', onConnect);
     socket.on('disconnect', onDisconnect);
@@ -146,8 +174,9 @@ export function AdminProvider({ children }) {
       socket.off('treasury:updated', onTreasury);
       socket.off('market:breaking_news', onNews);
       socket.off('market:intervention', onIntervention);
+      Object.values(timersMap).forEach(clearTimeout);
     };
-  }, [pushFeed, refreshCompanies, refreshOversight, refreshOverview, refreshTransactions, refreshUsers, refreshBank]);
+  }, [pushFeed, scheduleSilent, refreshCompanies, refreshOversight, refreshOverview, refreshTransactions, refreshUsers, refreshBank]);
 
   // ---------- Aksi ----------
   /** Menjalankan aksi API: toast sukses/gagal + refresh data terkait. Mengembalikan true bila berhasil. */
@@ -245,9 +274,15 @@ export function AdminProvider({ children }) {
     };
   }, [run, refreshOversight, refreshCompanies, refreshBank, refreshUsers, refreshOverview, refreshSettings]);
 
+  const toast = useMemo(() => ({
+    success: (m) => notify(m, 'success'),
+    error: (m) => notify(m, 'error'),
+    info: (m) => notify(m, 'info'),
+  }), [notify]);
+
   const value = {
     overview, marketIndex, companies, users, bank, oversight, transactions, settings, feed, toasts, online, loading,
-    refreshAll, notify, actions,
+    refreshAll, notify, toast, actions,
   };
 
   return <AdminContext.Provider value={value}>{children}</AdminContext.Provider>;

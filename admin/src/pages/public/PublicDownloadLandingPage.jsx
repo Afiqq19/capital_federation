@@ -23,18 +23,18 @@ import {
 
 export default function PublicDownloadLandingPage() {
   const [versionInfo, setVersionInfo] = useState({
-    version: '1.6.8',
-    buildNumber: 22,
-    apkVersion: 'v1.6.8 (Build 22)',
+    version: '1.6.9',
+    buildNumber: 23,
+    apkVersion: 'v1.6.9 (Build 23)',
     minAndroid: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
     fileSizeMb: '25.3 MB',
     downloadUrl: '/api/download/apk',
-    downloadCount: 196,
+    downloadCount: 315,
     totalCompanies: 504,
     totalPlayers: 1055,
-    sha256: '2f98c82e172ae1d484ffe15c3f32b539812f8d203b45d780b899f28baa38a2d8',
+    sha256: 'd636724b056f458dc06a0737439ae047a54a8f9c198becd89e2fe15325ebc609',
     releaseNotes:
-      'Ekspansi 12 Naga & 1.000+ Konglomerat, Perbaikan Profil Realtime, Validasi Pendirian PT, dan Performa Optimal',
+      'v1.6.9: Proteksi Permanen Kepemilikan PT Pendiri, Sinkronisasi Penuh Upgrade R&D PT Utama & Anak Perusahaan, Akselerasi Server <100ms, dan Refresh Halus di Latar Belakang Tanpa Kedip.',
   });
   const [topLeaders, setTopLeaders] = useState([]);
   const [topStocks, setTopStocks] = useState([]);
@@ -55,6 +55,7 @@ export default function PublicDownloadLandingPage() {
   };
 
   useEffect(() => {
+    let active = true;
     // 1. Amati URL awal (e.g. /peringkat, /tentang, /fitur, /spesifikasi)
     const handleLocation = () => {
       const clean = (window.location.pathname || '').replace(/^\/+|\/+$/g, '').toLowerCase();
@@ -65,37 +66,47 @@ export default function PublicDownloadLandingPage() {
     handleLocation();
     window.addEventListener('popstate', handleLocation);
 
+    const syncLiveMarketSilently = () => {
+      // Fetch Top 12 Leaders (12 Naga & Taipan) di latar belakang tanpa kedip
+      fetch('/api/leaderboard')
+        .then((r) => r.json())
+        .then((data) => {
+          if (active && Array.isArray(data) && data.length > 0) {
+            setTopLeaders(data.slice(0, 10));
+          }
+        })
+        .catch(() => {});
+
+      // Fetch Stocks di latar belakang tanpa kedip
+      fetch('/api/companies')
+        .then((r) => r.json())
+        .then((data) => {
+          if (active && Array.isArray(data) && data.length > 0) {
+            setTopStocks(data.slice(0, 8));
+          }
+        })
+        .catch(() => {});
+    };
+
     // 2. Fetch Version Info
     fetch('/api/version')
       .then((r) => r.json())
       .then((data) => {
-        if (data && data.version) {
+        if (active && data && data.version) {
           setVersionInfo((prev) => ({ ...prev, ...data }));
         }
       })
       .catch(() => {});
 
-    // 3. Fetch Top 12 Leaders (12 Naga & Taipan)
-    fetch('/api/leaderboard')
-      .then((r) => r.json())
-      .then((data) => {
-        if (Array.isArray(data)) {
-          setTopLeaders(data.slice(0, 10));
-        }
-      })
-      .catch(() => {});
+    // 3. Initial + Silent Background Refresh (tiap 25 detik tanpa loading spinner)
+    syncLiveMarketSilently();
+    const bgInterval = setInterval(syncLiveMarketSilently, 25000);
 
-    // 4. Fetch Stocks
-    fetch('/api/companies')
-      .then((r) => r.json())
-      .then((data) => {
-        if (Array.isArray(data)) {
-          setTopStocks(data.slice(0, 8));
-        }
-      })
-      .catch(() => {});
-
-    return () => window.removeEventListener('popstate', handleLocation);
+    return () => {
+      active = false;
+      clearInterval(bgInterval);
+      window.removeEventListener('popstate', handleLocation);
+    };
   }, []);
 
   const handleDownloadApk = () => {

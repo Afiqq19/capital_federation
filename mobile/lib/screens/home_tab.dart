@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -27,6 +28,21 @@ class _HomeTabState extends State<HomeTab> {
   String _selectedCompanyId = 'primary';
   final Set<String> _fetchingShareholders = {};
   bool _isUpgradingBusiness = false;
+
+  double _resolveEntityCash(UserModel user, Map<String, dynamic>? entity, {required bool isPrimary}) {
+    final entityCash = (entity?['companyBalance'] as num?)?.toDouble();
+    if (!isPrimary) return entityCash ?? 0.0;
+    if (entityCash == null) return user.companyBalanceIb;
+    if (user.companyBalanceIb < 0 || entityCash < 0) {
+      return user.companyBalanceIb < 0 ? user.companyBalanceIb : entityCash;
+    }
+    return math.max(user.companyBalanceIb, entityCash);
+  }
+
+  String? _resolveEntityCompanyId(Map<String, dynamic>? entity, {required bool isPrimary}) {
+    if (isPrimary) return 'primary';
+    return (entity?['companyDbId'] ?? entity?['id'])?.toString();
+  }
 
   @override
   void initState() {
@@ -873,9 +889,9 @@ class _HomeTabState extends State<HomeTab> {
   // MODE 2: SUDAH PUNYA PT / HASIL AKUISISI
   // ==========================================
   Widget _buildTycoonView(BuildContext context, GameProvider provider, UserModel user, Map<String, dynamic> activeEntity) {
-    final double companyBalance = (activeEntity['companyBalance'] ?? user.companyBalanceIb).toDouble();
     final bool isPrimary = activeEntity['isPrimary'] == true || (!activeEntity.containsKey('isPrimary') && user.hasPt);
-    final bool isEntityIpo = isPrimary ? user.isIpo : (activeEntity['isIpo'] == true || activeEntity['isIpo'] == 1);
+    final double companyBalance = _resolveEntityCash(user, activeEntity, isPrimary: isPrimary);
+    final bool isEntityIpo = isPrimary ? (user.isIpo || activeEntity['isIpo'] == true || activeEntity['isIpo'] == 1) : (activeEntity['isIpo'] == true || activeEntity['isIpo'] == 1);
     final bool isSeized = activeEntity['isSeized'] == true;
     final String? seizeReason = activeEntity['seizeReason']?.toString();
     final bool isPailit = (seizeReason != null && seizeReason.toUpperCase().contains('PAILIT')) || activeEntity['status'] == 'BANKRUPT';
@@ -1639,11 +1655,9 @@ class _HomeTabState extends State<HomeTab> {
   // --- IPO CARD ---
   Widget _buildIpoCard(BuildContext context, GameProvider provider, UserModel user, {required Map<String, dynamic> activeEntity}) {
     final bool isPrimary = activeEntity['isPrimary'] == true;
-    final double companyBalance = isPrimary
-        ? user.companyBalanceIb
-        : ((activeEntity['companyBalance'] as num?)?.toDouble() ?? 0.0);
+    final double companyBalance = _resolveEntityCash(user, activeEntity, isPrimary: isPrimary);
     final int ptLevel = isPrimary
-        ? user.ptLevel
+        ? math.max(user.ptLevel, (activeEntity['ptLevel'] as num?)?.toInt() ?? 1)
         : ((activeEntity['ptLevel'] as num?)?.toInt() ?? 1);
     final String entityName = isPrimary ? user.ptName : (activeEntity['name'] ?? 'Perusahaan');
     const double minIpoKas = 250000000.0; // Syarat Kas Min IB 250 Juta
@@ -2609,12 +2623,10 @@ class _HomeTabState extends State<HomeTab> {
 
     final bool isPrimary = activeEntity == null || activeEntity['isPrimary'] == true;
     final String companyName = isPrimary
-        ? (user.ptName.isNotEmpty ? 'PT ${user.ptName}' : 'PT Utama')
+        ? (activeEntity?['name']?.toString() ?? (user.ptName.isNotEmpty ? 'PT ${user.ptName}' : 'PT Utama'))
         : (activeEntity['name'] ?? 'PT');
-    final String? companyId = isPrimary ? null : activeEntity['id']?.toString();
-    final double companyBalance = isPrimary
-        ? user.companyBalanceIb
-        : ((activeEntity['companyBalance'] ?? 0.0) as num).toDouble();
+    final String? companyId = _resolveEntityCompanyId(activeEntity, isPrimary: isPrimary);
+    final double companyBalance = _resolveEntityCash(user, activeEntity, isPrimary: isPrimary);
 
     final double maxAmount = isInject ? user.balanceIb : companyBalance;
 
@@ -3260,8 +3272,9 @@ class _HomeTabState extends State<HomeTab> {
   void _hireMember(BuildContext context, GameProvider provider, String type, double cost, {Map<String, dynamic>? activeEntity}) async {
     final user = provider.user;
     if (user == null) return;
-    final double companyBalance = (activeEntity?['companyBalance'] ?? user.companyBalanceIb).toDouble();
-    final companyId = (activeEntity != null && activeEntity['isPrimary'] != true) ? activeEntity['id']?.toString() : null;
+    final bool isPrimary = activeEntity == null || activeEntity['isPrimary'] == true;
+    final double companyBalance = _resolveEntityCash(user, activeEntity, isPrimary: isPrimary);
+    final String? companyId = _resolveEntityCompanyId(activeEntity, isPrimary: isPrimary);
 
     if (companyBalance < cost) {
       final deficit = cost - companyBalance;
@@ -3291,7 +3304,7 @@ class _HomeTabState extends State<HomeTab> {
             ElevatedButton(
               onPressed: () {
                 Navigator.pop(ctx);
-                _showTransferModal(context, provider, isInject: true);
+                _showTransferModal(context, provider, isInject: true, activeEntity: activeEntity);
               },
               style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF38BDF8)),
               child: const Text('💸 SUNTIK MODAL', style: TextStyle(color: Color(0xFF082F49), fontWeight: FontWeight.bold, fontSize: 11)),
@@ -4651,8 +4664,8 @@ class _HomeTabState extends State<HomeTab> {
     final user = provider.user;
     if (user == null) return;
 
-    final bool isPrimary = activeEntity['isPrimary'] == true;
-    final String? companyId = isPrimary ? null : (activeEntity['id'] as String?);
+    final bool isPrimary = activeEntity['isPrimary'] == true || (!activeEntity.containsKey('isPrimary') && user.hasPt);
+    final String? companyId = _resolveEntityCompanyId(activeEntity, isPrimary: isPrimary);
     final String entityName = (activeEntity['name'] as String?) ?? (isPrimary ? user.ptName : 'Perusahaan');
 
     int currentLvl = 1;
@@ -4666,9 +4679,7 @@ class _HomeTabState extends State<HomeTab> {
       currentLvl = (activeEntity['capacityLevel'] as num?)?.toInt() ?? user.capacityLevel;
     }
 
-    final double availableCash = isPrimary
-        ? user.companyBalanceIb
-        : ((activeEntity['companyBalance'] as num?)?.toDouble() ?? 0.0);
+    final double availableCash = _resolveEntityCash(user, activeEntity, isPrimary: isPrimary);
 
     final cost = 5000000.0 * currentLvl;
     if (availableCash < cost) {

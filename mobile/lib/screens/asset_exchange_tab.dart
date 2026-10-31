@@ -52,9 +52,15 @@ class _AssetExchangeTabState extends State<AssetExchangeTab> with SingleTickerPr
     super.dispose();
   }
 
-  Future<void> _loadData() async {
+  Future<void> _loadData({bool silent = false}) async {
     if (!mounted) return;
-    setState(() => _isLoading = true);
+    final hasExistingData = _crisisCompanies.isNotEmpty ||
+        _auctions.isNotEmpty ||
+        _incomingProposals.isNotEmpty ||
+        _outgoingProposals.isNotEmpty;
+    if (!silent && !hasExistingData) {
+      setState(() => _isLoading = true);
+    }
     final userId = context.read<GameProvider>().user?.id ?? '';
 
     final results = await Future.wait([

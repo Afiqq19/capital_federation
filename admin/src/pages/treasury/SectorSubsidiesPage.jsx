@@ -34,25 +34,30 @@ const SECTOR_ICONS = {
 };
 
 export default function SectorSubsidiesPage() {
-  const { toast } = useAdmin();
+  const { notify } = useAdmin();
+  const toast = {
+    success: (m) => notify?.(m, 'success'),
+    error: (m) => notify?.(m, 'error'),
+    info: (m) => notify?.(m, 'info'),
+  };
   const [subsidies, setSubsidies] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
-  const loadSubsidies = async () => {
-    setIsLoading(true);
+  const loadSubsidies = async (silent = false) => {
+    if (silent !== true) setIsLoading(true);
     try {
       const data = await adminApi.subsidiesStatus();
       setSubsidies(data || []);
     } catch (err) {
-      toast?.error(err.message || 'Gagal memuat status subsidi sektoral');
+      toast.error(err.message || 'Gagal memuat status subsidi sektoral');
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    loadSubsidies();
+    loadSubsidies(false);
   }, []);
 
   const handleToggle = async (item) => {
@@ -64,10 +69,10 @@ export default function SectorSubsidiesPage() {
         effectiveTaxRatePct: item.effective_tax_rate_pct,
         operationalGrantIb: item.operational_grant_ib,
       });
-      toast?.success(res.message);
-      loadSubsidies();
+      toast.success(res.message);
+      loadSubsidies(true);
     } catch (err) {
-      toast?.error(err.message || 'Gagal mengubah status subsidi');
+      toast.error(err.message || 'Gagal mengubah status subsidi');
     }
   };
 
@@ -81,10 +86,10 @@ export default function SectorSubsidiesPage() {
     setIsSaving(true);
     try {
       const res = await adminApi.subsidiesBatchSave({ items: subsidies });
-      toast?.success(res.message);
-      loadSubsidies();
+      toast.success(res.message);
+      loadSubsidies(true);
     } catch (err) {
-      toast?.error(err.message || 'Gagal menyimpan perubahan');
+      toast.error(err.message || 'Gagal menyimpan perubahan');
     } finally {
       setIsSaving(false);
     }

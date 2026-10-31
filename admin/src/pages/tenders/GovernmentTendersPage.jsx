@@ -101,7 +101,7 @@ export default function GovernmentTendersPage() {
       toast?.success(res.message);
       setIsEditModalOpen(false);
       setEditingTender(null);
-      loadTenders();
+      loadTenders(true);
     } catch (err) {
       toast?.error(err.message || 'Gagal memperbarui tender');
     } finally {
@@ -116,14 +116,14 @@ export default function GovernmentTendersPage() {
     try {
       const res = await adminApi.tendersDelete(tenderId);
       toast?.success(res.message);
-      loadTenders();
+      loadTenders(true);
     } catch (err) {
       toast?.error(err.message || 'Gagal menghapus tender');
     }
   };
 
-  const loadTenders = async () => {
-    setIsLoading(true);
+  const loadTenders = async (silent = false) => {
+    if (silent !== true) setIsLoading(true);
     try {
       const data = await adminApi.tendersList();
       setTenders(data || []);
@@ -135,7 +135,7 @@ export default function GovernmentTendersPage() {
   };
 
   useEffect(() => {
-    loadTenders();
+    loadTenders(false);
   }, []);
 
   const openDetailModal = async (tender) => {
@@ -170,7 +170,7 @@ export default function GovernmentTendersPage() {
         minCapacityStaff: '10',
         deadlineDays: '3',
       });
-      loadTenders();
+      loadTenders(true);
     } catch (err) {
       toast?.error(err.message || 'Gagal membuka tender');
     } finally {
@@ -189,7 +189,7 @@ export default function GovernmentTendersPage() {
       toast?.success(res.message);
       setSelectedTender(null);
       setTenderDetail(null);
-      loadTenders();
+      loadTenders(true);
     } catch (err) {
       toast?.error(err.message || 'Gagal menetapkan pemenang tender');
     } finally {

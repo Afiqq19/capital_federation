@@ -27,10 +27,10 @@ export default function LiveCourtRoomModal({ open, onClose, courtCase, onVerdict
   const [submittingVerdict, setSubmittingVerdict] = useState(false);
   const messagesEndRef = useRef(null);
 
-  const fetchRoom = async () => {
+  const fetchRoom = async (silent = false) => {
     if (!courtCase) return;
     try {
-      setLoading(true);
+      if (silent !== true) setLoading(true);
       const data = await adminApi.courtRoom(courtCase.id);
       setRoomData(data);
       setMessages(data.messages || []);
@@ -43,11 +43,11 @@ export default function LiveCourtRoomModal({ open, onClose, courtCase, onVerdict
 
   useEffect(() => {
     if (open && courtCase) {
-      fetchRoom();
+      fetchRoom(false);
 
       const handlePresence = (data) => {
         if (data.caseId === courtCase.id) {
-          fetchRoom();
+          fetchRoom(true);
         }
       };
 
@@ -59,7 +59,7 @@ export default function LiveCourtRoomModal({ open, onClose, courtCase, onVerdict
 
       const handleVerdict = (v) => {
         if (v.caseId === courtCase.id) {
-          fetchRoom();
+          fetchRoom(true);
         }
       };
 
@@ -117,7 +117,7 @@ export default function LiveCourtRoomModal({ open, onClose, courtCase, onVerdict
         verdictStatus,
         adminJudgeOverride: true,
       });
-      await fetchRoom();
+      await fetchRoom(true);
       if (onVerdictSuccess) onVerdictSuccess();
     } catch (err) {
       alert('Gagal mengetuk palu vonis: ' + err.message);

@@ -33,45 +33,53 @@ class ApiService {
     'http://192.168.1.100:5000', // Hosting
   ];
 
+  static bool _isDiscovering = false;
+
   static Future<void> autoDiscoverHost() async {
     if (kIsWeb) {
       baseUrl = 'http://localhost:4000';
       return;
     }
+    if (_isDiscovering) return;
+    _isDiscovering = true;
 
-    // 1. Cepat: Tes dulu host aktif saat ini / domain produksi utama (biasanya hanya 100-250ms)
     try {
-      final quickCheck = await http
-          .get(Uri.parse('$baseUrl/api/admin/overview'))
-          .timeout(const Duration(milliseconds: 900));
-      if (quickCheck.statusCode == 200) {
-        debugPrint('✅ Fast-connected ke Backend di $baseUrl');
-        return;
-      }
-    } catch (_) {}
-
-    // 2. Parallel host pinging to find reachable server fast (< 800ms)
-    final pingFutures = _candidateHosts.map((host) async {
+      // 1. Cepat: Tes dulu host aktif saat ini / domain produksi utama menggunakan endpoint ringan /api/version (<30ms)
       try {
-        final res = await http
-            .get(Uri.parse('$host/api/admin/overview'))
-            .timeout(const Duration(milliseconds: 1000));
-        if (res.statusCode == 200) {
-          return host;
+        final quickCheck = await http
+            .get(Uri.parse('$baseUrl/api/version'))
+            .timeout(const Duration(milliseconds: 1500));
+        if (quickCheck.statusCode == 200) {
+          debugPrint('✅ Fast-connected ke Backend di $baseUrl');
+          return;
         }
       } catch (_) {}
-      return null;
-    });
 
-    final results = await Future.wait(pingFutures);
-    for (final host in results) {
-      if (host != null) {
-        baseUrl = host;
-        debugPrint('✅ Connected to Capital Federation Backend at $baseUrl');
-        return;
+      // 2. Parallel host pinging to find reachable server fast
+      final pingFutures = _candidateHosts.map((host) async {
+        try {
+          final res = await http
+              .get(Uri.parse('$host/api/version'))
+              .timeout(const Duration(milliseconds: 1500));
+          if (res.statusCode == 200) {
+            return host;
+          }
+        } catch (_) {}
+        return null;
+      });
+
+      final results = await Future.wait(pingFutures);
+      for (final host in results) {
+        if (host != null) {
+          baseUrl = host;
+          debugPrint('✅ Connected to Capital Federation Backend at $baseUrl');
+          return;
+        }
       }
+      debugPrint('⚠️ Menggunakan fallback host: $baseUrl');
+    } finally {
+      _isDiscovering = false;
     }
-    debugPrint('⚠️ Menggunakan fallback host: $baseUrl');
   }
 
   // Fetch Central Bank & Monetary Settings
@@ -85,9 +93,9 @@ class ApiService {
     return null;
   }
 
-  static const String currentAppVersion = '1.6.8';
-  static const int currentBuildNumber = 22;
-  static const String currentApkDisplayVersion = 'v1.6.8-CFX Production (Build 22)';
+  static const String currentAppVersion = '1.6.9';
+  static const int currentBuildNumber = 23;
+  static const String currentApkDisplayVersion = 'v1.6.9-CFX Production (Build 23)';
 
   // Fetch Live Server Version & Update Detection Info
   static Future<Map<String, dynamic>?> getServerVersion() async {
@@ -223,7 +231,7 @@ class ApiService {
           'amount': amount,
           if (companyId != null) 'companyId': companyId,
         }),
-      ).timeout(const Duration(seconds: 5));
+      ).timeout(const Duration(seconds: 15));
       return jsonDecode(response.body);
     } catch (e) {
       autoDiscoverHost();
@@ -246,7 +254,7 @@ class ApiService {
           'amount': amount,
           if (companyId != null) 'companyId': companyId,
         }),
-      ).timeout(const Duration(seconds: 5));
+      ).timeout(const Duration(seconds: 15));
       return jsonDecode(response.body);
     } catch (e) {
       autoDiscoverHost();
@@ -269,7 +277,7 @@ class ApiService {
           'type': type,
           if (companyId != null) 'companyId': companyId,
         }),
-      ).timeout(const Duration(seconds: 5));
+      ).timeout(const Duration(seconds: 15));
       return jsonDecode(response.body);
     } catch (e) {
       autoDiscoverHost();
@@ -371,7 +379,7 @@ class ApiService {
           'type': type,
           if (companyId != null) 'companyId': companyId,
         }),
-      ).timeout(const Duration(seconds: 5));
+      ).timeout(const Duration(seconds: 15));
       return jsonDecode(response.body);
     } catch (e) {
       autoDiscoverHost();
@@ -380,19 +388,20 @@ class ApiService {
   }
 
   // Ambil Daftar Seluruh PT dalam Konglomerasi (PT Utama + Hasil Akuisisi)
-  static Future<List<Map<String, dynamic>>> getConglomerate(String userId) async {
+  static Future<List<Map<String, dynamic>>?> getConglomerate(String userId) async {
     try {
       final response = await http
           .get(Uri.parse('$baseUrl/api/user/conglomerate/$userId'))
           .timeout(const Duration(seconds: 20));
       if (response.statusCode == 200) {
+        LocalCache.write('conglomerate', response.body);
         final List<dynamic> list = jsonDecode(response.body);
         return list.map((e) => Map<String, dynamic>.from(e)).toList();
       }
     } catch (e) {
       autoDiscoverHost();
     }
-    return [];
+    return null;
   }
 
   // Ambil Rincian Biaya Penebusan PT Disita (Denda Sanksi PNAF + Utang Bank BCF + Bunga)
@@ -556,6 +565,7 @@ class ApiService {
     try {
       final response = await http.get(Uri.parse('$baseUrl/api/portfolio/$userId')).timeout(const Duration(seconds: 20));
       if (response.statusCode == 200) {
+        LocalCache.write('portfolio', response.body);
         return PortfolioSummaryModel.fromJson(jsonDecode(response.body));
       }
     } catch (e) {

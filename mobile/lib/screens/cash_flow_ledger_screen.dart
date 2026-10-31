@@ -44,8 +44,10 @@ class _CashFlowLedgerScreenState extends State<CashFlowLedgerScreen> {
     _fetchLedger();
   }
 
-  Future<void> _fetchLedger() async {
-    setState(() => _isLoading = true);
+  Future<void> _fetchLedger({bool silent = false}) async {
+    if (!silent && _ledger.isEmpty) {
+      setState(() => _isLoading = true);
+    }
     final directionFilter = _selectedDirection == 'ALL' ? null : _selectedDirection;
     final res = await ApiService.getCashFlowLedger(
       userId: widget.userId,

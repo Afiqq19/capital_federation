@@ -10,20 +10,20 @@ export default function ApkManagerPage({ showToast }) {
   const adminCtx = useAdmin();
   const toastFn = showToast || adminCtx?.notify;
   const [apkInfo, setApkInfo] = useState({
-    version: '1.5.1',
-    buildNumber: 6,
-    fileSizeMb: '24.8 MB',
+    version: '1.6.9',
+    buildNumber: 23,
+    fileSizeMb: '25.3 MB',
     minAndroid: 'Android 10.0 (API Level 29 / Q)',
     hasHostedApk: true,
-    downloadCount: 148,
-    releaseNotes: '252 Emiten Tbk. Terkoneksi 1-ke-1 dengan 265 Bot Peringkat, Setoran Pajak Bot ke Kas Negara, Bursa Akuisisi M&A Modern dengan RUPS Persetujuan Pendiri, & Lelang Sitaan Bank Sentral BCF'
+    downloadCount: 315,
+    releaseNotes: 'v1.6.9: Proteksi Permanen Kepemilikan PT Pendiri, Sinkronisasi Penuh Investasi R&D PT Utama & Anak Perusahaan, serta Akselerasi Server & Refresh Halus Latar Belakang Tanpa Kedip.'
   });
   const [loading, setLoading] = useState(true);
   const [savingMeta, setSavingMeta] = useState(false);
 
   // Form metadata state
-  const [version, setVersion] = useState('1.5.1');
-  const [buildNumber, setBuildNumber] = useState(6);
+  const [version, setVersion] = useState('1.6.9');
+  const [buildNumber, setBuildNumber] = useState(23);
   const [minAndroid, setMinAndroid] = useState('Android 10.0 (API 29 / Q)');
   const [externalUrl, setExternalUrl] = useState('');
   const [releaseNotesText, setReleaseNotesText] = useState('');
@@ -35,13 +35,13 @@ export default function ApkManagerPage({ showToast }) {
   const [uploadStatusText, setUploadStatusText] = useState('');
   const fileInputRef = useRef(null);
 
-  const loadApkInfo = async () => {
-    setLoading(true);
+  const loadApkInfo = async (silent = false) => {
+    if (silent !== true) setLoading(true);
     try {
       const res = await request('/api/version');
       setApkInfo(res);
-      setVersion(res.version || '1.5.0');
-      setBuildNumber(res.buildNumber || 5);
+      setVersion(res.version || '1.6.9');
+      setBuildNumber(res.buildNumber || 23);
       setMinAndroid(res.minAndroid || 'Android 10.0 (API 29 / Q)');
       setExternalUrl(res.externalUrl || '');
       if (Array.isArray(res.releaseNotes)) {
@@ -57,7 +57,7 @@ export default function ApkManagerPage({ showToast }) {
   };
 
   useEffect(() => {
-    loadApkInfo();
+    loadApkInfo(false);
   }, []);
 
   const handleSaveMetadata = async (e) => {
@@ -73,14 +73,14 @@ export default function ApkManagerPage({ showToast }) {
         method: 'POST',
         body: {
           version: version.trim(),
-          buildNumber: Number(buildNumber) || 5,
+          buildNumber: Number(buildNumber) || 23,
           minAndroid: minAndroid.trim(),
           externalUrl: externalUrl.trim(),
           releaseNotes: notes
         }
       });
       if (toastFn) toastFn('Metadata versi & catatan rilis APK berhasil diperbarui!', 'success');
-      await loadApkInfo();
+      await loadApkInfo(true);
     } catch (err) {
       if (toastFn) toastFn('Gagal menyimpan metadata: ' + err.message, 'error');
     } finally {

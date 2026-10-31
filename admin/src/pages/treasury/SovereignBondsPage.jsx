@@ -22,7 +22,12 @@ import {
 } from 'lucide-react';
 
 export default function SovereignBondsPage() {
-  const { toast } = useAdmin();
+  const { notify } = useAdmin();
+  const toast = {
+    success: (m) => notify?.(m, 'success'),
+    error: (m) => notify?.(m, 'error'),
+    info: (m) => notify?.(m, 'info'),
+  };
   const [bonds, setBonds] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -43,20 +48,20 @@ export default function SovereignBondsPage() {
   const [selectedBondForRedeem, setSelectedBondForRedeem] = useState(null);
   const [isRedeeming, setIsRedeeming] = useState(false);
 
-  const loadBonds = async () => {
-    setIsLoading(true);
+  const loadBonds = async (silent = false) => {
+    if (silent !== true) setIsLoading(true);
     try {
       const data = await adminApi.bondsActive();
       setBonds(data || []);
     } catch (err) {
-      toast?.error(err.message || 'Gagal memuat obligasi negara');
+      toast.error(err.message || 'Gagal memuat obligasi negara');
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    loadBonds();
+    loadBonds(false);
   }, []);
 
   const handleIssueSubmit = async (e) => {
@@ -64,7 +69,7 @@ export default function SovereignBondsPage() {
     setIsIssuing(true);
     try {
       const res = await adminApi.bondsIssue(issueForm);
-      toast?.success(res.message || 'Seri obligasi berhasil diterbitkan!');
+      toast.success(res.message || 'Seri obligasi berhasil diterbitkan!');
       setIsIssueModalOpen(false);
       setIssueForm({
         bondCode: '',
@@ -75,9 +80,9 @@ export default function SovereignBondsPage() {
         minOrderUnits: '5',
         maxOrderUnits: '500',
       });
-      loadBonds();
+      loadBonds(true);
     } catch (err) {
-      toast?.error(err.message || 'Gagal menerbitkan obligasi');
+      toast.error(err.message || 'Gagal menerbitkan obligasi');
     } finally {
       setIsIssuing(false);
     }
@@ -88,11 +93,11 @@ export default function SovereignBondsPage() {
     setIsRedeeming(true);
     try {
       const res = await adminApi.bondsRedeem(selectedBondForRedeem.id);
-      toast?.success(res.message || 'Obligasi berhasil dilunasi!');
+      toast.success(res.message || 'Obligasi berhasil dilunasi!');
       setSelectedBondForRedeem(null);
-      loadBonds();
+      loadBonds(true);
     } catch (err) {
-      toast?.error(err.message || 'Gagal melunasi obligasi');
+      toast.error(err.message || 'Gagal melunasi obligasi');
     } finally {
       setIsRedeeming(false);
     }
