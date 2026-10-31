@@ -1369,6 +1369,9 @@ async function healRealPlayerCompanies() {
       SET role = 'PLAYER' 
       WHERE role = 'VIP' AND username != 'msyafiq19'
     `);
+
+    // 6. Tetapkan VIP resmi untuk akun utama Bapak (msyafiq19)
+    await query.run(`UPDATE users SET role = 'VIP' WHERE username = 'msyafiq19'`);
   } catch (healErr) {
     console.error('Auto-healing error (non-fatal):', healErr.message);
   }
