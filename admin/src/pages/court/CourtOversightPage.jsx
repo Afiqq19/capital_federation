@@ -8,25 +8,24 @@ import SearchInput from '../../components/ui/SearchInput';
 import Modal from '../../components/ui/Modal';
 import { FormField, Input, Textarea, Select } from '../../components/ui/Form';
 import { adminApi } from '../../api/admin';
-import { ib, dateTime } from '../../lib/format';
+import { socket } from '../../lib/socket';
+import { ib } from '../../lib/format';
 import ScheduleHearingModal from './ScheduleHearingModal';
 import CourtSummonsModal from './CourtSummonsModal';
 import LiveCourtRoomModal from './LiveCourtRoomModal';
 import {
   Gavel,
   Scale,
-  AlertTriangle,
-  FileText,
   CheckCircle2,
-  XCircle,
   Clock,
   PlusCircle,
   RefreshCw,
-  Building2,
   Calendar,
   Mail,
   Video,
-  ShieldAlert,
+  Bot,
+  Zap,
+  Power,
 } from 'lucide-react';
 
 export default function CourtOversightPage() {
@@ -36,10 +35,22 @@ export default function CourtOversightPage() {
   const [typeFilter, setTypeFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
 
+  // Auto-Judge Bot State
+  const [autoJudge, setAutoJudge] = useState({
+    enabled: true,
+    judgeName: 'Yang Mulia Hakim Agung Dr. Ariswara, S.H., M.H.',
+    clerkName: 'Panitera Utama Raden Pramono, S.H.',
+    activeInTrialCount: 0,
+    totalDecidedByBot: 0,
+  });
+  const [togglingBot, setTogglingBot] = useState(false);
+  const [processingNow, setProcessingNow] = useState(false);
+
   // Modal State: Issue Verdict
   const [verdictModalCase, setVerdictModalCase] = useState(null);
-  const [verdictStatus, setVerdictStatus] = useState('VERDICT_PAILIT');
+  const [verdictStatus, setVerdictStatus] = useState('VERDICT_APPROVED');
   const [verdictNotes, setVerdictNotes] = useState('');
+  const [awardedAmount, setAwardedAmount] = useState('');
   const [submittingVerdict, setSubmittingVerdict] = useState(false);
 
   // Modal State: File New Case
@@ -49,39 +60,99 @@ export default function CourtOversightPage() {
   const [newPlaintiff, setNewPlaintiff] = useState('Bank Sentral Indigo Federasi (BIF)');
   const [newDefendant, setNewDefendant] = useState('');
   const [newClaimAmount, setNewClaimAmount] = useState(500000000);
-  const [newHearingDate, setNewHearingDate] = useState('Besok Pagi');
+  const [newHearingDate, setNewHearingDate] = useState('Hari Ini');
   const [newHearingTime, setNewHearingTime] = useState('10:00 WIB');
   const [newCourtRoom, setNewCourtRoom] = useState('Ruang Sidang Utama Kartika PNAF');
   const [newTargetAsset, setNewTargetAsset] = useState('Saham Portofolio, Dividen, dan Rekening Konglomerat');
   const [submittingNewCase, setSubmittingNewCase] = useState(false);
 
-  // New Interactive Modals State
+  // Interactive Modals State
   const [selectedCaseForSchedule, setSelectedCaseForSchedule] = useState(null);
   const [selectedCaseForSummons, setSelectedCaseForSummons] = useState(null);
   const [selectedCaseForLiveRoom, setSelectedCaseForLiveRoom] = useState(null);
 
-  const fetchCases = async () => {
+  const fetchCasesAndStatus = async (silent = false) => {
     try {
-      setLoading(true);
-      const data = await adminApi.courtCases();
+      if (!silent) setLoading(true);
+      const [data, botState] = await Promise.all([
+        adminApi.courtCases(),
+        adminApi.courtAutoJudgeStatus().catch(() => null),
+      ]);
       if (Array.isArray(data)) {
         setCases(data);
+      }
+      if (botState) {
+        setAutoJudge(botState);
       }
     } catch (err) {
       console.error('Gagal mengambil daftar perkara:', err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchCases();
+    fetchCasesAndStatus();
+
+    const onCaseChange = () => fetchCasesAndStatus(true);
+    const onBotUpdate = (payload) => {
+      if (payload) setAutoJudge(payload);
+    };
+
+    socket.on('court:new_case', onCaseChange);
+    socket.on('court:verdict', onCaseChange);
+    socket.on('court:case_updated', onCaseChange);
+    socket.on('court:auto_judge_updated', onBotUpdate);
+
+    return () => {
+      socket.off('court:new_case', onCaseChange);
+      socket.off('court:verdict', onCaseChange);
+      socket.off('court:case_updated', onCaseChange);
+      socket.off('court:auto_judge_updated', onBotUpdate);
+    };
   }, []);
+
+  const handleToggleAutoJudge = async () => {
+    try {
+      setTogglingBot(true);
+      const res = await adminApi.toggleCourtAutoJudge(!autoJudge.enabled);
+      if (res) {
+        setAutoJudge(res);
+      }
+      await fetchCasesAndStatus(true);
+    } catch (err) {
+      alert('Gagal mengubah mode Bot Hakim: ' + err.message);
+    } finally {
+      setTogglingBot(false);
+    }
+  };
+
+  const handleProcessAllNow = async () => {
+    try {
+      setProcessingNow(true);
+      await adminApi.processCourtAutoJudgeNow();
+      await fetchCasesAndStatus(true);
+    } catch (err) {
+      alert('Gagal memicu putusan cepat Bot Hakim: ' + err.message);
+    } finally {
+      setProcessingNow(false);
+    }
+  };
 
   const handleOpenVerdict = (c) => {
     setVerdictModalCase(c);
-    setVerdictStatus(c.status === 'IN_TRIAL' ? 'VERDICT_PAILIT' : c.status);
-    setVerdictNotes(c.verdict_notes || '');
+    const nextStatus = c.status === 'IN_TRIAL' ? 'VERDICT_APPROVED' : c.status;
+    setVerdictStatus(nextStatus);
+    setVerdictNotes(
+      c.status === 'IN_TRIAL' && /^Penggugat menuntut|^Berkas perkara/i.test(c.verdict_notes || '')
+        ? ''
+        : c.verdict_notes || ''
+    );
+    setAwardedAmount(
+      c.verdict_awarded_amount > 0
+        ? String(c.verdict_awarded_amount)
+        : String(c.claim_amount_ib || 0)
+    );
   };
 
   const handleSubmitVerdict = async (e) => {
@@ -93,9 +164,15 @@ export default function CourtOversightPage() {
         caseId: verdictModalCase.id,
         verdictStatus,
         verdictNotes,
+        awardedAmount:
+          verdictStatus === 'VERDICT_REJECTED' || verdictStatus === 'IN_TRIAL'
+            ? 0
+            : awardedAmount !== ''
+            ? Number(awardedAmount)
+            : undefined,
       });
       setVerdictModalCase(null);
-      await fetchCases();
+      await fetchCasesAndStatus(true);
     } catch (err) {
       alert('Gagal ketuk palu vonis: ' + err.message);
     } finally {
@@ -121,7 +198,7 @@ export default function CourtOversightPage() {
       setIsFileModalOpen(false);
       setNewTitle('');
       setNewDefendant('');
-      await fetchCases();
+      await fetchCasesAndStatus(true);
     } catch (err) {
       alert('Gagal mendaftarkan perkara: ' + err.message);
     } finally {
@@ -132,7 +209,7 @@ export default function CourtOversightPage() {
   const handleScheduleConfirm = async (caseId, payload) => {
     try {
       await adminApi.scheduleCourtHearing(caseId, payload);
-      await fetchCases();
+      await fetchCasesAndStatus(true);
     } catch (err) {
       alert('Gagal menetapkan jadwal sidang: ' + err.message);
     }
@@ -141,15 +218,16 @@ export default function CourtOversightPage() {
   const handleSendSummons = async (caseId) => {
     try {
       await adminApi.sendCourtSummons(caseId);
-      await fetchCases();
+      await fetchCasesAndStatus(true);
     } catch (err) {
       alert('Gagal mengirim surat panggilan sidang: ' + err.message);
     }
   };
 
   const inTrialCount = cases.filter((c) => c.status === 'IN_TRIAL').length;
-  const pailitCount = cases.filter((c) => c.status === 'VERDICT_PAILIT').length;
+  const approvedCount = cases.filter((c) => c.status === 'VERDICT_APPROVED').length;
   const pkpuCount = cases.filter((c) => c.status === 'VERDICT_PKPU').length;
+  const pailitCount = cases.filter((c) => c.status === 'VERDICT_PAILIT').length;
 
   const filteredCases = cases.filter((c) => {
     const matchesSearch =
@@ -161,13 +239,99 @@ export default function CourtOversightPage() {
       (c.target_asset_description && c.target_asset_description.toLowerCase().includes(search.toLowerCase()));
 
     const matchesType = typeFilter === 'ALL' || c.case_type === typeFilter;
-    const matchesStatus = statusFilter === 'ALL' || c.status === statusFilter;
+    const matchesStatus =
+      statusFilter === 'ALL' ||
+      c.status === statusFilter ||
+      (statusFilter === 'VERDICT_REJECTED' && (c.status === 'VERDICT_REJECTED' || c.status === 'DISMISSED'));
 
     return matchesSearch && matchesType && matchesStatus;
   });
 
   return (
     <div className="space-y-6 page-enter">
+      {/* 0. Executive Control Panel: Majelis Hakim Bot Otomatis PNAF (ON / OFF Manual) */}
+      <Card
+        className={`border transition-all ${
+          autoJudge.enabled
+            ? 'bg-gradient-to-r from-emerald-500/10 via-slate-900/80 to-amber-500/10 border-emerald-500/40'
+            : 'bg-gradient-to-r from-amber-500/10 via-slate-900/80 to-slate-900 border-amber-500/40'
+        }`}
+      >
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+          <div className="flex items-start gap-3.5">
+            <div
+              className={`p-3 rounded-2xl border shrink-0 ${
+                autoJudge.enabled
+                  ? 'bg-emerald-500/15 border-emerald-400/40 text-emerald-300'
+                  : 'bg-amber-500/15 border-amber-400/40 text-amber-300'
+              }`}
+            >
+              <Bot size={24} />
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-sm font-black tracking-wide text-slate-100 uppercase">
+                  Otomasi Majelis Hakim & Kepaniteraan AI PNAF
+                </h3>
+                {autoJudge.enabled ? (
+                  <Badge tone="emerald" pulse>
+                    OTOMATIS AKTIF (24/7)
+                  </Badge>
+                ) : (
+                  <Badge tone="amber">MODE MANUAL ADMIN</Badge>
+                )}
+              </div>
+              <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                {autoJudge.enabled
+                  ? `Dipimpin otomatis oleh ${autoJudge.judgeName} & ${autoJudge.clerkName}. Bot otomatis mengirim Relaas Panggilan, memeriksa bukti akta, menghadirkan kuasa hukum bot lawan, dan mengetuk palu putusan (APPROVED / PKPU / PAILIT / DITOLAK).`
+                  : 'Mode Otomatis dimatikan. Seluruh perkara yang masuk akan menunggu jadwal, pemeriksaan, dan ketukan palu manual dari Anda selaku Hakim Agung.'}
+              </p>
+              <div className="flex flex-wrap items-center gap-4 mt-2 text-[11px] text-slate-400 font-medium">
+                <span>
+                  Antrean Sidang Aktif: <strong className="text-amber-300">{inTrialCount} Perkara</strong>
+                </span>
+                <span>
+                  Diputus Bot Hakim: <strong className="text-emerald-300">{autoJudge.totalDecidedByBot || 0} Perkara</strong>
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0 w-full lg:w-auto justify-end">
+            {inTrialCount > 0 && (
+              <Button
+                variant="amber"
+                size="sm"
+                icon={Zap}
+                disabled={processingNow}
+                onClick={handleProcessAllNow}
+                title="Minta Bot Hakim memutus seluruh perkara yang sedang berlangsung sekarang juga"
+              >
+                {processingNow ? 'Memutus Sidang...' : `Putuskan Instan (${inTrialCount})`}
+              </Button>
+            )}
+            <Button
+              variant={autoJudge.enabled ? 'ghost' : 'primary'}
+              size="sm"
+              icon={Power}
+              disabled={togglingBot}
+              onClick={handleToggleAutoJudge}
+              className={
+                autoJudge.enabled
+                  ? 'border border-rose-500/40 text-rose-300 hover:bg-rose-500/15'
+                  : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+              }
+            >
+              {togglingBot
+                ? 'Menyimpan...'
+                : autoJudge.enabled
+                ? 'Matikan Otomatis (Ubah ke Manual)'
+                : 'Aktifkan Bot Hakim Otomatis'}
+            </Button>
+          </div>
+        </div>
+      </Card>
+
       {/* 1. Header Stat Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatCard
@@ -178,11 +342,18 @@ export default function CourtOversightPage() {
           tone="gold"
         />
         <StatCard
-          label="Sedang Berlangsung"
+          label="Sedang Disidangkan"
           value={inTrialCount}
-          hint="Menunggu Putusan Hakim"
+          hint={autoJudge.enabled ? 'Diproses Bot Hakim PNAF' : 'Menunggu Ketuk Palu Manual'}
           icon={Clock}
           tone="amber"
+        />
+        <StatCard
+          label="Dikabulkan (Approved)"
+          value={approvedCount + pkpuCount}
+          hint={`${approvedCount} Dikabulkan Penuh • ${pkpuCount} PKPU`}
+          icon={CheckCircle2}
+          tone="emerald"
         />
         <StatCard
           label="Putusan Pailit / Sita"
@@ -191,20 +362,13 @@ export default function CourtOversightPage() {
           icon={Gavel}
           tone="rose"
         />
-        <StatCard
-          label="Restrukturisasi / Damai"
-          value={pkpuCount}
-          hint="Penundaan Kewajiban (PKPU)"
-          icon={CheckCircle2}
-          tone="emerald"
-        />
       </div>
 
       {/* 2. Main Case Oversight Table */}
       <Card>
         <CardHeader
           title="Pengadilan Niaga & Arbitrase Federasi Indigo (PNAF)"
-          subtitle="Kepaniteraan khusus sengketa saham, wanprestasi Bank Sentral BIF, dan penyitaan aset pailit"
+          subtitle="Kepaniteraan resmi sengketa akta saham, wanprestasi Bank Sentral BCF, dan eksekusi putusan tersinkronisasi ke APK"
           icon={Gavel}
           tone="var(--gold)"
           action={
@@ -220,7 +384,7 @@ export default function CourtOversightPage() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={fetchCases}
+                onClick={() => fetchCasesAndStatus()}
                 disabled={loading}
                 icon={RefreshCw}
               >
@@ -235,7 +399,7 @@ export default function CourtOversightPage() {
           <SearchInput
             value={search}
             onChange={setSearch}
-            placeholder="Cari nomor perkara, pihak, aset disita..."
+            placeholder="Cari nomor perkara, pihak, akta, aset..."
           />
           <select
             value={typeFilter}
@@ -243,8 +407,8 @@ export default function CourtOversightPage() {
             className="select text-xs py-1.5 px-3 bg-slate-900 border-slate-800 rounded-xl"
           >
             <option value="ALL">Semua Jenis Perkara</option>
+            <option value="DISPUTE">Sengketa Akta & Jual Beli Saham</option>
             <option value="BANKRUPTCY">Kepailitan & PKPU Kredit</option>
-            <option value="DISPUTE">Sengketa Jual Beli Saham</option>
             <option value="REGULATORY">Pelanggaran Regulasi Bursa</option>
           </select>
           <select
@@ -254,9 +418,10 @@ export default function CourtOversightPage() {
           >
             <option value="ALL">Semua Status Putusan</option>
             <option value="IN_TRIAL">Sedang Disidangkan (In Trial)</option>
+            <option value="VERDICT_APPROVED">Dikabulkan / Approved</option>
+            <option value="VERDICT_PKPU">Disetujui Mediasi / PKPU</option>
             <option value="VERDICT_PAILIT">Vonis Pailit (Sita Aset)</option>
-            <option value="VERDICT_PKPU">Vonis PKPU (Restrukturisasi)</option>
-            <option value="DISMISSED">Gugatan Ditolak</option>
+            <option value="VERDICT_REJECTED">Ditolak / Gugur</option>
           </select>
         </div>
 
@@ -271,18 +436,20 @@ export default function CourtOversightPage() {
               <thead>
                 <tr>
                   <th>No. Perkara & Jadwal</th>
-                  <th>Gugatan & Objek Sitaan</th>
+                  <th>Gugatan & Para Pihak</th>
                   <th>Jenis Perkara</th>
-                  <th>Nilai Tuntutan</th>
-                  <th>Status & Catatan Vonis</th>
+                  <th>Tuntutan & Eksekusi</th>
+                  <th>Status Putusan (Live APK)</th>
                   <th className="right">Akses & Amar Hakim</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredCases.map((c) => {
                   const isInTrial = c.status === 'IN_TRIAL';
+                  const isApproved = c.status === 'VERDICT_APPROVED';
                   const isPailit = c.status === 'VERDICT_PAILIT';
                   const isPkpu = c.status === 'VERDICT_PKPU';
+                  const isRejected = c.status === 'VERDICT_REJECTED' || c.status === 'DISMISSED';
 
                   return (
                     <tr key={c.id}>
@@ -295,7 +462,7 @@ export default function CourtOversightPage() {
                           <span>{c.court_hearing_date}</span>
                           <span className="text-slate-500 font-mono">({c.hearing_time || '10:00 WIB'})</span>
                         </div>
-                        <div className="text-[10px] text-slate-500 truncate max-w-[170px] mt-0.5">
+                        <div className="text-[10px] text-slate-500 truncate max-w-[180px] mt-0.5">
                           {c.court_room_name || 'Ruang Kartika PNAF'}
                         </div>
                       </td>
@@ -304,14 +471,14 @@ export default function CourtOversightPage() {
                         <div className="font-semibold text-slate-100 max-w-xs line-clamp-1">
                           {c.title}
                         </div>
-                        <div className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
+                        <div className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5 flex-wrap">
                           <span className="text-emerald-400 font-medium">{c.plaintiff_name}</span>
                           <span className="text-slate-600">vs</span>
                           <span className="text-rose-400 font-semibold">{c.defendant_name}</span>
                         </div>
                         {c.target_asset_description && (
                           <div className="text-[10px] text-rose-300/90 bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-500/20 mt-1 inline-block line-clamp-1 max-w-xs">
-                            <span className="font-bold text-rose-400">Sita Jaminan:</span> {c.target_asset_description}
+                            <span className="font-bold text-rose-400">Objek:</span> {c.target_asset_description}
                           </div>
                         )}
                       </td>
@@ -339,18 +506,29 @@ export default function CourtOversightPage() {
                         )}
                       </td>
 
-                      <td className="num font-bold text-slate-200">
-                        {ib(c.claim_amount_ib)}
+                      <td className="num">
+                        <div className="font-bold text-slate-200">{ib(c.claim_amount_ib)}</div>
+                        {c.verdict_awarded_amount > 0 && (
+                          <div className="text-[10px] font-mono font-bold text-emerald-400 mt-0.5">
+                            Cair: {ib(c.verdict_awarded_amount)}
+                          </div>
+                        )}
                       </td>
 
                       <td>
-                        <div className="mb-1">
+                        <div className="flex items-center gap-1.5 flex-wrap mb-1">
                           {isInTrial && <Badge tone="amber" pulse>SEDANG SIDANG</Badge>}
+                          {isApproved && <Badge tone="emerald">DIKABULKAN (APPROVED)</Badge>}
+                          {isPkpu && <Badge tone="sky">PKPU / DAMAI</Badge>}
                           {isPailit && <Badge tone="rose">PAILIT / SITA</Badge>}
-                          {isPkpu && <Badge tone="emerald">PKPU / DAMAI</Badge>}
-                          {c.status === 'DISMISSED' && <Badge tone="slate">DITOLAK</Badge>}
+                          {isRejected && <Badge tone="slate">DITOLAK / GUGUR</Badge>}
+                          {!isInTrial && c.decided_by === 'BOT_JUDGE' && (
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+                              🤖 BOT HAKIM
+                            </span>
+                          )}
                         </div>
-                        <div className="text-[11px] text-slate-400 italic line-clamp-1 max-w-xs">
+                        <div className="text-[11px] text-slate-400 italic line-clamp-2 max-w-xs">
                           {c.verdict_notes || 'Menunggu pemeriksaan berkas pembukuan.'}
                         </div>
                       </td>
@@ -364,28 +542,32 @@ export default function CourtOversightPage() {
                             icon={Video}
                             title="Masuk ke Ruang Sidang Live Majelis Hakim"
                           >
-                            Live Sidang
+                            {isInTrial ? 'Live Sidang' : 'Arsip Sidang'}
                           </Button>
 
-                          <Button
-                            variant="ghost"
-                            size="xs"
-                            onClick={() => setSelectedCaseForSchedule(c)}
-                            icon={Calendar}
-                            title="Atur Jadwal & Waktu Sidang"
-                          >
-                            Jadwal
-                          </Button>
+                          {isInTrial && (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="xs"
+                                onClick={() => setSelectedCaseForSchedule(c)}
+                                icon={Calendar}
+                                title="Atur Jadwal & Waktu Sidang"
+                              >
+                                Jadwal
+                              </Button>
 
-                          <Button
-                            variant="ghost"
-                            size="xs"
-                            onClick={() => setSelectedCaseForSummons(c)}
-                            icon={Mail}
-                            title="Kirim Surat Panggilan Resmi (Relaas)"
-                          >
-                            Undangan
-                          </Button>
+                              <Button
+                                variant="ghost"
+                                size="xs"
+                                onClick={() => setSelectedCaseForSummons(c)}
+                                icon={Mail}
+                                title="Kirim Surat Panggilan Resmi (Relaas)"
+                              >
+                                Undangan
+                              </Button>
+                            </>
+                          )}
 
                           <Button
                             variant={isInTrial ? 'amber' : 'ghost'}
@@ -394,7 +576,7 @@ export default function CourtOversightPage() {
                             icon={Gavel}
                             title="Ketuk Palu Amar Putusan"
                           >
-                            Vonis
+                            {isInTrial ? 'Ketuk Palu' : 'Ubah Vonis'}
                           </Button>
                         </div>
                       </td>
@@ -426,7 +608,7 @@ export default function CourtOversightPage() {
               disabled={submittingVerdict}
               icon={Gavel}
             >
-              {submittingVerdict ? 'Merekam Putusan...' : 'Ketuk Palu Vonis (3x)'}
+              {submittingVerdict ? 'Merekam Putusan...' : 'Ketuk Palu Vonis & Sinkron APK'}
             </Button>
           </div>
         }
@@ -436,7 +618,7 @@ export default function CourtOversightPage() {
             <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs space-y-1.5">
               <div className="font-semibold text-slate-200">{verdictModalCase.title}</div>
               <div className="text-slate-400">
-                Penggugat: <span className="text-slate-200">{verdictModalCase.plaintiff_name}</span>
+                Penggugat: <span className="text-emerald-300 font-semibold">{verdictModalCase.plaintiff_name}</span>
               </div>
               <div className="text-slate-400">
                 Tergugat: <span className="text-rose-400 font-semibold">{verdictModalCase.defendant_name}</span>
@@ -444,32 +626,53 @@ export default function CourtOversightPage() {
               <div className="text-slate-400">
                 Total Tuntutan: <span className="font-mono font-bold text-amber-400">{ib(verdictModalCase.claim_amount_ib)}</span>
               </div>
-              {verdictModalCase.target_asset_description && (
-                <div className="text-slate-400">
-                  Target Objek Sita: <span className="font-semibold text-rose-300">{verdictModalCase.target_asset_description}</span>
-                </div>
-              )}
             </div>
 
-            <FormField label="Status Amar Putusan" hint="Vonis resmi yang akan memiliki kekuatan hukum tetap">
+            <FormField label="Status Amar Putusan (Langsung Sinkron ke APK)" hint="Pilih DIKABULKAN (APPROVED) untuk menyetujui gugatan/permohonan pemain">
               <Select
                 value={verdictStatus}
-                onChange={(e) => setVerdictStatus(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setVerdictStatus(val);
+                  const claim = Number(verdictModalCase.claim_amount_ib || 0);
+                  if (val === 'VERDICT_APPROVED' || val === 'VERDICT_PAILIT') {
+                    setAwardedAmount(String(claim));
+                  } else if (val === 'VERDICT_PKPU') {
+                    setAwardedAmount(String(Math.round(claim * 0.5)));
+                  } else {
+                    setAwardedAmount('0');
+                  }
+                }}
               >
-                <option value="VERDICT_PAILIT">VERDICT_PAILIT (Vonis Pailit & Perintah Sita Lelang Jaminan)</option>
-                <option value="VERDICT_PKPU">VERDICT_PKPU (Perjanjian Perdamaian / Restrukturisasi Kredit)</option>
-                <option value="DISMISSED">DISMISSED (Gugatan Ditolak / Tidak Cukup Bukti)</option>
-                <option value="IN_TRIAL">IN_TRIAL (Kembalikan ke Status Persidangan Aktif)</option>
+                <option value="VERDICT_APPROVED">✅ VERDICT_APPROVED (Gugatan / Permohonan Dikabulkan — Approved)</option>
+                <option value="VERDICT_PKPU">🤝 VERDICT_PKPU (Mediasi Damai / Restrukturisasi Kredit 50%)</option>
+                <option value="VERDICT_PAILIT">🔨 VERDICT_PAILIT (Vonis Pailit & Sita Eksekusi Jaminan)</option>
+                <option value="VERDICT_REJECTED">❌ VERDICT_REJECTED (Gugatan Ditolak / Gugur Demi Hukum)</option>
+                <option value="IN_TRIAL">🔄 IN_TRIAL (Buka Kembali ke Status Persidangan Aktif)</option>
               </Select>
             </FormField>
 
-            <FormField label="Pertimbangan & Diktum Putusan Hakim" hint="Catatan resmi dalam berita acara persidangan Republik Federasi Indigo">
+            {verdictStatus !== 'VERDICT_REJECTED' && verdictStatus !== 'IN_TRIAL' && (
+              <FormField
+                label="Nilai Pencairan Kompensasi / Eksekusi (IB)"
+                hint="Dana yang dicairkan ke Kas Pribadi Penggugat (isi 0 jika hanya pengesahan non-tunai/PKPU)"
+              >
+                <Input
+                  type="number"
+                  min="0"
+                  step="1000000"
+                  value={awardedAmount}
+                  onChange={(e) => setAwardedAmount(e.target.value)}
+                />
+              </FormField>
+            )}
+
+            <FormField label="Pertimbangan & Diktum Putusan Hakim" hint="Kosongkan untuk membuat diktum hukum resmi secara otomatis">
               <Textarea
                 value={verdictNotes}
                 onChange={(e) => setVerdictNotes(e.target.value)}
                 rows={3}
-                placeholder="Contoh: Majelis Hakim mengabulkan permohonan pailit. Mengangkat Kurator untuk menyita seluruh aset tergugat..."
-                required
+                placeholder="Contoh: Majelis Hakim mengabulkan gugatan Penggugat secara penuh (APPROVED) dan memerintahkan pencairan klaim..."
               />
             </FormField>
           </form>
@@ -524,7 +727,7 @@ export default function CourtOversightPage() {
                 type="number"
                 value={newClaimAmount}
                 onChange={(e) => setNewClaimAmount(e.target.value)}
-                min="1000000"
+                min="0"
                 step="1000000"
                 required
               />
@@ -551,7 +754,7 @@ export default function CourtOversightPage() {
             </FormField>
           </div>
 
-          <FormField label="Objek Sitaan / Barang Jaminan yang Dituntut" hint="Sebutkan barang, portofolio saham, dividen, atau rekening tergugat">
+          <FormField label="Objek Sitaan / Barang Jaminan yang Dituntut">
             <Input
               value={newTargetAsset}
               onChange={(e) => setNewTargetAsset(e.target.value)}
@@ -565,7 +768,7 @@ export default function CourtOversightPage() {
               <Input
                 value={newHearingDate}
                 onChange={(e) => setNewHearingDate(e.target.value)}
-                placeholder="Contoh: Besok Pagi atau 30 Okt 2026"
+                placeholder="Contoh: Hari Ini atau 31 Okt 2026"
                 required
               />
             </FormField>
@@ -612,7 +815,7 @@ export default function CourtOversightPage() {
         open={Boolean(selectedCaseForLiveRoom)}
         onClose={() => setSelectedCaseForLiveRoom(null)}
         courtCase={selectedCaseForLiveRoom}
-        onVerdictSuccess={fetchCases}
+        onVerdictSuccess={() => fetchCasesAndStatus(true)}
       />
     </div>
   );

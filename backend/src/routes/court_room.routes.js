@@ -1,25 +1,112 @@
 const express = require('express');
-const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const { query } = require('../db');
+const {
+  BOT_CLERK_NAME,
+  formatCourtCase,
+  formatCourtMessage,
+  appendCourtChat,
+  executeCourtVerdict,
+  getAutoJudgeStatusPayload,
+  setAutoJudgeEnabled,
+  isAutoJudgeEnabled,
+} = require('../services/courtEngine.service');
 
-module.exports = function(io) {
-  // 1. Ambil Detail Ruang Sidang Live
+module.exports = function (io, courtJudgeBot) {
+  const router = express.Router();
+
+  // 0. Status & Sakelar ON/OFF Majelis Hakim Bot Otomatis PNAF
+  router.get('/auto-judge/status', async (req, res) => {
+    try {
+      const payload = await getAutoJudgeStatusPayload();
+      res.json(payload);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.post('/auto-judge/toggle', async (req, res) => {
+    try {
+      const current = await isAutoJudgeEnabled();
+      const nextEnabled =
+        req.body && typeof req.body.enabled === 'boolean' ? req.body.enabled : !current;
+      await setAutoJudgeEnabled(nextEnabled);
+      const payload = await getAutoJudgeStatusPayload();
+      io.emit('court:auto_judge_updated', payload);
+
+      // Jika baru dinyalakan ke mode Otomatis, langsung picu pemeriksaan perkara yang menunggu
+      if (nextEnabled && courtJudgeBot) {
+        setTimeout(() => {
+          courtJudgeBot.tick().catch(() => {});
+        }, 500);
+      }
+
+      res.json({
+        success: true,
+        ...payload,
+        message: nextEnabled
+          ? '🤖 Mode Majelis Hakim Bot Otomatis PNAF DIAKTIFKAN! Perkara baru & aktif akan diproses otomatis.'
+          : '👨‍⚖️ Mode Majelis Hakim diubah ke MANUAL! Seluruh ketukan palu menunggu keputusan Admin/Hakim Agung.',
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.post('/auto-judge/process-now', async (req, res) => {
+    try {
+      const { caseId } = req.body || {};
+      if (!courtJudgeBot) {
+        return res.status(503).json({ error: 'Engine Bot Hakim belum siap' });
+      }
+      const result = await courtJudgeBot.tick({
+        forceImmediate: true,
+        targetCaseId: caseId || null,
+      });
+      const statusPayload = await getAutoJudgeStatusPayload();
+      res.json({
+        success: true,
+        processed: result.processed || 0,
+        status: statusPayload,
+        message:
+          (result.processed || 0) > 0
+            ? `⚡ Bot Majelis Hakim PNAF berhasil memutus ${result.processed} perkara secara instan!`
+            : 'Tidak ada perkara berstatus DALAM SIDANG (IN_TRIAL) yang menunggu putusan.',
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // 1. Ambil Detail Ruang Sidang Live (Dual Format: snake_case & camelCase)
   router.get('/room/:caseId', async (req, res) => {
     try {
       const { caseId } = req.params;
       const courtCase = await query.get('SELECT * FROM court_cases WHERE id = ?', [caseId]);
-      if (!courtCase) return res.status(404).json({ error: 'Perkara pengadilan tidak ditemukan' });
+      if (!courtCase) {
+        return res.status(404).json({ error: 'Perkara pengadilan tidak ditemukan' });
+      }
 
       const messages = await query.all(
         'SELECT * FROM court_chat_messages WHERE case_id = ? ORDER BY created_at ASC',
         [caseId]
       );
 
-      res.json({
-        ...courtCase,
-        messages: messages || []
-      });
+      res.json(formatCourtCase(courtCase, messages || []));
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // 1b. Ambil Daftar Pesan Ruang Sidang (Kompatibilitas penuh Mobile APK)
+  router.get('/room/:caseId/messages', async (req, res) => {
+    try {
+      const { caseId } = req.params;
+      const messages = await query.all(
+        'SELECT * FROM court_chat_messages WHERE case_id = ? ORDER BY created_at ASC',
+        [caseId]
+      );
+      res.json((messages || []).map(formatCourtMessage));
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
@@ -28,84 +115,104 @@ module.exports = function(io) {
   // 2. Presensi Masuk Sidang (Tombol: [🟢 SAYA HADIR])
   router.post('/room/check-in', async (req, res) => {
     try {
-      const { caseId, userId, role } = req.body; // role: 'PLAINTIFF' atau 'DEFENDANT'
+      const { caseId, userId, role } = req.body || {};
       const courtCase = await query.get('SELECT * FROM court_cases WHERE id = ?', [caseId]);
       if (!courtCase) return res.status(404).json({ error: 'Perkara tidak ditemukan' });
 
-      let isPlaintiff = role === 'PLAINTIFF' || courtCase.plaintiff_user_id === userId;
-      let updateSql = isPlaintiff 
-        ? 'UPDATE court_cases SET plaintiff_present = 1 WHERE id = ?' 
-        : 'UPDATE court_cases SET defendant_present = 1 WHERE id = ?';
-      
-      await query.run(updateSql, [caseId]);
+      const user = userId ? await query.get('SELECT id, username FROM users WHERE id = ?', [userId]) : null;
+      const unameLower = (user?.username || '').toLowerCase();
 
-      // Catat log panitera ke chat room
-      const user = await query.get('SELECT username FROM users WHERE id = ?', [userId]);
-      const partyName = user ? user.username : (isPlaintiff ? 'Penggugat' : 'Tergugat');
-      const logMsgId = uuidv4();
-      await query.run(
-        'INSERT INTO court_chat_messages (id, case_id, sender_name, sender_role, message) VALUES (?, ?, ?, ?, ?)',
-        [logMsgId, caseId, 'Panitera Sidang PNAF', 'PANITERA', `🟢 ${partyName} (${isPlaintiff ? 'Pihak Penggugat' : 'Pihak Tergugat'}) Telah Hadir Memenuhi Panggilan Sidang.`]
-      );
+      let isPlaintiff = role === 'PLAINTIFF';
+      if (!role && userId) {
+        if (courtCase.plaintiff_user_id === userId) {
+          isPlaintiff = true;
+        } else if (courtCase.defendant_user_id === userId) {
+          isPlaintiff = false;
+        } else if (unameLower && (courtCase.plaintiff_name || '').toLowerCase().includes(unameLower)) {
+          isPlaintiff = true;
+        } else {
+          isPlaintiff = false;
+        }
+      }
+
+      if (isPlaintiff) {
+        await query.run(
+          "UPDATE court_cases SET plaintiff_present = 1, plaintiff_user_id = COALESCE(plaintiff_user_id, ?), room_status = CASE WHEN room_status = 'WAITING_PRESENCE' THEN 'IN_SESSION' ELSE room_status END WHERE id = ?",
+          [userId || null, caseId]
+        );
+      } else {
+        await query.run(
+          "UPDATE court_cases SET defendant_present = 1, defendant_user_id = COALESCE(defendant_user_id, ?), room_status = CASE WHEN room_status = 'WAITING_PRESENCE' THEN 'IN_SESSION' ELSE room_status END WHERE id = ?",
+          [userId || null, caseId]
+        );
+      }
+
+      const partyName = user ? user.username : isPlaintiff ? courtCase.plaintiff_name : courtCase.defendant_name;
+      await appendCourtChat(io, {
+        caseId,
+        senderName: BOT_CLERK_NAME,
+        senderRole: 'PANITERA',
+        message: `🟢 PRESENSI TERVERIFIKASI: ${partyName} (${isPlaintiff ? 'Pihak Penggugat' : 'Pihak Tergugat'}) telah hadir secara resmi di ruang persidangan.`,
+      });
 
       const updated = await query.get('SELECT * FROM court_cases WHERE id = ?', [caseId]);
+      const formatted = formatCourtCase(updated);
 
-      // Broadcast update presensi ke semua peserta di room
       io.emit(`court:presence_updated:${caseId}`, {
         caseId,
         plaintiffPresent: updated.plaintiff_present === 1,
         defendantPresent: updated.defendant_present === 1,
         partyName,
-        role: isPlaintiff ? 'PLAINTIFF' : 'DEFENDANT'
+        role: isPlaintiff ? 'PLAINTIFF' : 'DEFENDANT',
       });
+      io.emit('court:case_updated', formatted);
 
       res.json({
         success: true,
         message: 'Presensi kehadiran Anda resmi dicatat oleh Panitera Sidang PNAF.',
-        case: updated
+        case: formatted,
       });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
   });
 
-  // 3. Kirim Pesan Argumen / Pembelaan di Room Sidang
+  // 3. Kirim Pesan Argumen / Pembelaan / Instruksi Hakim di Room Sidang
   router.post('/room/:caseId/messages', async (req, res) => {
     try {
       const { caseId } = req.params;
-      const { senderName, senderRole, message } = req.body;
+      const { senderName, senderRole, role, senderUserId, message } = req.body || {};
 
-      if (!message || message.trim() === '') {
+      if (!message || String(message).trim() === '') {
         return res.status(400).json({ error: 'Pesan sidang tidak boleh kosong' });
       }
 
-      const msgId = uuidv4();
-      await query.run(
-        'INSERT INTO court_chat_messages (id, case_id, sender_name, sender_role, message) VALUES (?, ?, ?, ?, ?)',
-        [msgId, caseId, senderName || 'Peserta Sidang', senderRole || 'PENGGUGAT', message.trim()]
-      );
+      const rawRole = String(senderRole || role || 'PENGGUGAT').toUpperCase();
+      let normalizedRole = 'PENGGUGAT';
+      if (rawRole.includes('HAKIM') || rawRole === 'JUDGE') normalizedRole = 'HAKIM';
+      else if (rawRole.includes('PANITERA') || rawRole === 'SYSTEM' || rawRole === 'CLERK') normalizedRole = 'PANITERA';
+      else if (rawRole.includes('TERGUGAT') || rawRole === 'DEFENDANT') normalizedRole = 'TERGUGAT';
+      else normalizedRole = 'PENGGUGAT';
 
-      const msgObj = {
-        id: msgId,
-        case_id: caseId,
-        sender_name: senderName || 'Peserta Sidang',
-        sender_role: senderRole || 'PENGGUGAT',
-        message: message.trim(),
-        created_at: new Date().toISOString()
-      };
+      const msgObj = await appendCourtChat(io, {
+        caseId,
+        senderName: senderName || 'Peserta Sidang',
+        senderRole: normalizedRole,
+        senderUserId: senderUserId || null,
+        message: String(message).trim(),
+      });
 
-      io.emit(`court:new_message:${caseId}`, msgObj);
       res.json({ success: true, message: msgObj });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
   });
 
-  // Atur Jadwal Sidang (Hakim / Panitera)
+  // 4. Atur Jadwal Sidang (Hakim / Panitera)
   router.post('/room/:caseId/schedule', async (req, res) => {
     try {
       const { caseId } = req.params;
-      const { hearingDate, hearingTime, courtRoomName } = req.body;
+      const { hearingDate, hearingTime, courtRoomName } = req.body || {};
       const c = await query.get('SELECT * FROM court_cases WHERE id = ?', [caseId]);
       if (!c) return res.status(404).json({ error: 'Perkara tidak ditemukan' });
 
@@ -118,25 +225,25 @@ module.exports = function(io) {
         [dateStr, timeStr, roomStr, caseId]
       );
 
-      // Siarkan log panitera ke room
-      const logMsgId = uuidv4();
-      const schedMsg = `📅 JADWAL SIDANG DITETAPKAN: ${dateStr} pukul ${timeStr} bertempat di ${roomStr}.`;
-      await query.run(
-        'INSERT INTO court_chat_messages (id, case_id, sender_name, sender_role, message) VALUES (?, ?, ?, ?, ?)',
-        [logMsgId, caseId, 'Panitera Sidang PNAF', 'PANITERA', schedMsg]
-      );
+      await appendCourtChat(io, {
+        caseId,
+        senderName: BOT_CLERK_NAME,
+        senderRole: 'PANITERA',
+        message: `📅 JADWAL SIDANG DITETAPKAN: ${dateStr} pukul ${timeStr} bertempat di ${roomStr}.`,
+      });
 
       const updated = await query.get('SELECT * FROM court_cases WHERE id = ?', [caseId]);
-      io.emit(`court:scheduled:${caseId}`, updated);
-      io.emit('court:case_updated', updated);
+      const formatted = formatCourtCase(updated);
+      io.emit(`court:scheduled:${caseId}`, formatted);
+      io.emit('court:case_updated', formatted);
 
-      res.json({ success: true, message: 'Jadwal sidang berhasil ditetapkan!', case: updated });
+      res.json({ success: true, message: 'Jadwal sidang berhasil ditetapkan!', case: formatted });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
   });
 
-  // Kirim Surat Panggilan Sidang Resmi (Undangan Relaas Panggilan Elektronik)
+  // 5. Kirim Surat Panggilan Sidang Resmi (Relaas Elektronik)
   router.post('/room/:caseId/send-summons', async (req, res) => {
     try {
       const { caseId } = req.params;
@@ -145,22 +252,21 @@ module.exports = function(io) {
 
       await query.run('UPDATE court_cases SET summons_sent = 1 WHERE id = ?', [caseId]);
 
-      // Catat log panitera
-      const logMsgId = uuidv4();
-      const summonsMsg = `📨 RELAAS PANGGILAN RESMI PNAF: Surat panggilan sidang elektronik telah diterbitkan kepada Penggugat (${c.plaintiff_name}) dan Tergugat (${c.defendant_name}). Harap hadir tepat waktu.`;
-      await query.run(
-        'INSERT INTO court_chat_messages (id, case_id, sender_name, sender_role, message) VALUES (?, ?, ?, ?, ?)',
-        [logMsgId, caseId, 'Panitera Sidang PNAF', 'PANITERA', summonsMsg]
-      );
+      await appendCourtChat(io, {
+        caseId,
+        senderName: BOT_CLERK_NAME,
+        senderRole: 'PANITERA',
+        message: `📨 RELAAS PANGGILAN RESMI PNAF: Surat panggilan sidang elektronik telah diterbitkan kepada Penggugat (${c.plaintiff_name}) dan Tergugat (${c.defendant_name}). Harap hadir tepat waktu.`,
+      });
 
-      // Siarkan notifikasi breaking news panggilan sidang
       const newsItem = {
         id: uuidv4(),
         title: `⚖️ PANGGILAN SIDANG PNAF: Perkara No. ${c.case_number}`,
         content: `Panitera PNAF menerbitkan panggilan resmi kepada ${c.plaintiff_name} (Penggugat) dan ${c.defendant_name} (Tergugat) untuk hadir pada sidang perkara ${c.title}. Jadwal: ${c.court_hearing_date} ${c.hearing_time || '10:00 WIB'} di ${c.court_room_name || 'Ruang Sidang Kartika'}.`,
         affected_sector: 'Semua Sektor',
+        affectedSector: 'Semua Sektor',
         sentiment: 'NEUTRAL',
-        published_at: new Date().toISOString()
+        published_at: new Date().toISOString(),
       };
       await query.run(
         'INSERT INTO news (id, title, content, affected_sector, sentiment, published_at) VALUES (?, ?, ?, ?, ?, ?)',
@@ -168,7 +274,10 @@ module.exports = function(io) {
       );
       io.emit('market:news_broadcast', newsItem);
       io.emit('market:breaking_news', newsItem);
+
+      const updated = await query.get('SELECT * FROM court_cases WHERE id = ?', [caseId]);
       io.emit(`court:summons_sent:${caseId}`, { caseId, summonsSent: true });
+      io.emit('court:case_updated', formatCourtCase(updated));
 
       res.json({ success: true, message: 'Surat panggilan sidang resmi berhasil disiarkan!' });
     } catch (err) {
@@ -176,116 +285,71 @@ module.exports = function(io) {
     }
   });
 
-  // 4. Ketuk Palu Vonis (Verstek / Gugur / Batal / Vonis Damai)
+  // 6. Ketuk Palu Vonis dari Ruang Sidang Live (Admin Hakim Agung atau Evaluasi Bot Hakim)
   router.post('/room/verdict', async (req, res) => {
     try {
-      const { caseId, adminJudgeOverride, forcedVerdictType } = req.body;
+      const {
+        caseId,
+        adminJudgeOverride,
+        forcedVerdictType,
+        verdictStatus,
+        verdictNotes,
+        awardedAmount,
+        userId,
+      } = req.body || {};
+
       const c = await query.get('SELECT * FROM court_cases WHERE id = ?', [caseId]);
       if (!c) return res.status(404).json({ error: 'Perkara tidak ditemukan' });
 
-      let verdictType = forcedVerdictType;
-      let verdictStatus = 'VERDICT_PAILIT';
-      let notes = '';
-      let awardedAmount = 0.0;
-
-      // Evaluasi Otomatis berdasarkan Kehadiran jika tidak di-override
-      if (!verdictType) {
-        if (c.plaintiff_present === 1 && c.defendant_present === 0) {
-          verdictType = 'VERSTEK_PLAINTIFF_WIN';
-        } else if (c.plaintiff_present === 0 && c.defendant_present === 1) {
-          verdictType = 'GUGUR_DISMISSED';
-        } else if (c.plaintiff_present === 0 && c.defendant_present === 0) {
-          verdictType = 'BATAL_ANNULLED';
-        } else {
-          verdictType = 'SETTLED_MEDIATION';
+      // Cek apakah pemanggil adalah Admin / Hakim Otoritas
+      let isCallerAdmin = Boolean(adminJudgeOverride);
+      if (!isCallerAdmin && userId) {
+        const caller = await query.get('SELECT role, username FROM users WHERE id = ?', [userId]);
+        if (
+          caller &&
+          (String(caller.role || '').toUpperCase() === 'ADMIN' ||
+            ['admin', 'msyafiq19'].includes(String(caller.username || '').toLowerCase()))
+        ) {
+          isCallerAdmin = true;
         }
       }
 
-      // -------------------------------------------------------------
-      // SKENARIO A: VERSTEK (Penggugat Hadir, Tergugat MANGKIR)
-      // Penggugat Menang Mutlak, Uang Sitaan Penalti Cair ke Kas Penggugat!
-      // -------------------------------------------------------------
-      if (verdictType === 'VERSTEK_PLAINTIFF_WIN') {
-        verdictStatus = 'VERDICT_PAILIT';
-        awardedAmount = c.claim_amount_ib || 1000000000.0;
-        notes = `⚖️ PUTUSAN VERSTEK MAJELIS HAKIM PNAF: Tergugat (${c.defendant_name}) dinyatakan MANGKIR dan kehilangan hak membela diri. Gugatan Penggugat dikabulkan PENUH. Sita eksekusi ganti rugi sebesar IB ${awardedAmount.toLocaleString('id-ID')} dicairkan seketika ke Kas Pribadi Penggugat.`;
-
-        // Eksekusi pencairan uang jika ada plaintiff_user_id
-        if (c.plaintiff_user_id) {
-          await query.run('UPDATE users SET balance_ib = balance_ib + ? WHERE id = ?', [awardedAmount, c.plaintiff_user_id]);
+      if (!isCallerAdmin) {
+        // Jika bukan Admin: cek apakah Bot Hakim Otomatis sedang aktif
+        const autoEnabled = await isAutoJudgeEnabled();
+        if (!autoEnabled) {
+          return res.status(403).json({
+            error:
+              'Persidangan sedang berada dalam Mode Manual Hakim Agung. Ketukan palu putusan hanya dapat dilakukan oleh Majelis Hakim Otoritas PNAF.',
+          });
         }
-
-        // Potong dari tergugat jika terdaftar
-        if (c.defendant_user_id) {
-          await query.run('UPDATE users SET balance_ib = MAX(0, balance_ib - ?) WHERE id = ?', [awardedAmount, c.defendant_user_id]);
-        }
-      } 
-      // -------------------------------------------------------------
-      // SKENARIO B: GUGUR (Tergugat Hadir, Penggugat MANGKIR)
-      // -------------------------------------------------------------
-      else if (verdictType === 'GUGUR_DISMISSED') {
-        verdictStatus = 'VERDICT_REJECTED';
-        notes = `⚖️ PUTUSAN MAJELIS HAKIM PNAF: Penggugat (${c.plaintiff_name}) dinyatakan MANGKIR dan lalai membuktikan tuntutan. Gugatan dinyatakan GUGUR DEMI HUKUM.`;
-      } 
-      // -------------------------------------------------------------
-      // SKENARIO C: BATAL (Keduanya Sama-Sama Mangkir)
-      // -------------------------------------------------------------
-      else if (verdictType === 'BATAL_ANNULLED') {
-        verdictStatus = 'VERDICT_REJECTED';
-        notes = `⚖️ PENETAPAN HAKIM PNAF: Kedua belah pihak mangkir dari sidang. Perkara No. ${c.case_number} dinyatakan BATAL & GUGUR.`;
-      } 
-      // -------------------------------------------------------------
-      // SKENARIO D: MEDIASI / SIDANG KEDUANYA HADIR
-      // -------------------------------------------------------------
-      else {
-        verdictStatus = 'VERDICT_PKPU';
-        awardedAmount = Math.round((c.claim_amount_ib || 1000000000.0) * 0.5);
-        notes = `⚖️ VONIS MEDIASI ARBITRASE PNAF: Tergugat diwajibkan membayar kompensasi restrukturisasi sebesar IB ${awardedAmount.toLocaleString('id-ID')} kepada Penggugat dalam waktu 30 hari bursa.`;
-        if (c.plaintiff_user_id) {
-          await query.run('UPDATE users SET balance_ib = balance_ib + ? WHERE id = ?', [awardedAmount, c.plaintiff_user_id]);
+        // Jika Bot Hakim Otomatis aktif, jalankan musyawarah & putusan resmi oleh Bot Hakim
+        if (courtJudgeBot) {
+          await courtJudgeBot.tick({ forceImmediate: true, targetCaseId: caseId });
+          const decided = await query.get('SELECT * FROM court_cases WHERE id = ?', [caseId]);
+          return res.json({
+            success: true,
+            caseId,
+            verdictStatus: decided?.status,
+            verdictType: decided?.verdict_type,
+            notes: decided?.verdict_notes,
+            awardedAmount: decided?.verdict_awarded_amount || 0,
+            case: formatCourtCase(decided),
+            message: '🔨 Majelis Hakim Bot PNAF telah bermusyawarah dan mengetuk palu putusan!',
+          });
         }
       }
 
-      await query.run(
-        `UPDATE court_cases 
-         SET status = ?, verdict_notes = ?, verdict_type = ?, verdict_awarded_amount = ?, room_status = 'VERDICT_DELIVERED', closed_at = ?
-         WHERE id = ?`,
-        [verdictStatus, notes, verdictType, awardedAmount, new Date().toISOString(), caseId]
-      );
-
-      // Siarkan Breaking News Ketuk Palu
-      const newsItem = {
-        id: uuidv4(),
-        title: `⚖️ KETUK PALU PNAF: Perkara No. ${c.case_number} Resmi Diputus!`,
-        content: notes,
-        affected_sector: 'Semua Sektor',
-        sentiment: verdictType === 'VERSTEK_PLAINTIFF_WIN' ? 'BEARISH' : 'NEUTRAL',
-        published_at: new Date().toISOString()
-      };
-      await query.run(
-        'INSERT INTO news (id, title, content, affected_sector, sentiment, published_at) VALUES (?, ?, ?, ?, ?, ?)',
-        [newsItem.id, newsItem.title, newsItem.content, newsItem.affected_sector, newsItem.sentiment, newsItem.published_at]
-      );
-      io.emit('market:news_broadcast', newsItem);
-
-      // Siarkan Event Ketuk Palu & Mulai Countdown 60 Detik Auto Exit
-      io.emit(`court:verdict_reached:${caseId}`, {
+      const result = await executeCourtVerdict(io, {
         caseId,
-        verdictType,
-        verdictStatus,
-        notes,
-        awardedAmount,
-        autoExitSeconds: 60
+        verdictStatus: verdictStatus || null,
+        verdictType: forcedVerdictType || null,
+        verdictNotes: verdictNotes || '',
+        customAwardedAmount: awardedAmount,
+        decidedBy: 'ADMIN_MANUAL',
       });
 
-      res.json({
-        success: true,
-        caseId,
-        verdictType,
-        notes,
-        awardedAmount,
-        message: '🔨 Palu Sidang Resmi Diketok Tiga Kali! Berita Acara Putusan Terbit.'
-      });
+      res.json(result);
     } catch (err) {
       res.status(500).json({ error: err.message });
     }

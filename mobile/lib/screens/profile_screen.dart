@@ -664,33 +664,50 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
       appBar: AppBar(
         backgroundColor: const Color(0xFF0A0F1E),
         elevation: 0,
+        titleSpacing: 0,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                const Text(
-                  'PROFIL KONGLOMERAT',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, letterSpacing: 0.8, color: Colors.white),
+                const Flexible(
+                  child: Text(
+                    'PROFIL KONGLOMERAT',
+                    style: TextStyle(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.6,
+                      color: Colors.white,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-                const SizedBox(width: 8),
-                if (is9Naga)
+                if (is9Naga) ...[
+                  const SizedBox(width: 6),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
-                      gradient: const LinearGradient(colors: [Color(0xFFF59E0B), Color(0xFFB45309)]),
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFFF59E0B), Color(0xFFB45309)],
+                      ),
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: const Text(
                       '🐉 12 NAGA',
-                      style: TextStyle(color: Colors.white, fontSize: 8.5, fontWeight: FontWeight.w900),
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 8.5,
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
                   ),
+                ],
               ],
             ),
             const Text(
               'Otoritas Akun & Ekosistem Finansial IPMC',
-              style: TextStyle(fontSize: 10, color: Color(0xFF94A3B8)),
+              style: TextStyle(fontSize: 9.5, color: Color(0xFF94A3B8)),
+              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),
@@ -698,14 +715,20 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
           // Tombol Sinkronisasi / Cek Server
           IconButton(
             tooltip: 'Periksa Pembaruan Sistem',
+            visualDensity: VisualDensity.compact,
             icon: _isCheckingUpdate
-                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF38BDF8)))
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF38BDF8)),
+                  )
                 : const Icon(Icons.sync_rounded, color: Color(0xFF94A3B8), size: 20),
             onPressed: () => _checkServerVersion(silent: false),
           ),
           // Tombol Salinan Regulasi Konstitusi Notaris
           IconButton(
             tooltip: 'Konstitusi & Regulasi IPMC',
+            visualDensity: VisualDensity.compact,
             icon: const Icon(Icons.menu_book_rounded, color: Color(0xFFF59E0B), size: 20),
             onPressed: () {
               Navigator.push(
@@ -714,19 +737,24 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
               );
             },
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 6),
         ],
         bottom: TabBar(
           controller: _tabController,
+          labelPadding: const EdgeInsets.symmetric(horizontal: 6),
           indicatorColor: const Color(0xFFF59E0B),
           indicatorWeight: 3,
           labelColor: const Color(0xFFF59E0B),
           unselectedLabelColor: const Color(0xFF64748B),
-          labelStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 0.5),
+          labelStyle: const TextStyle(
+            fontSize: 10.5,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 0.3,
+          ),
           tabs: const [
-            Tab(text: 'PENGATURAN & AKUN'),
-            Tab(text: 'STATUS VIP & PRESTISE'),
-            Tab(text: 'HOLDING PT & REGULASI'),
+            Tab(text: 'AKUN & KEAMANAN'),
+            Tab(text: 'VIP & PRESTISE'),
+            Tab(text: 'HOLDING & REGULASI'),
           ],
         ),
       ),
@@ -1015,6 +1043,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
               const SizedBox(height: 6),
               TextField(
                 controller: _emailController,
+                onChanged: (_) => setState(() {}),
                 style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
                 keyboardType: TextInputType.emailAddress,
                 decoration: InputDecoration(
@@ -1029,26 +1058,48 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
               ),
               const SizedBox(height: 8),
 
-              // Tombol Aksi Verifikasi Email
-              Align(
-                alignment: Alignment.centerRight,
-                child: OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF34D399),
-                    side: const BorderSide(color: Color(0xFF059669)),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              // Tombol Aksi Verifikasi Email (Hanya tampil jika belum terverifikasi atau email diubah)
+              if (!isEmailVerified ||
+                  _emailController.text.trim().toLowerCase() != user.email.trim().toLowerCase())
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF34D399),
+                      side: const BorderSide(color: Color(0xFF059669)),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    onPressed: _isVerifyingEmail ? null : _startEmailVerificationFlow,
+                    icon: _isVerifyingEmail
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Color(0xFF34D399),
+                            ),
+                          )
+                        : const Icon(Icons.verified_rounded, size: 15),
+                    label: Text(
+                      isEmailVerified ? 'VERIFIKASI EMAIL BARU' : 'VERIFIKASI EMAIL SEKARANG',
+                      style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 10.5),
+                    ),
                   ),
-                  onPressed: _isVerifyingEmail ? null : _startEmailVerificationFlow,
-                  icon: _isVerifyingEmail
-                      ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF34D399)))
-                      : const Icon(Icons.verified_rounded, size: 15),
-                  label: const Text(
-                    'VERIFIKASI EMAIL SEKARANG',
-                    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 10.5),
-                  ),
+                )
+              else
+                const Row(
+                  children: [
+                    Icon(Icons.verified_user_rounded, color: Color(0xFF10B981), size: 13),
+                    SizedBox(width: 5),
+                    Expanded(
+                      child: Text(
+                        'Email resmi notariat telah terverifikasi & terhubung ke pemulihan akun.',
+                        style: TextStyle(color: Color(0xFF64748B), fontSize: 10),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
 
               const Divider(color: Color(0xFF1E293B), height: 26),
 

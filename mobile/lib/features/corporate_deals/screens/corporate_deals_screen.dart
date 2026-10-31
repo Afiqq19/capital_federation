@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../providers/game_provider.dart';
+import '../../../services/socket_service.dart';
 import '../models/deal_model.dart';
 import '../services/deals_service.dart';
 import '../widgets/deal_card.dart';
@@ -28,10 +29,20 @@ class _CorporateDealsScreenState extends State<CorporateDealsScreen> with Single
     super.initState();
     _tabController = TabController(length: 3, vsync: this, initialIndex: widget.initialIndex);
     _loadAllData();
+    SocketService.socket?.on('court:verdict', _onCourtSocketEvent);
+    SocketService.socket?.on('court:case_updated', _onCourtSocketEvent);
+  }
+
+  void _onCourtSocketEvent(dynamic _) {
+    if (mounted) {
+      _loadAllData();
+    }
   }
 
   @override
   void dispose() {
+    SocketService.socket?.off('court:verdict', _onCourtSocketEvent);
+    SocketService.socket?.off('court:case_updated', _onCourtSocketEvent);
     _tabController.dispose();
     super.dispose();
   }
@@ -59,11 +70,14 @@ class _CorporateDealsScreenState extends State<CorporateDealsScreen> with Single
     }
   }
 
-  void _openCourtRoom(String caseId) {
-    Navigator.push(
+  Future<void> _openCourtRoom(String caseId) async {
+    await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => CourtLiveRoomScreen(caseId: caseId)),
     );
+    if (mounted) {
+      _loadAllData();
+    }
   }
 
   Future<void> _openSellDialog() async {
@@ -184,6 +198,7 @@ class _CorporateDealsScreenState extends State<CorporateDealsScreen> with Single
         ],
         bottom: TabBar(
           controller: _tabController,
+          labelPadding: const EdgeInsets.symmetric(horizontal: 6),
           indicatorColor: const Color(0xFFF5B942),
           labelColor: const Color(0xFFF5B942),
           unselectedLabelColor: const Color(0xFF94A3B8),

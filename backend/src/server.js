@@ -11,6 +11,14 @@ const { query, initDb, recordCashFlow, syncAllToMariaDb } = require('./db');
 const MarketSimulationEngine = require('./engine/simulation');
 const SurveillanceService = require('./services/surveillance.service');
 const CommunitySimulationService = require('./services/communitySimulation.service');
+const {
+  formatCourtCase,
+  appendCourtChat,
+  executeCourtVerdict,
+  healExistingCourtCases,
+  CourtJudgeBotService,
+  BOT_CLERK_NAME,
+} = require('./services/courtEngine.service');
 const registerAdminRoutes = require('./routes/admin');
 
 const app = express();
@@ -1901,7 +1909,7 @@ app.post('/api/company/negotiation/deal', async (req, res) => {
 app.get('/api/court/cases', async (req, res) => {
   try {
     const cases = await query.all('SELECT * FROM court_cases ORDER BY created_at DESC');
-    res.json(cases);
+    res.json((cases || []).map((c) => formatCourtCase(c)));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1910,7 +1918,22 @@ app.get('/api/court/cases', async (req, res) => {
 // Pendaftaran Gugatan Sidang Baru ke Pengadilan Niaga
 app.post('/api/court/file-case', async (req, res) => {
   try {
-    const { plaintiffName, plaintiffUserId, defendantName, defendantUserId, defendantCompanyId, caseType, title, claimAmountIb, courtHearingDate, hearingDate, hearingTime, courtRoomName, targetAssetDescription, notes } = req.body;
+    const {
+      plaintiffName,
+      plaintiffUserId,
+      defendantName,
+      defendantUserId,
+      defendantCompanyId,
+      caseType,
+      title,
+      claimAmountIb,
+      courtHearingDate,
+      hearingDate,
+      hearingTime,
+      courtRoomName,
+      targetAssetDescription,
+      notes,
+    } = req.body;
     if (!plaintiffName || !defendantName || !title) {
       return res.status(400).json({ error: 'Data penggugat, tergugat, dan pokok perkara wajib diisi' });
     }
@@ -1923,27 +1946,97 @@ app.post('/api/court/file-case', async (req, res) => {
         if (plUser.balance_ib < courtFee) {
           return res.status(400).json({ error: 'Saldo Kas Pribadi tidak mencukupi untuk biaya panitera PNAF (IB 250.000)' });
         }
-        await query.run('UPDATE users SET balance_ib = balance_ib - ? WHERE id = ?', [courtFee, plUser.id]);
-        io.emit('user:balance_updated', { userId: plUser.id, newBalance: plUser.balance_ib - courtFee });
+        const newBal = plUser.balance_ib - courtFee;
+        await query.run('UPDATE users SET balance_ib = ? WHERE id = ?', [newBal, plUser.id]);
+        await recordCashFlow({
+          userId: plUser.id,
+          accountType: 'PERSONAL',
+          category: 'COURT_FEE',
+          title: `Biaya Registrasi Panitera PNAF: ${title}`,
+          amountIb: courtFee,
+          direction: 'EXPENSE',
+          balanceAfter: newBal,
+          notes: `Tergugat: ${defendantName}`,
+        });
+        await query.run(
+          'INSERT INTO state_treasury_ledger (id, source_type, title, amount_ib, direction, reference_id, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [uuidv4(), 'PNAF_FILING_FEE', `Biaya Registrasi Gugatan PNAF (${title})`, courtFee, 'INCOME', plUser.id, `Diajukan oleh ${plUser.username}`]
+        );
+        io.emit('user:balance_updated', { userId: plUser.id, newBalance: newBal });
+      }
+    }
+
+    // Auto-resolve defendant_user_id & defendant_company_id jika belum diisi
+    let resolvedDefUserId = defendantUserId || null;
+    let resolvedDefCompId = defendantCompanyId || null;
+    const cleanDef = String(defendantName).trim();
+    if (!resolvedDefUserId && cleanDef) {
+      const matchedUser = await query.get(
+        'SELECT id FROM users WHERE LOWER(username) = LOWER(?) OR LOWER(pt_name) = LOWER(?) LIMIT 1',
+        [cleanDef, cleanDef]
+      );
+      if (matchedUser) resolvedDefUserId = matchedUser.id;
+    }
+    if (!resolvedDefCompId && cleanDef) {
+      const matchedComp = await query.get(
+        'SELECT id, owner_id FROM companies WHERE LOWER(symbol) = LOWER(?) OR LOWER(name) LIKE LOWER(?) LIMIT 1',
+        [cleanDef, `%${cleanDef}%`]
+      );
+      if (matchedComp) {
+        resolvedDefCompId = matchedComp.id;
+        if (!resolvedDefUserId && matchedComp.owner_id) {
+          resolvedDefUserId = matchedComp.owner_id;
+        }
       }
     }
 
     const typeCode = caseType === 'BANKRUPTCY' ? 'Pailit' : (caseType === 'DISPUTE' ? 'Sengketa' : 'Bursa');
     const caseNumber = `${String(Math.floor(10 + Math.random() * 90)).padStart(3, '0')}/Pdt.Sus-${typeCode}/${new Date().getFullYear()}/PNAF`;
     const caseId = uuidv4();
-    const hearingSchedule = courtHearingDate || hearingDate || `${new Date(Date.now() + 2 * 86400000).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}`;
-    const timeVal = hearingTime || '10:00 WIB';
+    const hearingSchedule = courtHearingDate || hearingDate || 'Hari Ini, Sidang Segera';
+    const timeVal = hearingTime || 'Sesi Aktif WIB';
     const roomName = courtRoomName || 'Ruang Sidang Utama Kartika PNAF';
     const targetAsset = targetAssetDescription || 'Saham Portofolio, Dividen, dan Rekening Konglomerat';
+    const nextBotAt = new Date(Date.now() + 8000).toISOString();
 
     await query.run(
-      `INSERT INTO court_cases (id, case_number, case_type, title, plaintiff_name, defendant_name, defendant_user_id, defendant_company_id, claim_amount_ib, court_hearing_date, hearing_time, court_room_name, target_asset_description, status, verdict_notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'IN_TRIAL', ?)`,
-      [caseId, caseNumber, caseType || 'DISPUTE', title, plaintiffName, defendantName, defendantUserId || null, defendantCompanyId || null, claimAmountIb || 0.0, hearingSchedule, timeVal, roomName, targetAsset, notes || 'Berkas perkara telah diterima Panitera PNAF. Menunggu persidangan.']
+      `INSERT INTO court_cases (
+        id, case_number, case_type, title, plaintiff_name, plaintiff_user_id,
+        defendant_name, defendant_user_id, defendant_company_id, claim_amount_ib,
+        court_hearing_date, hearing_time, court_room_name, target_asset_description,
+        status, verdict_notes, plaintiff_present, room_status, bot_stage, bot_next_action_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'IN_TRIAL', ?, ?, 'WAITING_PRESENCE', 0, ?)`,
+      [
+        caseId,
+        caseNumber,
+        caseType || 'DISPUTE',
+        title,
+        plaintiffName,
+        plaintiffUserId || null,
+        defendantName,
+        resolvedDefUserId,
+        resolvedDefCompId,
+        Number(claimAmountIb) || 0.0,
+        hearingSchedule,
+        timeVal,
+        roomName,
+        targetAsset,
+        notes || 'Berkas perkara telah diterima Panitera PNAF. Menunggu pemeriksaan Majelis Hakim.',
+        plaintiffUserId ? 1 : 0,
+        nextBotAt,
+      ]
     );
 
+    await appendCourtChat(io, {
+      caseId,
+      senderName: BOT_CLERK_NAME,
+      senderRole: 'PANITERA',
+      message: `📜 REGISTRASI PERKARA SAH: Berkas gugatan No. ${caseNumber} (${title}) oleh ${plaintiffName} melawan ${defendantName} resmi diterima Kepaniteraan PNAF.`,
+    });
+
     const newCase = await query.get('SELECT * FROM court_cases WHERE id = ?', [caseId]);
-    io.emit('court:new_case', newCase);
+    const formattedCase = formatCourtCase(newCase);
+    io.emit('court:new_case', formattedCase);
 
     // Otomatis Siarkan Berita Breaking News ke Seluruh Klien Bursa & Ticker
     const formattedClaim = `IB ${Number(claimAmountIb || 0).toLocaleString('id-ID')}`;
@@ -1971,53 +2064,35 @@ app.post('/api/court/file-case', async (req, res) => {
       sentiment: 'BEARISH',
     });
 
-    res.json({ success: true, case: newCase, message: `Gugatan berhasil diregister di PNAF dengan Nomor Perkara: ${caseNumber}` });
+    res.json({ success: true, case: formattedCase, message: `Gugatan berhasil diregister di PNAF dengan Nomor Perkara: ${caseNumber}` });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Vonis Ketukan Palu Hakim Niaga Federasi
+// Vonis Ketukan Palu Hakim Niaga Federasi (Unified Verdict Engine)
 app.post('/api/court/verdict', async (req, res) => {
   try {
-    const { caseId, verdictStatus, verdictNotes } = req.body;
+    const { caseId, verdictStatus, verdictType, verdictNotes, awardedAmount } = req.body || {};
     const existing = await query.get('SELECT * FROM court_cases WHERE id = ?', [caseId]);
     if (!existing) return res.status(404).json({ error: 'Perkara tidak ditemukan' });
 
-    await query.run(
-      'UPDATE court_cases SET status = ?, verdict_notes = ? WHERE id = ?',
-      [verdictStatus, verdictNotes || 'Vonis telah dijatuhkan secara sah oleh Majelis Hakim Niaga Federasi.', caseId]
-    );
-
-    const updated = await query.get('SELECT * FROM court_cases WHERE id = ?', [caseId]);
-    io.emit('court:verdict', updated);
-
-    // Siarkan Berita Pengadilan ke Bursa
-    const newsId = uuidv4();
-    const nowIso = new Date().toISOString();
-    const newsTitle = `⚖️ VONIS HAKIM PNAF: Perkara No. ${updated.case_number}`;
-    const newsContent = `Majelis Hakim Pengadilan Niaga Federasi resmi menjatuhkan amar putusan "${verdictStatus}" terhadap Tergugat ${updated.defendant_name}. Diktum Majelis: ${verdictNotes || 'Putusan berkekuatan hukum tetap.'}`;
-
-    await query.run(
-      'INSERT INTO news (id, title, content, affected_sector, sentiment, published_at) VALUES (?, ?, ?, ?, ?, ?)',
-      [newsId, newsTitle, newsContent, 'Semua Sektor', verdictStatus === 'VERDICT_PAILIT' ? 'BEARISH' : 'NEUTRAL', nowIso]
-    );
-    io.emit('market:news_broadcast', {
-      id: newsId,
-      title: newsTitle,
-      content: newsContent,
-      affectedSector: 'Semua Sektor',
-      sentiment: verdictStatus === 'VERDICT_PAILIT' ? 'BEARISH' : 'NEUTRAL',
-      published_at: nowIso,
-    });
-    io.emit('market:breaking_news', {
-      id: newsId,
-      title: newsTitle,
-      content: newsContent,
-      sentiment: verdictStatus === 'VERDICT_PAILIT' ? 'BEARISH' : 'NEUTRAL',
+    const result = await executeCourtVerdict(io, {
+      caseId,
+      verdictStatus,
+      verdictType,
+      verdictNotes,
+      customAwardedAmount: awardedAmount !== undefined && awardedAmount !== '' ? Number(awardedAmount) : undefined,
+      decidedBy: 'ADMIN_MANUAL',
     });
 
-    res.json({ success: true, case: updated, message: `Vonis perkara ${updated.case_number} berhasil dijatuhkan dan disiarkan ke bursa.` });
+    res.json({
+      success: true,
+      case: result.case,
+      verdictStatus: result.verdictStatus,
+      awardedAmount: result.awardedAmount,
+      message: `Vonis perkara ${result.case.case_number} (${result.verdictStatus}) berhasil dijatuhkan, dieksekusi, dan disiarkan ke seluruh aplikasi!`,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -6368,8 +6443,9 @@ app.get('/api/admin/transactions', async (req, res) => {
 });
 
 // Mount Modular Routers: Deals (P2P/Global), Live Courtroom, State Treasury, Company Seizure, Ledger, Trade Orders, Bonds, Subsidies, and Tenders
+const courtJudgeBot = new CourtJudgeBotService(io);
 const dealsRouter = require('./routes/deals.routes')(io);
-const courtRoomRouter = require('./routes/court_room.routes')(io);
+const courtRoomRouter = require('./routes/court_room.routes')(io, courtJudgeBot);
 const treasuryRouter = require('./routes/treasury.routes')(io, simulationEngine);
 const seizureRouter = require('./routes/seizure.routes')(io, simulationEngine);
 const ledgerRouter = require('./routes/ledger.routes')();
@@ -6403,14 +6479,14 @@ const localBuiltApkPath = path.join(__dirname, '../../mobile/build/app/outputs/f
 
 async function getApkSettingsMap() {
   const defaults = {
-    apk_version: '1.6.7',
-    apk_build_number: '21',
+    apk_version: '1.6.8',
+    apk_build_number: '22',
     apk_min_android: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
-    apk_file_size_mb: '25.1 MB',
-    apk_release_notes: 'v1.6.7: Kuota beli Pasar Reguler diperluas hingga 49% (Publik + Konsorsium Institusi), sinkronisasi antrean Offer Orderbook real-time, transparansi struktur Lembar & Lot, serta normalisasi Cap Table 100%.',
+    apk_file_size_mb: '25.3 MB',
+    apk_release_notes: 'v1.6.8: Sinkronisasi penuh Putusan Ketuk Palu PNAF (Approved/PKPU/Pailit/Ditolak) & Brankas Akta Notaris, Majelis Hakim & Panitera Bot Otomatis 24/7 dengan sakelar ON/OFF Manual, serta modernisasi tampilan siap launching.',
     apk_external_url: '',
     apk_download_count: '315',
-    apk_sha256: '4722c4ad5c1d49ad3c9651a2779727946bb39febb5f8575d83f3cfde2a1576e0',
+    apk_sha256: '2f98c82e172ae1d484ffe15c3f32b539812f8d203b45d780b899f28baa38a2d8',
     apk_updated_at: new Date().toISOString(),
   };
   try {
@@ -6420,12 +6496,12 @@ async function getApkSettingsMap() {
         defaults[r.key] = String(r.value);
       }
     }
-    if (parseInt(defaults.apk_build_number || '0', 10) < 21) {
-      defaults.apk_version = '1.6.7';
-      defaults.apk_build_number = '21';
-      defaults.apk_file_size_mb = '25.1 MB';
-      defaults.apk_sha256 = '4722c4ad5c1d49ad3c9651a2779727946bb39febb5f8575d83f3cfde2a1576e0';
-      defaults.apk_release_notes = 'v1.6.7: Kuota beli Pasar Reguler diperluas hingga 49% (Publik + Konsorsium Institusi), sinkronisasi antrean Offer Orderbook real-time, transparansi struktur Lembar & Lot, serta normalisasi Cap Table 100%.';
+    if (parseInt(defaults.apk_build_number || '0', 10) < 22) {
+      defaults.apk_version = '1.6.8';
+      defaults.apk_build_number = '22';
+      defaults.apk_file_size_mb = '25.3 MB';
+      defaults.apk_sha256 = '2f98c82e172ae1d484ffe15c3f32b539812f8d203b45d780b899f28baa38a2d8';
+      defaults.apk_release_notes = 'v1.6.8: Sinkronisasi penuh Putusan Ketuk Palu PNAF (Approved/PKPU/Pailit/Ditolak) & Brankas Akta Notaris, Majelis Hakim & Panitera Bot Otomatis 24/7 dengan sakelar ON/OFF Manual, serta modernisasi tampilan siap launching.';
     }
   } catch (_) {}
   return defaults;
@@ -6811,6 +6887,7 @@ async function start() {
       const { ensureMarketPopulation } = require('./seed');
       await ensureMarketPopulation();
       await healAllCorruptedCapTables();
+      await healExistingCourtCases();
       await syncAllToMariaDb();
     }
   } catch (seedErr) {
@@ -6819,6 +6896,7 @@ async function start() {
   simulationEngine.start();
   surveillance.start();
   communitySimulation.start();
+  courtJudgeBot.start();
 }
 
 start().catch((err) => {

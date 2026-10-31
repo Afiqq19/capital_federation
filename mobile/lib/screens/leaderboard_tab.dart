@@ -179,22 +179,28 @@ class _LeaderboardTabState extends State<LeaderboardTab> with SingleTickerProvid
 
                   // Tabs
                   Container(
-                    height: 38,
+                    height: 40,
+                    padding: const EdgeInsets.all(3),
                     decoration: BoxDecoration(
                       color: const Color(0xFF0F172A),
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFF1E293B)),
                     ),
                     child: TabBar(
                       controller: _tabController,
                       indicatorSize: TabBarIndicatorSize.tab,
+                      labelPadding: const EdgeInsets.symmetric(horizontal: 6),
                       dividerColor: Colors.transparent,
                       indicator: BoxDecoration(
-                        color: const Color(0xFF1E293B),
-                        borderRadius: BorderRadius.circular(8),
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF1E293B), Color(0xFF334155)],
+                        ),
+                        borderRadius: BorderRadius.circular(9),
+                        border: Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.4)),
                       ),
                       labelColor: Colors.white,
                       unselectedLabelColor: const Color(0xFF64748B),
-                      labelStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                      labelStyle: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w900),
                       tabs: const [
                         Tab(text: 'TOP 100 KONGLOMERAT'),
                         Tab(text: 'CHAT GLOBAL BURSA'),

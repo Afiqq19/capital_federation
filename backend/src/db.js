@@ -515,6 +515,12 @@ async function initDb() {
   await safeAddColumn('court_cases', 'target_asset_description TEXT');
   await safeAddColumn('court_cases', 'court_room_name TEXT DEFAULT "Ruang Sidang Utama Kartika PNAF"');
   await safeAddColumn('court_cases', 'summons_sent INTEGER DEFAULT 0');
+  await safeAddColumn('court_cases', 'bot_stage INTEGER DEFAULT 0');
+  await safeAddColumn('court_cases', 'bot_next_action_at TEXT');
+  await safeAddColumn('court_cases', 'decided_by TEXT');
+  await safeAddColumn('court_cases', 'deed_id TEXT');
+  await safeAddColumn('court_cases', 'deed_number TEXT');
+  await safeAddColumn('court_chat_messages', 'sender_user_id TEXT');
 
   // New Corporate Legal & P2P Escrow Tables
   await query.exec(`

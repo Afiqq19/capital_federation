@@ -973,12 +973,12 @@ class _AssetExchangeTabState extends State<AssetExchangeTab> with SingleTickerPr
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'BURSA ASET, M&A & LELANG BCF',
+                              'BURSA ASET & M&A KORPORASI',
                               style: TextStyle(
                                 color: Colors.white,
-                                fontSize: 16.5,
+                                fontSize: 15.5,
                                 fontWeight: FontWeight.w900,
-                                letterSpacing: 0.6,
+                                letterSpacing: 0.5,
                               ),
                             ),
                             SizedBox(height: 2),
@@ -1030,7 +1030,7 @@ class _AssetExchangeTabState extends State<AssetExchangeTab> with SingleTickerPr
                   ),
                   const SizedBox(height: 12),
 
-                  // 3 Modern Tabs
+                  // 3 Modern Tabs (Anti-Terpotong dengan Pill Counter)
                   Container(
                     height: 40,
                     padding: const EdgeInsets.all(3),
@@ -1042,6 +1042,7 @@ class _AssetExchangeTabState extends State<AssetExchangeTab> with SingleTickerPr
                     child: TabBar(
                       controller: _tabController,
                       indicatorSize: TabBarIndicatorSize.tab,
+                      labelPadding: const EdgeInsets.symmetric(horizontal: 4),
                       dividerColor: Colors.transparent,
                       indicator: BoxDecoration(
                         gradient: const LinearGradient(
@@ -1054,12 +1055,39 @@ class _AssetExchangeTabState extends State<AssetExchangeTab> with SingleTickerPr
                       unselectedLabelColor: const Color(0xFF64748B),
                       labelStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900),
                       tabs: [
-                        Tab(text: 'PASAR AKUISISI (${_crisisCompanies.length})'),
                         Tab(
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              const Flexible(child: Text('RUPS PENDIRI', overflow: TextOverflow.ellipsis)),
+                              const Flexible(
+                                child: Text('AKUISISI', overflow: TextOverflow.ellipsis),
+                              ),
+                              const SizedBox(width: 4),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF38BDF8).withValues(alpha: 0.18),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  '${_crisisCompanies.length}',
+                                  style: const TextStyle(
+                                    color: Color(0xFF38BDF8),
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Tab(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Flexible(
+                                child: Text('RUPS PENDIRI', overflow: TextOverflow.ellipsis),
+                              ),
                               if (pendingIncomingCount > 0) ...[
                                 const SizedBox(width: 4),
                                 Container(
@@ -1070,14 +1098,43 @@ class _AssetExchangeTabState extends State<AssetExchangeTab> with SingleTickerPr
                                   ),
                                   child: Text(
                                     '$pendingIncomingCount',
-                                    style: const TextStyle(color: Color(0xFF020617), fontSize: 9, fontWeight: FontWeight.w900),
+                                    style: const TextStyle(
+                                      color: Color(0xFF020617),
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w900,
+                                    ),
                                   ),
                                 ),
                               ],
                             ],
                           ),
                         ),
-                        Tab(text: 'LELANG SITAAN (${_auctions.length})'),
+                        Tab(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Flexible(
+                                child: Text('LELANG BCF', overflow: TextOverflow.ellipsis),
+                              ),
+                              const SizedBox(width: 4),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF59E0B).withValues(alpha: 0.18),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  '${_auctions.length}',
+                                  style: const TextStyle(
+                                    color: Color(0xFFFBBF24),
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ],
                     ),
                   ),

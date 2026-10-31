@@ -279,12 +279,14 @@ class _FileLawsuitSheetState extends State<FileLawsuitSheet> {
             const SizedBox(height: 6),
             Wrap(
               spacing: 6,
-              children: [100000000.0, 500000000.0, 1000000000.0, 5000000000.0, 20000000000000.0].map((amt) {
-                final label = amt >= 1e12 ? '20 Triliun' : CurrencyFormatter.formatCompact(amt);
+              runSpacing: 4,
+              children: [50000000.0, 100000000.0, 500000000.0, 1000000000.0, 5000000000.0].map((amt) {
+                final label = CurrencyFormatter.formatCompact(amt);
                 return ActionChip(
-                  label: Text(label, style: const TextStyle(fontSize: 10, color: Color(0xFFCBD5E1))),
+                  label: Text(label, style: const TextStyle(fontSize: 10, color: Color(0xFFCBD5E1), fontWeight: FontWeight.w600)),
                   backgroundColor: const Color(0xFF070B14),
                   side: const BorderSide(color: Color(0xFF1E293B)),
+                  visualDensity: VisualDensity.compact,
                   onPressed: () {
                     setState(() {
                       _claimCtrl.text = amt.toStringAsFixed(0);

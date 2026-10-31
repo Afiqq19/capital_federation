@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../utils/formatters.dart';
+import '../../../utils/wib_time.dart';
 import '../models/deal_model.dart';
 import '../services/deals_service.dart';
 
@@ -24,27 +25,66 @@ class DeedCard extends StatefulWidget {
 class _DeedCardState extends State<DeedCard> {
   bool _isDisputing = false;
 
+  String _formatWibDateTime(String raw) {
+    final dt = tryParseServerTime(raw);
+    if (dt == null) {
+      return raw.length >= 16 ? raw.substring(0, 16) : raw;
+    }
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+    final hh = dt.hour.toString().padLeft(2, '0');
+    final mm = dt.minute.toString().padLeft(2, '0');
+    return '${dt.day} ${months[dt.month - 1]} ${dt.year}, $hh:$mm WIB';
+  }
+
   @override
   Widget build(BuildContext context) {
     final deed = widget.deed;
     final bool isSeller = deed.sellerUserId == widget.currentUserId;
     final bool isBuyer = deed.buyerUserId == widget.currentUserId;
-    final bool isDisputed = deed.status == 'DISPUTED_PNAF';
+
+    final String effectiveCourtStatus = deed.courtStatus ?? '';
+    final bool isApproved =
+        deed.status == 'VERDICT_APPROVED' || effectiveCourtStatus == 'VERDICT_APPROVED';
+    final bool isSettledPkpu =
+        deed.status == 'SETTLED_PKPU' || effectiveCourtStatus == 'VERDICT_PKPU';
+    final bool isExecutedPailit =
+        deed.status == 'EXECUTED_PAILIT' || effectiveCourtStatus == 'VERDICT_PAILIT';
+    final bool isInTrial = !isApproved &&
+        !isSettledPkpu &&
+        !isExecutedPailit &&
+        (effectiveCourtStatus == 'IN_TRIAL' ||
+            deed.status == 'DISPUTED_PNAF' ||
+            deed.status == 'BREACHED_WANPRESTASI');
+
+    Color borderColor = const Color(0xFFF5B942);
+    if (isApproved) {
+      borderColor = const Color(0xFF10B981);
+    } else if (isSettledPkpu) {
+      borderColor = const Color(0xFF06B6D4);
+    } else if (isExecutedPailit) {
+      borderColor = const Color(0xFFEF4444);
+    } else if (isInTrial) {
+      borderColor = const Color(0xFFF59E0B);
+    }
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF0F172A),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF0F172A), Color(0xFF0B1120)],
+        ),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isDisputed ? const Color(0xFFEF4444) : const Color(0xFFF5B942),
-          width: 1.5,
+          color: borderColor.withValues(alpha: 0.75),
+          width: 1.4,
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFF5B942).withValues(alpha: 0.05),
-            blurRadius: 10,
+            color: borderColor.withValues(alpha: 0.08),
+            blurRadius: 14,
             spreadRadius: 1,
           ),
         ],
@@ -55,6 +95,7 @@ class _DeedCardState extends State<DeedCard> {
           // Header: Nomor Akta & Meterai Digital
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
                 child: Column(
@@ -66,17 +107,18 @@ class _DeedCardState extends State<DeedCard> {
                         color: Color(0xFFF5B942),
                         fontSize: 12,
                         fontWeight: FontWeight.w900,
-                        letterSpacing: 0.5,
+                        letterSpacing: 0.4,
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Ditandatangani: ${deed.signedAt.length >= 16 ? deed.signedAt.substring(0, 16) : deed.signedAt}',
-                      style: const TextStyle(color: Color(0xFF64748B), fontSize: 9.5),
+                      'Disahkan: ${_formatWibDateTime(deed.signedAt)}',
+                      style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 9.5),
                     ),
                   ],
                 ),
               ),
+              const SizedBox(width: 8),
               // Meterai Badge
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -105,8 +147,9 @@ class _DeedCardState extends State<DeedCard> {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: const Color(0xFF1E293B),
+              color: const Color(0xFF1E293B).withValues(alpha: 0.7),
               borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFF334155).withValues(alpha: 0.6)),
             ),
             child: Row(
               children: [
@@ -161,7 +204,7 @@ class _DeedCardState extends State<DeedCard> {
             children: [
               Expanded(
                 child: Text(
-                  'Saham: ${deed.companyName}',
+                  'Emiten: ${deed.companyName}',
                   style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 11, fontWeight: FontWeight.w600),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -177,7 +220,7 @@ class _DeedCardState extends State<DeedCard> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Total Dana Transaksi', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11)),
+              const Text('Total Nilai Akta', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11)),
               Text(
                 CurrencyFormatter.formatFull(deed.totalAmountIb),
                 style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w900),
@@ -201,8 +244,8 @@ class _DeedCardState extends State<DeedCard> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Klausul Wanprestasi Pasal 7: Penalti ingkar janji/pembatalan sebesar ${deed.clauseBreachPenaltyPct.toStringAsFixed(0)}% '
-                    '(${CurrencyFormatter.formatFull(deed.totalAmountIb * (deed.clauseBreachPenaltyPct / 100.0))}) disita langsung melalui Pengadilan PNAF.',
+                    'Klausul Wanprestasi Pasal 7: Penalti ingkar janji sebesar ${deed.clauseBreachPenaltyPct.toStringAsFixed(0)}% '
+                    '(${CurrencyFormatter.formatFull(deed.totalAmountIb * (deed.clauseBreachPenaltyPct / 100.0))}) dieksekusi resmi melalui Mahkamah PNAF.',
                     style: const TextStyle(color: Color(0xFFFDE68A), fontSize: 9.5, height: 1.3),
                   ),
                 ),
@@ -211,21 +254,59 @@ class _DeedCardState extends State<DeedCard> {
           ),
           const SizedBox(height: 12),
 
-          // Tombol Gugat ke PNAF jika terjadi wanprestasi / pembatalan sepihak
-          if (isDisputed) ...[
+          // Status Putusan & Tombol Aksi Hukum PNAF
+          if (isApproved || isSettledPkpu || isExecutedPailit) ...[
+            _buildVerdictStampBanner(
+              deed: deed,
+              isApproved: isApproved,
+              isSettledPkpu: isSettledPkpu,
+            ),
+          ] else if (isInTrial) ...[
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 8),
+              padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: const Color(0xFFEF4444).withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFFEF4444)),
+                color: const Color(0xFFF59E0B).withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.7)),
               ),
-              child: const Center(
-                child: Text(
-                  '⚖️ SEDANG DALAM PROSES SIDANG GUGATAN DI PNAF',
-                  style: TextStyle(color: Color(0xFFEF4444), fontSize: 10, fontWeight: FontWeight.bold),
-                ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.hourglass_top_rounded, color: Color(0xFFFBBF24), size: 14),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          '⏳ SEDANG DISIDANGKAN DI PNAF${deed.courtCaseNumber != null ? ' (${deed.courtCaseNumber})' : ''}',
+                          style: const TextStyle(color: Color(0xFFFDE68A), fontSize: 10, fontWeight: FontWeight.w900),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (deed.courtCaseId != null && widget.onOpenCourtRoom != null) ...[
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 34,
+                      child: ElevatedButton.icon(
+                        icon: const Icon(Icons.meeting_room_rounded, size: 14),
+                        label: const Text(
+                          '⚖️ BUKA RUANG SIDANG LIVE PNAF',
+                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFF5B942),
+                          foregroundColor: const Color(0xFF0A0F1D),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        onPressed: () => widget.onOpenCourtRoom!(deed.courtCaseId!),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
           ] else ...[
@@ -239,70 +320,174 @@ class _DeedCardState extends State<DeedCard> {
                   style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
                 ),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFFEF4444),
+                  foregroundColor: const Color(0xFFF87171),
                   side: const BorderSide(color: Color(0xFFEF4444), width: 1.2),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
                 ),
-                onPressed: _isDisputing
-                    ? null
-                    : () async {
-                        final confirmed = await showDialog<bool>(
-                          context: context,
-                          builder: (ctx) => AlertDialog(
-                            backgroundColor: const Color(0xFF0F172A),
-                            title: const Text('Gugat Wanprestasi ke PNAF?', style: TextStyle(color: Colors.white, fontSize: 15)),
-                            content: Text(
-                              'Gugatan arbitrase niaga akan didaftarkan ke Pengadilan Niaga Federasi (PNAF).\n\n'
-                              'Klaim ganti rugi penalti: ${CurrencyFormatter.formatFull(deed.totalAmountIb * (deed.clauseBreachPenaltyPct / 100.0))}.\n'
-                              'Jadwal sidang otomatis ditetapkan pada pukul 10:00 WIB di Ruang Sidang Arbitrase PNAF.',
-                              style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11.5),
-                            ),
-                            actions: [
-                              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
-                              ElevatedButton(
-                                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFEF4444)),
-                                onPressed: () => Navigator.pop(ctx, true),
-                                child: const Text('Daftarkan Gugatan', style: TextStyle(color: Colors.white)),
-                              ),
-                            ],
-                          ),
-                        );
-
-                        if (confirmed == true) {
-                          if (!context.mounted) return;
-                          final messenger = ScaffoldMessenger.of(context);
-                          setState(() => _isDisputing = true);
-                          final res = await DealsService.disputeToPnaf(
-                            deedId: deed.id,
-                            plaintiffUserId: widget.currentUserId,
-                            grievanceReason: 'Wanprestasi pelaksanaan kewajiban transaksi saham pada Akta ${deed.deedNumber}',
-                          );
-                          setState(() => _isDisputing = false);
-
-                          if (!mounted) return;
-                          if (res['error'] != null) {
-                            messenger.showSnackBar(
-                              SnackBar(content: Text('❌ Gagal: ${res['error']}'), backgroundColor: Colors.red),
-                            );
-                          } else {
-                            widget.onRefresh();
-                            messenger.showSnackBar(
-                              SnackBar(
-                                content: Text('⚖️ ${res['message'] ?? 'Gugatan Berhasil Didaftarkan ke PNAF!'}'),
-                                backgroundColor: const Color(0xFF10B981),
-                              ),
-                            );
-                            if (widget.onOpenCourtRoom != null && res['caseId'] != null) {
-                              widget.onOpenCourtRoom!(res['caseId']);
-                            }
-                          }
-                        }
-                      },
+                onPressed: _isDisputing ? null : () => _confirmAndFileDispute(deed),
               ),
             ),
           ],
         ],
       ),
     );
+  }
+
+  Widget _buildVerdictStampBanner({
+    required DealDeedModel deed,
+    required bool isApproved,
+    required bool isSettledPkpu,
+  }) {
+    final Color color = isApproved
+        ? const Color(0xFF10B981)
+        : isSettledPkpu
+            ? const Color(0xFF06B6D4)
+            : const Color(0xFFEF4444);
+    final String title = isApproved
+        ? '✅ PUTUSAN PNAF: DIKABULKAN (APPROVED)'
+        : isSettledPkpu
+            ? '🤝 PUTUSAN PNAF: MEDIASI / PKPU DISETUJUI'
+            : '🔨 PUTUSAN PNAF: EKSEKUSI PAILIT & SITA';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(11),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.8), width: 1.2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.verified_rounded, color: color, size: 15),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(color: color, fontSize: 10.5, fontWeight: FontWeight.w900),
+                ),
+              ),
+            ],
+          ),
+          if (deed.courtCaseNumber != null || deed.courtAwardedIb > 0) ...[
+            const SizedBox(height: 5),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                if (deed.courtCaseNumber != null)
+                  Text(
+                    'Reg: ${deed.courtCaseNumber}',
+                    style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 9.5, fontFamily: 'monospace'),
+                  ),
+                if (deed.courtAwardedIb > 0)
+                  Text(
+                    'Cair: ${CurrencyFormatter.formatFull(deed.courtAwardedIb)}',
+                    style: const TextStyle(color: Color(0xFF34D399), fontSize: 10, fontWeight: FontWeight.w900),
+                  ),
+              ],
+            ),
+          ],
+          if (deed.courtCaseId != null && widget.onOpenCourtRoom != null) ...[
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              height: 32,
+              child: OutlinedButton.icon(
+                icon: Icon(Icons.description_rounded, size: 13, color: color),
+                label: Text(
+                  '📜 LIHAT ARSIP SIDANG & AMAR PUTUSAN',
+                  style: TextStyle(color: color, fontSize: 9.5, fontWeight: FontWeight.w900),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: color.withValues(alpha: 0.6)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
+                ),
+                onPressed: () => widget.onOpenCourtRoom!(deed.courtCaseId!),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmAndFileDispute(DealDeedModel deed) async {
+    final penaltyAmount = deed.totalAmountIb * (deed.clauseBreachPenaltyPct / 100.0);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF0F172A),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: Color(0xFFF5B942), width: 1.2),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.gavel_rounded, color: Color(0xFFF5B942), size: 20),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Gugat Wanprestasi ke PNAF?',
+                style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'Gugatan arbitrase niaga atas Akta ${deed.deedNumber} akan diregister ke Pengadilan Niaga Federasi (PNAF).\n\n'
+          '• Tuntutan Penalti Pasal 7: ${CurrencyFormatter.formatFull(penaltyAmount)}\n'
+          '• Biaya Panitera: IB 250.000\n'
+          '• Majelis Hakim PNAF akan segera memeriksa bukti akta & memutus perkara.',
+          style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 11.5, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal', style: TextStyle(color: Color(0xFF94A3B8))),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Daftarkan Gugatan', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
+      setState(() => _isDisputing = true);
+      final res = await DealsService.disputeToPnaf(
+        deedId: deed.id,
+        plaintiffUserId: widget.currentUserId,
+        grievanceReason: 'Wanprestasi pelaksanaan kewajiban transaksi saham pada Akta ${deed.deedNumber}',
+      );
+      if (!mounted) return;
+      setState(() => _isDisputing = false);
+
+      if (res['error'] != null) {
+        messenger.showSnackBar(
+          SnackBar(content: Text('❌ ${res['error']}'), backgroundColor: Colors.red),
+        );
+      } else {
+        widget.onRefresh();
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('⚖️ ${res['message'] ?? 'Gugatan Berhasil Didaftarkan ke PNAF!'}'),
+            backgroundColor: const Color(0xFF10B981),
+          ),
+        );
+        if (widget.onOpenCourtRoom != null && res['caseId'] != null) {
+          widget.onOpenCourtRoom!(res['caseId'].toString());
+        }
+      }
+    }
   }
 }

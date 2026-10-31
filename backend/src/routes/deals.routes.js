@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
-const { query } = require('../db');
+const { query, recordCashFlow } = require('../db');
+const { formatCourtCase, appendCourtChat, BOT_CLERK_NAME } = require('../services/courtEngine.service');
 
 const dealCooldownMap = new Map();
 
@@ -595,7 +596,26 @@ module.exports = function(io) {
         WHERE seller_user_id = ? OR buyer_user_id = ?
         ORDER BY created_at DESC
       `, [userId, userId]);
-      res.json(deeds || []);
+
+      const enriched = [];
+      for (const d of (deeds || [])) {
+        const linkedCase = await query.get(
+          `SELECT id, case_number, status, verdict_awarded_amount, verdict_notes
+           FROM court_cases
+           WHERE deed_id = ? OR deed_number = ? OR title LIKE ?
+           ORDER BY CASE WHEN status = 'IN_TRIAL' THEN 0 WHEN verdict_awarded_amount > 0 THEN 1 ELSE 2 END, created_at DESC
+           LIMIT 1`,
+          [d.id, d.deed_number, `%#${d.deed_number}%`]
+        );
+        enriched.push({
+          ...d,
+          court_case_id: linkedCase?.id || null,
+          court_case_number: linkedCase?.case_number || null,
+          court_status: linkedCase?.status || null,
+          court_awarded_ib: linkedCase?.verdict_awarded_amount || 0,
+        });
+      }
+      res.json(enriched);
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
@@ -614,24 +634,59 @@ module.exports = function(io) {
   // 8. Gugat Wanprestasi ke PNAF dari Akta
   router.post('/dispute-to-pnaf', async (req, res) => {
     try {
-      const { deedId, plaintiffUserId, disputeReason } = req.body;
+      const { deedId, plaintiffUserId, disputeReason, grievanceReason } = req.body;
       const deed = await query.get('SELECT * FROM deal_deeds WHERE id = ?', [deedId]);
       if (!deed) return res.status(404).json({ error: 'Akta perjanjian tidak ditemukan' });
+
+      // Cegah pengajuan gugatan ganda atas akta yang sedang disidangkan atau sudah dimenangkan
+      const existingCase = await query.get(
+        `SELECT * FROM court_cases
+         WHERE (deed_id = ? OR deed_number = ? OR title LIKE ?)
+           AND status IN ('IN_TRIAL', 'VERDICT_APPROVED', 'VERDICT_PKPU', 'VERDICT_PAILIT')
+         ORDER BY created_at DESC LIMIT 1`,
+        [deed.id, deed.deed_number, `%#${deed.deed_number}%`]
+      );
+      if (existingCase) {
+        if (existingCase.status === 'IN_TRIAL') {
+          return res.json({
+            success: true,
+            caseId: existingCase.id,
+            caseNumber: existingCase.case_number,
+            penaltyAmount: existingCase.claim_amount_ib,
+            message: `⚖️ Akta ini sedang dalam proses persidangan aktif di Perkara #${existingCase.case_number}. Mengarahkan ke Ruang Sidang...`,
+          });
+        }
+        return res.status(400).json({
+          error: `Sengketa atas Akta #${deed.deed_number} telah diputus secara inkrah pada Perkara No. ${existingCase.case_number} (${existingCase.status}).`,
+        });
+      }
 
       const plaintiff = await query.get('SELECT * FROM users WHERE id = ?', [plaintiffUserId]);
       if (!plaintiff) return res.status(404).json({ error: 'Data penggugat tidak valid' });
 
-      // Cek biaya registrasi panitera IB 250.000
-      if ((plaintiff.balance_ib || 0) < 250000) {
+      const filingFee = 250000;
+      if ((plaintiff.balance_ib || 0) < filingFee) {
         return res.status(400).json({ error: 'Kas Pribadi Anda tidak cukup untuk biaya panitera IB 250.000' });
       }
 
-      await query.run('UPDATE users SET balance_ib = balance_ib - 250000 WHERE id = ?', [plaintiffUserId]);
+      const newBalance = (Number(plaintiff.balance_ib) || 0) - filingFee;
+      await query.run('UPDATE users SET balance_ib = ? WHERE id = ?', [newBalance, plaintiffUserId]);
+      await recordCashFlow({
+        userId: plaintiffUserId,
+        accountType: 'PERSONAL',
+        category: 'COURT_FEE',
+        title: `Biaya Panitera Gugatan Akta #${deed.deed_number}`,
+        amountIb: filingFee,
+        direction: 'EXPENSE',
+        balanceAfter: newBalance,
+        notes: disputeReason || grievanceReason || 'Registrasi sengketa wanprestasi ke PNAF',
+      });
+      io.emit('user:balance_updated', { userId: plaintiffUserId, newBalance });
 
       // Catat ke kas negara
       await query.run(
         'INSERT INTO state_treasury_ledger (id, source_type, title, amount_ib, direction, reference_id, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [uuidv4(), 'PNAF_FILING_FEE', `Biaya Pendaftaran Gugatan Wanprestasi Akta #${deed.deed_number}`, 250000, 'INCOME', deed.deed_number, `Diajukan oleh ${plaintiff.username}`]
+        [uuidv4(), 'PNAF_FILING_FEE', `Biaya Pendaftaran Gugatan Wanprestasi Akta #${deed.deed_number}`, filingFee, 'INCOME', deed.deed_number, `Diajukan oleh ${plaintiff.username}`]
       );
 
       // Hitung tuntutan ganti rugi penalti 20% nilai akta
@@ -642,24 +697,51 @@ module.exports = function(io) {
 
       const caseId = uuidv4();
       const caseNumber = `0${Math.floor(10 + Math.random() * 90)}/Pdt.Sus-Wanprestasi/${new Date().getFullYear()}/PNAF`;
+      const reasonNote = disputeReason || grievanceReason || `Penggugat menuntut denda penalti wanprestasi 20% (IB ${penaltyAmount.toLocaleString('id-ID')}) atas pelanggaran klausul Akta #${deed.deed_number}.`;
+      const nextBotAt = new Date(Date.now() + 8000).toISOString();
 
       await query.run(
         `INSERT INTO court_cases (
           id, case_number, case_type, title, plaintiff_name, defendant_name,
           defendant_user_id, claim_amount_ib, court_hearing_date, status, verdict_notes,
-          plaintiff_user_id, hearing_time, room_status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          plaintiff_user_id, hearing_time, room_status, plaintiff_present, deed_id, deed_number,
+          bot_stage, bot_next_action_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
-          caseId, caseNumber, 'DISPUTE', `Gugatan Wanprestasi & Pelanggaran Klausul Akta #${deed.deed_number}`,
-          `${plaintiff.username} (${plaintiff.pt_name || 'Penggugat'})`, defendantName,
-          defendantUserId, penaltyAmount, 'Hari Ini, 10:00 WIB', 'IN_TRIAL',
-          `Penggugat menuntut denda penalti wanprestasi 20% (IB ${penaltyAmount.toLocaleString('id-ID')}) atas pembatalan sepihak akta.`,
-          plaintiffUserId, '10:00 WIB', 'WAITING_PRESENCE'
+          caseId,
+          caseNumber,
+          'DISPUTE',
+          `Gugatan Wanprestasi & Pelanggaran Klausul Akta #${deed.deed_number}`,
+          `${plaintiff.username} (${plaintiff.pt_name || 'Penggugat'})`,
+          defendantName,
+          defendantUserId,
+          penaltyAmount,
+          'Hari Ini, Sidang Segera',
+          'IN_TRIAL',
+          reasonNote,
+          plaintiffUserId,
+          'Sesi Aktif WIB',
+          'IN_SESSION',
+          1,
+          deed.id,
+          deed.deed_number,
+          0,
+          nextBotAt,
         ]
       );
 
+      await appendCourtChat(io, {
+        caseId,
+        senderName: BOT_CLERK_NAME,
+        senderRole: 'PANITERA',
+        message: `📜 BERKAS DITERIMA KEPANITERAAN: Gugatan Wanprestasi atas Akta #${deed.deed_number} oleh ${plaintiff.username} telah teregistrasi dengan Nomor Perkara ${caseNumber}. Nilai tuntutan: IB ${penaltyAmount.toLocaleString('id-ID')}.`,
+      });
+
       // Update status akta
       await query.run('UPDATE deal_deeds SET status = "BREACHED_WANPRESTASI" WHERE id = ?', [deedId]);
+
+      const createdCase = await query.get('SELECT * FROM court_cases WHERE id = ?', [caseId]);
+      io.emit('court:new_case', formatCourtCase(createdCase));
 
       // Berita Breaking News
       const newsItem = {
@@ -667,8 +749,9 @@ module.exports = function(io) {
         title: `🚨 GUGATAN WANPRESTASI PNAF: ${plaintiff.username} Menggugat ${defendantName}!`,
         content: `Perkara No. ${caseNumber} resmi terdaftar. Penggugat menuntut sita ganti rugi penalti wanprestasi IB ${penaltyAmount.toLocaleString('id-ID')} atas Akta #${deed.deed_number}.`,
         affected_sector: 'Semua Sektor',
+        affectedSector: 'Semua Sektor',
         sentiment: 'BEARISH',
-        published_at: new Date().toISOString()
+        published_at: new Date().toISOString(),
       };
       await query.run(
         'INSERT INTO news (id, title, content, affected_sector, sentiment, published_at) VALUES (?, ?, ?, ?, ?, ?)',
@@ -681,7 +764,7 @@ module.exports = function(io) {
         caseId,
         caseNumber,
         penaltyAmount,
-        message: `⚖️ Gugatan Wanprestasi #${caseNumber} Resmi Didaftarkan ke PNAF Federasi! Tuntutan Penalti: IB ${penaltyAmount.toLocaleString('id-ID')}`
+        message: `⚖️ Gugatan Wanprestasi #${caseNumber} Resmi Didaftarkan ke PNAF Federasi! Tuntutan Penalti: IB ${penaltyAmount.toLocaleString('id-ID')}`,
       });
     } catch (err) {
       res.status(500).json({ error: err.message });

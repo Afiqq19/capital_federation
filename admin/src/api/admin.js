@@ -51,6 +51,9 @@ export const adminApi = {
   scheduleCourtHearing: (caseId, payload) => request(`/api/court/room/${caseId}/schedule`, { method: 'POST', body: payload }),
   sendCourtSummons: (caseId) => request(`/api/court/room/${caseId}/send-summons`, { method: 'POST' }),
   sendCourtMessage: (caseId, payload) => request(`/api/court/room/${caseId}/messages`, { method: 'POST', body: payload }),
+  courtAutoJudgeStatus: () => request('/api/court/auto-judge/status'),
+  toggleCourtAutoJudge: (enabled) => request('/api/court/auto-judge/toggle', { method: 'POST', body: { enabled } }),
+  processCourtAutoJudgeNow: (caseId = null) => request('/api/court/auto-judge/process-now', { method: 'POST', body: { caseId } }),
 
   // ---- Sita Perusahaan & BUMN ----
   seizeCompany: (companyId, reason) => request(`/api/companies/${companyId}/seize`, { method: 'POST', body: { reason } }),

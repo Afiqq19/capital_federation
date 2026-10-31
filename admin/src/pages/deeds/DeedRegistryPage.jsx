@@ -225,10 +225,25 @@ export default function DeedRegistryPage() {
                     </td>
 
                     <td>
-                      {d.status === 'BREACHED_WANPRESTASI' ? (
+                      {d.status === 'BREACHED_WANPRESTASI' || d.status === 'DISPUTED_PNAF' ? (
                         <Badge tone="rose" pulse>
                           <AlertTriangle size={10} className="mr-1" />
-                          SENGKETA WANPRESTASI
+                          DALAM SIDANG PNAF
+                        </Badge>
+                      ) : d.status === 'VERDICT_APPROVED' ? (
+                        <Badge tone="emerald">
+                          <CheckCircle2 size={10} className="mr-1" />
+                          PNAF: DIKABULKAN (APPROVED)
+                        </Badge>
+                      ) : d.status === 'SETTLED_PKPU' ? (
+                        <Badge tone="sky">
+                          <Gavel size={10} className="mr-1" />
+                          PNAF: DAMAI / PKPU
+                        </Badge>
+                      ) : d.status === 'EXECUTED_PAILIT' ? (
+                        <Badge tone="amber">
+                          <Gavel size={10} className="mr-1" />
+                          PNAF: EKSEKUSI SITA
                         </Badge>
                       ) : (
                         <Badge tone="emerald">

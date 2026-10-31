@@ -1,0 +1,993 @@
+const { v4: uuidv4 } = require('uuid');
+const { query, recordCashFlow } = require('../db');
+
+const BOT_JUDGE_NAME = 'Yang Mulia Hakim Agung Dr. Ariswara, S.H., M.H.';
+const BOT_CLERK_NAME = 'Panitera Utama Raden Pramono, S.H.';
+const AUTO_JUDGE_SETTING_KEY = 'court_bot_auto_judge';
+
+function getWibParts(date = new Date()) {
+  const wibMs = date.getTime() + 7 * 3600 * 1000;
+  const wib = new Date(wibMs);
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+  const day = String(wib.getUTCDate()).padStart(2, '0');
+  const month = months[wib.getUTCMonth()];
+  const year = wib.getUTCFullYear();
+  const hh = String(wib.getUTCHours()).padStart(2, '0');
+  const mm = String(wib.getUTCMinutes()).padStart(2, '0');
+  return {
+    dateStr: `${day} ${month} ${year}`,
+    timeStr: `${hh}:${mm} WIB`,
+    fullStr: `${day} ${month} ${year}, ${hh}:${mm} WIB`,
+  };
+}
+
+function extractDeedNumberFromTitle(title) {
+  if (!title || typeof title !== 'string') return null;
+  const match = title.match(/#([A-Z0-9\/._-]+)/i);
+  return match ? match[1] : null;
+}
+
+function normalizeStatus(status) {
+  if (!status) return 'IN_TRIAL';
+  const s = String(status).toUpperCase().trim();
+  if (s === 'APPROVED' || s === 'DIKABULKAN' || s === 'WON' || s === 'VERDICT_WON') {
+    return 'VERDICT_APPROVED';
+  }
+  if (s === 'DISMISSED' || s === 'REJECTED' || s === 'CLOSED_REJECTED') {
+    return 'VERDICT_REJECTED';
+  }
+  return s;
+}
+
+function formatCourtMessage(m) {
+  if (!m) return null;
+  const role = m.sender_role || m.role || 'PENGGUGAT';
+  return {
+    ...m,
+    id: m.id,
+    case_id: m.case_id,
+    caseId: m.case_id,
+    sender_name: m.sender_name || m.senderName || 'Peserta Sidang',
+    senderName: m.sender_name || m.senderName || 'Peserta Sidang',
+    sender_role: role,
+    senderRole: role,
+    role,
+    sender_user_id: m.sender_user_id || m.senderUserId || null,
+    senderUserId: m.sender_user_id || m.senderUserId || null,
+    message: m.message || '',
+    created_at: m.created_at || new Date().toISOString(),
+    createdAt: m.created_at || new Date().toISOString(),
+  };
+}
+
+function formatCourtCase(c, messages = undefined) {
+  if (!c) return null;
+  const normalizedStatus = normalizeStatus(c.status);
+  const isDecided = normalizedStatus !== 'IN_TRIAL';
+  const inferredVerdictType =
+    c.verdict_type ||
+    (normalizedStatus === 'VERDICT_APPROVED'
+      ? 'APPROVED_PLAINTIFF_WIN'
+      : normalizedStatus === 'VERDICT_PAILIT'
+      ? 'VERSTEK_PLAINTIFF_WIN'
+      : normalizedStatus === 'VERDICT_PKPU'
+      ? 'SETTLED_MEDIATION'
+      : normalizedStatus === 'VERDICT_REJECTED'
+      ? 'GUGUR_DISMISSED'
+      : null);
+
+  const deedNumber = c.deed_number || extractDeedNumberFromTitle(c.title);
+
+  const result = {
+    ...c,
+    status: normalizedStatus,
+    verdict_type: inferredVerdictType,
+    room_status: isDecided ? 'VERDICT_DELIVERED' : (c.room_status || 'WAITING_PRESENCE'),
+    deed_number: deedNumber || null,
+    // CamelCase & Nested Structures for Mobile APK Full Compatibility
+    caseNumber: c.case_number,
+    caseType: c.case_type || 'DISPUTE',
+    plaintiffName: c.plaintiff_name || 'Penggugat',
+    plaintiffUserId: c.plaintiff_user_id || null,
+    defendantName: c.defendant_name || 'Tergugat',
+    defendantUserId: c.defendant_user_id || null,
+    defendantCompanyId: c.defendant_company_id || null,
+    claimAmountIb: Number(c.claim_amount_ib || 0),
+    courtHearingDate: c.court_hearing_date || 'Hari Ini',
+    hearingTime: c.hearing_time || '10:00 WIB',
+    courtRoomName: c.court_room_name || 'Ruang Sidang Utama Kartika PNAF',
+    targetAssetDescription: c.target_asset_description || null,
+    verdictNotes: c.verdict_notes || '',
+    verdictType: inferredVerdictType,
+    verdictAwardedAmount: Number(c.verdict_awarded_amount || 0),
+    roomStatus: isDecided ? 'VERDICT_DELIVERED' : (c.room_status || 'WAITING_PRESENCE'),
+    plaintiffPresent: c.plaintiff_present === 1,
+    defendantPresent: c.defendant_present === 1,
+    summonsSent: c.summons_sent === 1,
+    closedAt: c.closed_at || null,
+    createdAt: c.created_at || '',
+    decidedBy: c.decided_by || null,
+    botStage: Number(c.bot_stage || 0),
+    deedId: c.deed_id || null,
+    deedNumber: deedNumber || null,
+    isDecided,
+    plaintiff: {
+      id: c.plaintiff_user_id || '',
+      name: c.plaintiff_name || 'Penggugat',
+      present: c.plaintiff_present === 1,
+    },
+    defendant: {
+      id: c.defendant_user_id || '',
+      name: c.defendant_name || 'Tergugat',
+      present: c.defendant_present === 1,
+    },
+  };
+
+  if (messages !== undefined) {
+    result.messages = (messages || []).map(formatCourtMessage);
+  }
+  return result;
+}
+
+async function isAutoJudgeEnabled() {
+  try {
+    const row = await query.get(
+      'SELECT value FROM central_bank_settings WHERE key = ?',
+      [AUTO_JUDGE_SETTING_KEY]
+    );
+    if (!row) {
+      await query.run(
+        'INSERT OR REPLACE INTO central_bank_settings (key, value) VALUES (?, ?)',
+        [AUTO_JUDGE_SETTING_KEY, 'true']
+      );
+      return true;
+    }
+    return String(row.value).toLowerCase() === 'true' || String(row.value) === '1';
+  } catch (_) {
+    return true;
+  }
+}
+
+async function setAutoJudgeEnabled(enabled) {
+  const val = enabled ? 'true' : 'false';
+  await query.run(
+    'INSERT OR REPLACE INTO central_bank_settings (key, value) VALUES (?, ?)',
+    [AUTO_JUDGE_SETTING_KEY, val]
+  );
+  return enabled;
+}
+
+async function getAutoJudgeStatusPayload() {
+  const enabled = await isAutoJudgeEnabled();
+  const inTrialRow = await query.get("SELECT COUNT(*) as count FROM court_cases WHERE status = 'IN_TRIAL'");
+  const botDecidedRow = await query.get("SELECT COUNT(*) as count FROM court_cases WHERE decided_by = 'BOT_JUDGE'");
+  const totalDecidedRow = await query.get("SELECT COUNT(*) as count FROM court_cases WHERE status != 'IN_TRIAL'");
+  return {
+    enabled,
+    mode: enabled ? 'AUTO_BOT' : 'MANUAL_ADMIN',
+    judgeName: BOT_JUDGE_NAME,
+    clerkName: BOT_CLERK_NAME,
+    activeInTrialCount: inTrialRow?.count || 0,
+    totalDecidedByBot: botDecidedRow?.count || 0,
+    totalDecided: totalDecidedRow?.count || 0,
+    cycleSeconds: 15,
+  };
+}
+
+async function resolveLinkedDeed(courtCase) {
+  if (!courtCase) return null;
+  if (courtCase.deed_id) {
+    const byId = await query.get('SELECT * FROM deal_deeds WHERE id = ?', [courtCase.deed_id]);
+    if (byId) return byId;
+  }
+  const deedNum = courtCase.deed_number || extractDeedNumberFromTitle(courtCase.title);
+  if (deedNum) {
+    const byNum = await query.get('SELECT * FROM deal_deeds WHERE deed_number = ?', [deedNum]);
+    if (byNum) return byNum;
+  }
+  return null;
+}
+
+async function appendCourtChat(io, { caseId, senderName, senderRole, senderUserId = null, message }) {
+  const msgId = uuidv4();
+  const nowIso = new Date().toISOString();
+  await query.run(
+    'INSERT INTO court_chat_messages (id, case_id, sender_name, sender_role, sender_user_id, message, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    [msgId, caseId, senderName, senderRole, senderUserId, message, nowIso]
+  );
+  const formatted = formatCourtMessage({
+    id: msgId,
+    case_id: caseId,
+    sender_name: senderName,
+    sender_role: senderRole,
+    sender_user_id: senderUserId,
+    message,
+    created_at: nowIso,
+  });
+  if (io) {
+    io.emit(`court:new_message:${caseId}`, formatted);
+  }
+  return formatted;
+}
+
+/**
+ * Satu pintu eksekusi Ketuk Palu Putusan Pengadilan Niaga Federasi (PNAF)
+ * Dipakai oleh:
+ *  - Web Admin (/api/court/verdict & /api/court/room/verdict)
+ *  - Mobile APK Admin/Hakim (/api/court/room/verdict & /api/court/verdict)
+ *  - Majelis Hakim Bot Otomatis PNAF (CourtJudgeBotService)
+ */
+async function executeCourtVerdict(
+  io,
+  {
+    caseId,
+    verdictStatus,
+    verdictType,
+    verdictNotes,
+    customAwardedAmount = undefined,
+    decidedBy = 'ADMIN_MANUAL',
+    broadcastNews = true,
+  }
+) {
+  const c = await query.get('SELECT * FROM court_cases WHERE id = ?', [caseId]);
+  if (!c) {
+    throw new Error('Perkara tidak ditemukan');
+  }
+
+  // Opsi membuka kembali perkara ke IN_TRIAL oleh Admin
+  if (verdictStatus === 'IN_TRIAL') {
+    const reopenNotes = verdictNotes || 'Perkara dibuka kembali untuk pemeriksaan lanjutan oleh Majelis Hakim PNAF.';
+    await query.run(
+      `UPDATE court_cases
+       SET status = 'IN_TRIAL',
+           verdict_notes = ?,
+           verdict_type = NULL,
+           room_status = 'IN_SESSION',
+           closed_at = NULL,
+           bot_stage = 1
+       WHERE id = ?`,
+      [reopenNotes, caseId]
+    );
+    await appendCourtChat(io, {
+      caseId,
+      senderName: BOT_CLERK_NAME,
+      senderRole: 'PANITERA',
+      message: `🔄 SIDANG DIBUKA KEMBALI: ${reopenNotes}`,
+    });
+    const reopened = await query.get('SELECT * FROM court_cases WHERE id = ?', [caseId]);
+    const formattedReopened = formatCourtCase(reopened);
+    if (io) {
+      io.emit('court:verdict', formattedReopened);
+      io.emit('court:case_updated', formattedReopened);
+    }
+    return {
+      success: true,
+      case: formattedReopened,
+      verdictStatus: 'IN_TRIAL',
+      verdictType: null,
+      awardedAmount: 0,
+      notes: reopenNotes,
+    };
+  }
+
+  // Tentukan finalStatus & finalType secara konsisten
+  let finalStatus = verdictStatus ? normalizeStatus(verdictStatus) : null;
+  let finalType = verdictType || null;
+
+  if (!finalStatus && finalType) {
+    if (finalType === 'APPROVED_PLAINTIFF_WIN') {
+      finalStatus = 'VERDICT_APPROVED';
+    } else if (finalType === 'VERSTEK_PLAINTIFF_WIN') {
+      finalStatus = c.case_type === 'BANKRUPTCY' ? 'VERDICT_PAILIT' : 'VERDICT_APPROVED';
+    } else if (finalType === 'SETTLED_MEDIATION') {
+      finalStatus = 'VERDICT_PKPU';
+    } else if (finalType === 'VERDICT_PAILIT') {
+      finalStatus = 'VERDICT_PAILIT';
+    } else {
+      finalStatus = 'VERDICT_REJECTED';
+    }
+  }
+
+  if (!finalStatus) {
+    // Evaluasi kehadiran jika tidak dikirim keduanya
+    if (c.plaintiff_present === 1 && c.defendant_present === 0) {
+      finalStatus = 'VERDICT_APPROVED';
+      finalType = 'VERSTEK_PLAINTIFF_WIN';
+    } else if (c.plaintiff_present === 0 && c.defendant_present === 1) {
+      finalStatus = 'VERDICT_REJECTED';
+      finalType = 'GUGUR_DISMISSED';
+    } else {
+      finalStatus = 'VERDICT_APPROVED';
+      finalType = 'APPROVED_PLAINTIFF_WIN';
+    }
+  }
+
+  if (!finalType) {
+    if (finalStatus === 'VERDICT_APPROVED') finalType = 'APPROVED_PLAINTIFF_WIN';
+    else if (finalStatus === 'VERDICT_PAILIT') finalType = 'VERSTEK_PLAINTIFF_WIN';
+    else if (finalStatus === 'VERDICT_PKPU') finalType = 'SETTLED_MEDIATION';
+    else finalType = 'GUGUR_DISMISSED';
+  }
+
+  const rawClaim = Math.max(0, Number(c.claim_amount_ib || 0));
+  const linkedDeed = await resolveLinkedDeed(c);
+
+  // Hitung nilai kompensasi / pencairan yang sah
+  let awardedAmount = 0;
+  if (customAwardedAmount !== undefined && customAwardedAmount !== null) {
+    awardedAmount = Math.max(0, Math.round(Number(customAwardedAmount) || 0));
+  } else if (finalStatus === 'VERDICT_APPROVED' || finalStatus === 'VERDICT_PAILIT') {
+    if (c.case_type === 'BANKRUPTCY' && /BCF|Bank Sentral|PKPU|Restrukturisasi/i.test(`${c.defendant_name} ${c.title}`) && c.plaintiff_user_id) {
+      // Permohonan PKPU / restrukturisasi utang oleh debitur: efeknya moratorium pinjaman, bukan pencairan uang tunai gratis
+      awardedAmount = 0;
+    } else if (decidedBy === 'BOT_JUDGE' && !linkedDeed) {
+      // Proteksi ekonomi untuk gugatan bebas tanpa akta saat diputus otomatis oleh Bot Hakim
+      let cap = 250000000; // Maks 250 Juta IB untuk klaim bebas non-akta otomatis
+      if (c.defendant_user_id) {
+        const defU = await query.get('SELECT balance_ib FROM users WHERE id = ?', [c.defendant_user_id]);
+        if (defU) {
+          cap = Math.min(500000000, Math.max(25000000, Math.round((defU.balance_ib || 0) * 0.25)));
+        }
+      }
+      awardedAmount = Math.min(rawClaim, cap);
+    } else if (decidedBy === 'BOT_JUDGE' && linkedDeed) {
+      const maxDeedPenalty = Math.max(Math.round((linkedDeed.total_price_ib || 0) * 0.25), 5000000);
+      awardedAmount = Math.min(rawClaim, maxDeedPenalty);
+    } else {
+      awardedAmount = Math.round(rawClaim);
+    }
+  } else if (finalStatus === 'VERDICT_PKPU') {
+    if (c.case_type === 'BANKRUPTCY' && /BCF|Bank Sentral|PKPU|Restrukturisasi/i.test(`${c.defendant_name} ${c.title}`) && c.plaintiff_user_id) {
+      awardedAmount = 0;
+    } else if (decidedBy === 'BOT_JUDGE' && !linkedDeed) {
+      awardedAmount = Math.min(Math.round(rawClaim * 0.5), 150000000);
+    } else {
+      awardedAmount = Math.round(rawClaim * 0.5);
+    }
+  } else {
+    awardedAmount = 0;
+  }
+
+  // Susun diktum amar putusan resmi apabila catatan masih default/kosong
+  const isDefaultFilingNote =
+    !verdictNotes ||
+    /^Penggugat menuntut/i.test(verdictNotes.trim()) ||
+    /^Berkas perkara telah diterima/i.test(verdictNotes.trim()) ||
+    /^Permohonan gugatan resmi/i.test(verdictNotes.trim());
+
+  const judgeLabel = decidedBy === 'BOT_JUDGE' ? `Majelis Hakim Otomatis PNAF (${BOT_JUDGE_NAME})` : 'Majelis Hakim Agung PNAF';
+  let finalNotes = verdictNotes && !isDefaultFilingNote ? verdictNotes.trim() : '';
+
+  if (!finalNotes) {
+    if (finalStatus === 'VERDICT_APPROVED') {
+      finalNotes =
+        awardedAmount > 0
+          ? `✅ AMAR PUTUSAN DIKABULKAN (APPROVED): ${judgeLabel} mengabulkan gugatan Penggugat (${c.plaintiff_name}) terhadap Tergugat (${c.defendant_name}). Memerintahkan eksekusi pencairan ganti rugi sebesar IB ${awardedAmount.toLocaleString('id-ID')} ke Kas Pribadi Penggugat.`
+          : `✅ AMAR PUTUSAN DIKABULKAN (APPROVED): ${judgeLabel} mengabulkan permohonan hukum Penggugat (${c.plaintiff_name}) secara sah dan berkekuatan hukum tetap (inkrah).`;
+    } else if (finalStatus === 'VERDICT_PKPU') {
+      finalNotes =
+        awardedAmount > 0
+          ? `🤝 PUTUSAN MEDIASI & PKPU DISETUJUI: ${judgeLabel} menetapkan perdamaian restrukturisasi perkara antara ${c.plaintiff_name} dan ${c.defendant_name} dengan pencairan kompensasi sebesar IB ${awardedAmount.toLocaleString('id-ID')}.`
+          : `🤝 PUTUSAN PKPU DISETUJUI: ${judgeLabel} mengabulkan moratorium penundaan kewajiban pembayaran utang (PKPU) dan restrukturisasi tenor kredit Penggugat.`;
+    } else if (finalStatus === 'VERDICT_PAILIT') {
+      finalNotes =
+        awardedAmount > 0
+          ? `🔨 VONIS PAILIT & SITA EKSEKUSI: ${judgeLabel} menjatuhkan putusan pailit/verstek terhadap ${c.defendant_name} dan mengeksekusi klaim sebesar IB ${awardedAmount.toLocaleString('id-ID')} untuk ${c.plaintiff_name}.`
+          : `🔨 VONIS PAILIT & SITA JAMINAN: ${judgeLabel} menyatakan Tergugat (${c.defendant_name}) dalam keadaan pailit dan memerintahkan Kurator PNAF mengeksekusi aset jaminan.`;
+    } else {
+      finalNotes = `❌ PUTUSAN DITOLAK / GUGUR: ${judgeLabel} menolak/menggugurkan gugatan Perkara No. ${c.case_number} setelah memeriksa alat bukti dan fakta hukum persidangan.`;
+    }
+  }
+
+  // Eksekusi pencairan finansial HANYA jika belum pernah dicairkan sebelumnya
+  const previouslyAwarded = Number(c.verdict_awarded_amount || 0);
+  const alreadyDelivered = c.room_status === 'VERDICT_DELIVERED' && previouslyAwarded > 0;
+
+  let plaintiffId = c.plaintiff_user_id;
+  if (!plaintiffId && c.plaintiff_name) {
+    const rawUsername = c.plaintiff_name.split('(')[0].trim();
+    const matchedPl = await query.get('SELECT id FROM users WHERE LOWER(username) = LOWER(?)', [rawUsername]);
+    if (matchedPl) {
+      plaintiffId = matchedPl.id;
+      await query.run('UPDATE court_cases SET plaintiff_user_id = ? WHERE id = ?', [plaintiffId, caseId]);
+    }
+  }
+
+  if (!alreadyDelivered && awardedAmount > 0 && plaintiffId) {
+    const plUser = await query.get('SELECT id, balance_ib, username FROM users WHERE id = ?', [plaintiffId]);
+    if (plUser) {
+      const newPlBalance = (Number(plUser.balance_ib) || 0) + awardedAmount;
+      await query.run('UPDATE users SET balance_ib = ? WHERE id = ?', [newPlBalance, plUser.id]);
+      await recordCashFlow({
+        userId: plUser.id,
+        accountType: 'PERSONAL',
+        category: 'COURT_VERDICT',
+        title: `Pencairan Putusan PNAF (${c.case_number})`,
+        amountIb: awardedAmount,
+        direction: 'INCOME',
+        balanceAfter: newPlBalance,
+        notes: finalNotes,
+      });
+      if (io) {
+        io.emit('user:balance_updated', { userId: plUser.id, newBalance: newPlBalance });
+      }
+    }
+
+    if (c.defendant_user_id && c.defendant_user_id !== plaintiffId && !['admin-001', 'bank-central-bcf'].includes(c.defendant_user_id)) {
+      const defUser = await query.get('SELECT id, balance_ib FROM users WHERE id = ?', [c.defendant_user_id]);
+      if (defUser) {
+        const deduct = Math.min(Number(defUser.balance_ib) || 0, awardedAmount);
+        const newDefBalance = Math.max(0, (Number(defUser.balance_ib) || 0) - deduct);
+        await query.run('UPDATE users SET balance_ib = ? WHERE id = ?', [newDefBalance, defUser.id]);
+        if (deduct > 0) {
+          await recordCashFlow({
+            userId: defUser.id,
+            accountType: 'PERSONAL',
+            category: 'COURT_VERDICT',
+            title: `Eksekusi Ganti Rugi Putusan PNAF (${c.case_number})`,
+            amountIb: deduct,
+            direction: 'EXPENSE',
+            balanceAfter: newDefBalance,
+            notes: finalNotes,
+          });
+        }
+        if (io) {
+          io.emit('user:balance_updated', { userId: defUser.id, newBalance: newDefBalance });
+        }
+      }
+    }
+  }
+
+  // Efek Hukum Nyata 1: Sinkronisasi Status Akta Notaris (deal_deeds)
+  if (linkedDeed) {
+    let nextDeedStatus = 'ACTIVE';
+    if (finalStatus === 'VERDICT_APPROVED') nextDeedStatus = 'VERDICT_APPROVED';
+    else if (finalStatus === 'VERDICT_PKPU') nextDeedStatus = 'SETTLED_PKPU';
+    else if (finalStatus === 'VERDICT_PAILIT') nextDeedStatus = 'EXECUTED_PAILIT';
+    else nextDeedStatus = 'ACTIVE';
+
+    await query.run('UPDATE deal_deeds SET status = ? WHERE id = ?', [nextDeedStatus, linkedDeed.id]);
+  }
+
+  // Efek Hukum Nyata 2: Moratorium PKPU (+7 Hari Jatuh Tempo Pinjaman BCF) & Pemulihan Suspensi Emiten
+  if ((finalStatus === 'VERDICT_APPROVED' || finalStatus === 'VERDICT_PKPU') && plaintiffId) {
+    if (c.case_type === 'BANKRUPTCY') {
+      const activeLoans = await query.all(
+        "SELECT id, due_date FROM loans WHERE user_id = ? AND status = 'ACTIVE'",
+        [plaintiffId]
+      );
+      for (const ln of activeLoans || []) {
+        const baseMs = ln.due_date ? Date.parse(ln.due_date) : Date.now();
+        const extendedIso = new Date((Number.isNaN(baseMs) ? Date.now() : Math.max(Date.now(), baseMs)) + 7 * 86400000).toISOString();
+        await query.run('UPDATE loans SET due_date = ? WHERE id = ?', [extendedIso, ln.id]);
+      }
+    }
+    if (c.case_type === 'REGULATORY' && finalStatus === 'VERDICT_APPROVED') {
+      // Jika penggugat mengajukan banding pemulihan suspensi/UMA atas emitennya sendiri
+      const plComp = c.defendant_company_id
+        ? await query.get('SELECT * FROM companies WHERE id = ? AND owner_id = ?', [c.defendant_company_id, plaintiffId])
+        : await query.get('SELECT * FROM companies WHERE owner_id = ?', [plaintiffId]);
+      if (plComp && (plComp.uma_flag === 1 || plComp.suspended_at || plComp.status === 'SUSPENDED')) {
+        await query.run(
+          "UPDATE companies SET uma_flag = 0, uma_reason = NULL, suspended_at = NULL, suspend_until = NULL, suspend_reason = NULL, status = 'HEALTHY' WHERE id = ?",
+          [plComp.id]
+        );
+      }
+    }
+  }
+
+  const nowIso = new Date().toISOString();
+  const effectiveAward = alreadyDelivered ? previouslyAwarded : awardedAmount;
+
+  await query.run(
+    `UPDATE court_cases
+     SET status = ?,
+         verdict_notes = ?,
+         verdict_type = ?,
+         verdict_awarded_amount = ?,
+         room_status = 'VERDICT_DELIVERED',
+         closed_at = COALESCE(closed_at, ?),
+         decided_by = ?,
+         bot_stage = 3,
+         deed_id = COALESCE(deed_id, ?),
+         deed_number = COALESCE(deed_number, ?)
+     WHERE id = ?`,
+    [
+      finalStatus,
+      finalNotes,
+      finalType,
+      effectiveAward,
+      nowIso,
+      decidedBy,
+      linkedDeed?.id || null,
+      linkedDeed?.deed_number || extractDeedNumberFromTitle(c.title) || null,
+      caseId,
+    ]
+  );
+
+  // Catat amar putusan resmi ke ruang chat sidang
+  await appendCourtChat(io, {
+    caseId,
+    senderName: decidedBy === 'BOT_JUDGE' ? BOT_JUDGE_NAME : 'Majelis Hakim Ketua PNAF',
+    senderRole: 'HAKIM',
+    message: `🔨 PALU SIDANG DIKETUK 3 KALI — PUTUSAN INKRAH: ${finalNotes}`,
+  });
+
+  const updatedRow = await query.get('SELECT * FROM court_cases WHERE id = ?', [caseId]);
+  const allMessages = await query.all(
+    'SELECT * FROM court_chat_messages WHERE case_id = ? ORDER BY created_at ASC',
+    [caseId]
+  );
+  const formattedCase = formatCourtCase(updatedRow, allMessages);
+
+  if (broadcastNews) {
+    const statusHeadline =
+      finalStatus === 'VERDICT_APPROVED'
+        ? 'DIKABULKAN (APPROVED)'
+        : finalStatus === 'VERDICT_PKPU'
+        ? 'DAMAI / PKPU DISETUJUI'
+        : finalStatus === 'VERDICT_PAILIT'
+        ? 'VONIS PAILIT & SITA'
+        : 'DITOLAK / GUGUR';
+
+    const sentiment =
+      finalStatus === 'VERDICT_APPROVED' || finalStatus === 'VERDICT_PKPU'
+        ? 'BULLISH'
+        : finalStatus === 'VERDICT_PAILIT'
+        ? 'BEARISH'
+        : 'NEUTRAL';
+
+    const newsItem = {
+      id: uuidv4(),
+      title: `⚖️ PUTUSAN PNAF [${statusHeadline}]: Perkara No. ${c.case_number}`,
+      content: finalNotes,
+      affected_sector: 'Semua Sektor',
+      affectedSector: 'Semua Sektor',
+      sentiment,
+      published_at: nowIso,
+    };
+
+    await query.run(
+      'INSERT INTO news (id, title, content, affected_sector, sentiment, published_at) VALUES (?, ?, ?, ?, ?, ?)',
+      [newsItem.id, newsItem.title, newsItem.content, newsItem.affected_sector, newsItem.sentiment, newsItem.published_at]
+    );
+
+    if (io) {
+      io.emit('market:news_broadcast', newsItem);
+      io.emit('market:breaking_news', newsItem);
+    }
+  }
+
+  if (io) {
+    io.emit('court:verdict', formattedCase);
+    io.emit('court:case_updated', formattedCase);
+    io.emit(`court:verdict_reached:${caseId}`, {
+      caseId,
+      verdictType: finalType,
+      verdictStatus: finalStatus,
+      notes: finalNotes,
+      awardedAmount: effectiveAward,
+      decidedBy,
+      autoExitSeconds: 60,
+      case: formattedCase,
+    });
+  }
+
+  return {
+    success: true,
+    caseId,
+    verdictStatus: finalStatus,
+    verdictType: finalType,
+    awardedAmount: effectiveAward,
+    notes: finalNotes,
+    case: formattedCase,
+    message: `🔨 Palu Sidang Resmi Diketuk! Status Perkara: ${finalStatus}.`,
+  };
+}
+
+/**
+ * Auto-Healing Startup untuk memperbaiki perkara-perkara lama di DB produksi
+ * yang sebelumnya diketuk palu lewat endpoint lama (sehingga room_status, verdict_type,
+ * verdict_notes, dan status deal_deeds belum tersinkronisasi).
+ */
+async function healExistingCourtCases() {
+  try {
+    const allCases = await query.all('SELECT * FROM court_cases ORDER BY created_at ASC');
+    const rewardedDeeds = new Set();
+
+    // Tandai akta yang sudah pernah mendapatkan pencairan putusan
+    for (const c of allCases) {
+      const dNum = c.deed_number || extractDeedNumberFromTitle(c.title);
+      if (dNum && Number(c.verdict_awarded_amount || 0) > 0) {
+        rewardedDeeds.add(dNum);
+      }
+    }
+
+    let healedCount = 0;
+    for (const c of allCases) {
+      const dNum = c.deed_number || extractDeedNumberFromTitle(c.title);
+
+      // Lengkapi plaintiff_user_id jika kosong
+      let plId = c.plaintiff_user_id;
+      if (!plId && c.plaintiff_name) {
+        const rawUname = c.plaintiff_name.split('(')[0].trim();
+        const u = await query.get('SELECT id FROM users WHERE LOWER(username) = LOWER(?)', [rawUname]);
+        if (u) {
+          plId = u.id;
+          await query.run('UPDATE court_cases SET plaintiff_user_id = ? WHERE id = ?', [plId, c.id]);
+        }
+      }
+
+      if (c.status === 'IN_TRIAL') {
+        if (dNum && !c.deed_number) {
+          await query.run('UPDATE court_cases SET deed_number = ? WHERE id = ?', [dNum, c.id]);
+        }
+        continue;
+      }
+
+      // Perkara sudah diputus, cek apakah butuh normalisasi
+      const normStatus = normalizeStatus(c.status);
+      const needsHeal =
+        c.status !== normStatus ||
+        c.room_status !== 'VERDICT_DELIVERED' ||
+        !c.verdict_type ||
+        !c.closed_at ||
+        /^Penggugat menuntut/i.test((c.verdict_notes || '').trim());
+
+      if (!needsHeal) continue;
+
+      // Untuk kasus sengketa akta pemain yang sebelumnya diketuk VERDICT_PAILIT oleh Admin (maksudnya memenangkan penggugat),
+      // pastikan status & pencairan sinkron sekali per akta (tanpa duplikasi).
+      let targetStatus = normStatus;
+      let customAward = Number(c.verdict_awarded_amount || 0);
+
+      if ((normStatus === 'VERDICT_PAILIT' || normStatus === 'VERDICT_PKPU' || normStatus === 'VERDICT_APPROVED') && plId) {
+        if (dNum && rewardedDeeds.has(dNum) && customAward === 0) {
+          // Akta yang sama sudah pernah dicairkan pada nomor perkara lain
+          customAward = 0;
+        } else if (customAward === 0) {
+          const claim = Math.max(0, Number(c.claim_amount_ib || 0));
+          customAward = normStatus === 'VERDICT_PKPU' ? Math.round(claim * 0.5) : Math.round(claim);
+          if (dNum && customAward > 0) rewardedDeeds.add(dNum);
+          // Jika sengketa wanprestasi pemain dimenangkan penuh, tampilkan VERDICT_APPROVED agar jelas APPROVED di APK
+          if (c.case_type === 'DISPUTE' && normStatus === 'VERDICT_PAILIT') {
+            targetStatus = 'VERDICT_APPROVED';
+          }
+        }
+      }
+
+      await executeCourtVerdict(null, {
+        caseId: c.id,
+        verdictStatus: targetStatus,
+        verdictNotes: /^Penggugat menuntut/i.test((c.verdict_notes || '').trim()) ? '' : c.verdict_notes,
+        customAwardedAmount: customAward,
+        decidedBy: c.decided_by || 'ADMIN_MANUAL',
+        broadcastNews: false,
+      });
+      healedCount++;
+    }
+
+    if (healedCount > 0) {
+      console.log(`⚖️ [PNAF Auto-Heal] Berhasil menyelaraskan ${healedCount} berkas putusan pengadilan & akta notaris.`);
+    }
+  } catch (err) {
+    console.error('⚠️ [PNAF Auto-Heal] Warning:', err.message);
+  }
+}
+
+/**
+ * Engine Otonom Majelis Hakim & Panitera Bot PNAF
+ * Dapat dinyalakan (Otomatis) atau dimatikan (Manual Admin) kapan saja.
+ */
+class CourtJudgeBotService {
+  constructor(io) {
+    this.io = io;
+    this.timer = null;
+    this.isProcessing = false;
+  }
+
+  start() {
+    if (this.timer) clearInterval(this.timer);
+    this.timer = setInterval(() => {
+      this.tick().catch((err) => console.error('⚠️ [CourtJudgeBot] Tick error:', err.message));
+    }, 12000);
+    // Jalankan pemeriksaan awal 6 detik setelah server hidup
+    setTimeout(() => {
+      this.tick().catch(() => {});
+    }, 6000);
+    console.log('⚖️ [PNAF Bot Judge] Engine Majelis Hakim & Panitera Otomatis siap bertugas.');
+  }
+
+  stop() {
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = null;
+    }
+  }
+
+  async tick({ forceImmediate = false, targetCaseId = null } = {}) {
+    if (this.isProcessing) return { processed: 0 };
+    if (!forceImmediate) {
+      const enabled = await isAutoJudgeEnabled();
+      if (!enabled) return { processed: 0, mode: 'MANUAL_ADMIN' };
+    }
+
+    this.isProcessing = true;
+    let processed = 0;
+    try {
+      const sql = targetCaseId
+        ? "SELECT * FROM court_cases WHERE id = ? AND status = 'IN_TRIAL'"
+        : "SELECT * FROM court_cases WHERE status = 'IN_TRIAL' ORDER BY created_at ASC";
+      const activeCases = await query.all(sql, targetCaseId ? [targetCaseId] : []);
+
+      for (const c of activeCases || []) {
+        if (!forceImmediate && c.bot_next_action_at) {
+          const nextMs = Date.parse(c.bot_next_action_at);
+          if (!Number.isNaN(nextMs) && Date.now() < nextMs) {
+            continue;
+          }
+        }
+
+        if (forceImmediate) {
+          // Jalankan seluruh tahapan yang tersisa sekaligus sampai ketuk palu
+          let fresh = c;
+          if (Number(fresh.bot_stage || 0) < 1) {
+            await this.runStage1ClerkSummons(fresh);
+            fresh = await query.get('SELECT * FROM court_cases WHERE id = ?', [c.id]);
+          }
+          if (fresh && Number(fresh.bot_stage || 0) < 2) {
+            await this.runStage2Examination(fresh);
+            fresh = await query.get('SELECT * FROM court_cases WHERE id = ?', [c.id]);
+          }
+          if (fresh && fresh.status === 'IN_TRIAL') {
+            await this.runStage3Verdict(fresh);
+          }
+          processed++;
+        } else {
+          const stage = Number(c.bot_stage || 0);
+          if (stage <= 0) {
+            await this.runStage1ClerkSummons(c);
+          } else if (stage === 1) {
+            await this.runStage2Examination(c);
+          } else {
+            await this.runStage3Verdict(c);
+          }
+          processed++;
+        }
+      }
+      return { processed };
+    } finally {
+      this.isProcessing = false;
+    }
+  }
+
+  async runStage1ClerkSummons(c) {
+    const wib = getWibParts();
+    const nextAt = new Date(Date.now() + 18000).toISOString();
+    const plPresent = c.plaintiff_user_id ? 1 : c.plaintiff_present;
+
+    await query.run(
+      `UPDATE court_cases
+       SET court_hearing_date = ?,
+           hearing_time = ?,
+           summons_sent = 1,
+           plaintiff_present = ?,
+           room_status = 'IN_SESSION',
+           bot_stage = 1,
+           bot_next_action_at = ?
+       WHERE id = ?`,
+      [`Hari Ini, ${wib.dateStr}`, wib.timeStr, plPresent, nextAt, c.id]
+    );
+
+    await appendCourtChat(this.io, {
+      caseId: c.id,
+      senderName: BOT_CLERK_NAME,
+      senderRole: 'PANITERA',
+      message: `🏛️ SIDANG DIBUKA & RELAAS DITERBITKAN: Perkara No. ${c.case_number} (${c.title}) resmi dibuka di ${c.court_room_name || 'Ruang Sidang Utama Kartika PNAF'} pukul ${wib.timeStr}. Panggilan elektronik telah dikirim kepada Penggugat (${c.plaintiff_name}) dan Tergugat (${c.defendant_name}).`,
+    });
+
+    const updated = await query.get('SELECT * FROM court_cases WHERE id = ?', [c.id]);
+    if (this.io && updated) {
+      this.io.emit('court:case_updated', formatCourtCase(updated));
+      this.io.emit(`court:presence_updated:${c.id}`, {
+        caseId: c.id,
+        plaintiffPresent: updated.plaintiff_present === 1,
+        defendantPresent: updated.defendant_present === 1,
+      });
+    }
+  }
+
+  async runStage2Examination(c) {
+    const nextAt = new Date(Date.now() + 20000).toISOString();
+    let defPresent = c.defendant_present === 1;
+
+    // Cek apakah pihak Tergugat adalah Bot, Institusi, atau Bank Sentral
+    let isBotOrInstitutionalDefendant = !c.defendant_user_id;
+    if (c.defendant_user_id) {
+      if (
+        c.defendant_user_id.startsWith('bot-') ||
+        c.defendant_user_id === 'bank-central-bcf' ||
+        c.defendant_user_id.startsWith('admin')
+      ) {
+        isBotOrInstitutionalDefendant = true;
+      } else {
+        const defComp = await query.get('SELECT is_bot FROM companies WHERE owner_id = ? LIMIT 1', [c.defendant_user_id]);
+        if (defComp && defComp.is_bot === 1) isBotOrInstitutionalDefendant = true;
+      }
+    }
+
+    if (!defPresent && isBotOrInstitutionalDefendant) {
+      // 80% Kuasa Hukum Tergugat hadir menyampaikan jawaban hukum, 20% mangkir (verstek)
+      const willAttend = Math.random() < 0.8;
+      if (willAttend) {
+        defPresent = true;
+        await query.run('UPDATE court_cases SET defendant_present = 1 WHERE id = ?', [c.id]);
+        const defenseText =
+          c.case_type === 'BANKRUPTCY'
+            ? `Yang Mulia, Biro Hukum ${c.defendant_name} hadir dan menyerahkan rekapitulasi baki kredit serta mendukung opsi restrukturisasi yang sehat.`
+            : c.case_type === 'REGULATORY'
+            ? `Yang Mulia, Kuasa Hukum ${c.defendant_name} hadir menyerahkan log aktivitas perdagangan bursa untuk diperiksa secara objektif.`
+            : `Yang Mulia, Kuasa Hukum ${c.defendant_name} hadir memenuhi panggilan relaas dan menyerahkan salinan dokumen transaksi kepada Majelis Hakim.`;
+
+        await appendCourtChat(this.io, {
+          caseId: c.id,
+          senderName: `Kuasa Hukum ${c.defendant_name}`,
+          senderRole: 'TERGUGAT',
+          senderUserId: c.defendant_user_id || 'bot-counsel',
+          message: defenseText,
+        });
+      }
+    }
+
+    const linkedDeed = await resolveLinkedDeed(c);
+    const examMsg = linkedDeed
+      ? `⚖️ PEMERIKSAAN ALAT BUKTI: Majelis Hakim telah memverifikasi keabsahan Akta Notaris #${linkedDeed.deed_number} senilai IB ${Number(linkedDeed.total_price_ib || 0).toLocaleString('id-ID')} bermeterai lunas beserta bukti tuntutan sebesar IB ${Number(c.claim_amount_ib || 0).toLocaleString('id-ID')}. Majelis memasuki musyawarah pembacaan putusan.`
+      : `⚖️ PEMERIKSAAN POKOK PERKARA: Majelis Hakim sedang meneliti berkas gugatan "${c.title}", riwayat kepatuhan finansial para pihak, dan nilai tuntutan IB ${Number(c.claim_amount_ib || 0).toLocaleString('id-ID')} sebelum mengetuk palu putusan.`;
+
+    await appendCourtChat(this.io, {
+      caseId: c.id,
+      senderName: BOT_JUDGE_NAME,
+      senderRole: 'HAKIM',
+      message: examMsg,
+    });
+
+    await query.run(
+      'UPDATE court_cases SET bot_stage = 2, bot_next_action_at = ? WHERE id = ?',
+      [nextAt, c.id]
+    );
+
+    const updated = await query.get('SELECT * FROM court_cases WHERE id = ?', [c.id]);
+    if (this.io && updated) {
+      this.io.emit('court:case_updated', formatCourtCase(updated));
+      this.io.emit(`court:presence_updated:${c.id}`, {
+        caseId: c.id,
+        plaintiffPresent: updated.plaintiff_present === 1,
+        defendantPresent: updated.defendant_present === 1,
+      });
+    }
+  }
+
+  async runStage3Verdict(c) {
+    const linkedDeed = await resolveLinkedDeed(c);
+    const rawClaim = Math.max(0, Number(c.claim_amount_ib || 0));
+    let verdictStatus = 'VERDICT_APPROVED';
+    let verdictType = 'APPROVED_PLAINTIFF_WIN';
+    let verdictNotes = '';
+    let customAwardedAmount = undefined;
+
+    // 1. Cek asas Ne Bis In Idem (gugatan ganda pada akta yang sama yang sudah diputus menang)
+    if (linkedDeed) {
+      const priorWon = await query.get(
+        `SELECT case_number, status FROM court_cases
+         WHERE id != ? AND status IN ('VERDICT_APPROVED', 'VERDICT_PKPU', 'VERDICT_PAILIT')
+           AND (deed_id = ? OR deed_number = ? OR title LIKE ?)
+           AND verdict_awarded_amount > 0
+         LIMIT 1`,
+        [c.id, linkedDeed.id, linkedDeed.deed_number, `%#${linkedDeed.deed_number}%`]
+      );
+      if (priorWon) {
+        return executeCourtVerdict(this.io, {
+          caseId: c.id,
+          verdictStatus: 'VERDICT_REJECTED',
+          verdictType: 'GUGUR_DISMISSED',
+          verdictNotes: `❌ NE BIS IN IDEM: Majelis Hakim Otomatis PNAF menolak gugatan ganda karena klaim atas Akta #${linkedDeed.deed_number} telah diputus dan dieksekusi pada Perkara No. ${priorWon.case_number}.`,
+          customAwardedAmount: 0,
+          decidedBy: 'BOT_JUDGE',
+        });
+      }
+    }
+
+    // 2. Evaluasi berdasarkan kategori perkara
+    if (c.case_type === 'BANKRUPTCY') {
+      const isDebtorPkpuAppeal =
+        c.plaintiff_user_id && /BCF|Bank Sentral|PKPU|Restrukturisasi/i.test(`${c.defendant_name} ${c.title}`);
+
+      if (isDebtorPkpuAppeal) {
+        const plUser = await query.get('SELECT credit_score, username FROM users WHERE id = ?', [c.plaintiff_user_id]);
+        const creditScore = plUser?.credit_score ?? 700;
+        if (creditScore >= 500) {
+          verdictStatus = 'VERDICT_APPROVED';
+          verdictType = 'APPROVED_PLAINTIFF_WIN';
+          customAwardedAmount = 0;
+          verdictNotes = `✅ PERMOHONAN PKPU DIKABULKAN (APPROVED): ${BOT_JUDGE_NAME} mengabulkan permohonan restrukturisasi & moratorium pinjaman ${c.plaintiff_name} (Skor Kredit: ${creditScore}). Jatuh tempo fasilitas pinjaman aktif diperpanjang +7 hari.`;
+        } else {
+          verdictStatus = 'VERDICT_REJECTED';
+          verdictType = 'GUGUR_DISMISSED';
+          customAwardedAmount = 0;
+          verdictNotes = `❌ PERMOHONAN PKPU DITOLAK: Skor kredit pemohon (${creditScore}) berada di bawah ambang kelayakan restrukturisasi minimum Bank Sentral Federasi.`;
+        }
+      } else {
+        verdictStatus = c.defendant_present === 1 ? 'VERDICT_PKPU' : 'VERDICT_PAILIT';
+        verdictType = c.defendant_present === 1 ? 'SETTLED_MEDIATION' : 'VERSTEK_PLAINTIFF_WIN';
+      }
+    } else if (c.case_type === 'REGULATORY') {
+      // Cek emiten terkait jika ada
+      const targetComp = c.defendant_company_id
+        ? await query.get('SELECT * FROM companies WHERE id = ?', [c.defendant_company_id])
+        : await query.get(
+            'SELECT * FROM companies WHERE LOWER(symbol) = LOWER(?) OR LOWER(name) LIKE LOWER(?) LIMIT 1',
+            [c.defendant_name.trim(), `%${c.defendant_name.trim()}%`]
+          );
+
+      if (targetComp && targetComp.owner_id === c.plaintiff_user_id) {
+        // Penggugat memohon pembukaan suspensi/UMA emitennya
+        verdictStatus = 'VERDICT_APPROVED';
+        verdictType = 'APPROVED_PLAINTIFF_WIN';
+        customAwardedAmount = 0;
+        verdictNotes = `✅ BANDING REGULASI DIKABULKAN (APPROVED): ${BOT_JUDGE_NAME} memerintahkan pemulihan status perdagangan normal bagi emiten ${targetComp.name} (${targetComp.symbol}).`;
+      } else if (rawClaim > 100000000000) {
+        verdictStatus = 'VERDICT_REJECTED';
+        verdictType = 'GUGUR_DISMISSED';
+        customAwardedAmount = 0;
+        verdictNotes = `❌ GUGATAN REGULASI DITOLAK: Nilai tuntutan tidak proporsional dan tidak disertai bukti audit pelanggaran bursa OPFF.`;
+      } else {
+        verdictStatus = 'VERDICT_APPROVED';
+        verdictType = 'APPROVED_PLAINTIFF_WIN';
+        customAwardedAmount = Math.min(rawClaim || 25000000, 50000000);
+        verdictNotes = `✅ LAPORAN PENGAWASAN BURSA DIKABULKAN (APPROVED): ${BOT_JUDGE_NAME} mengesahkan temuan kepatuhan bursa terhadap ${c.defendant_name} dan mencairkan insentif pelapor sebesar IB ${customAwardedAmount.toLocaleString('id-ID')}.`;
+      }
+    } else {
+      // DISPUTE (Sengketa Saham / Wanprestasi Akta)
+      if (!linkedDeed && rawClaim > 50000000000) {
+        // Klaim > 50 Miliar tanpa bukti akta notaris -> ditolak demi menjaga stabilitas moneter
+        verdictStatus = 'VERDICT_REJECTED';
+        verdictType = 'GUGUR_DISMISSED';
+        customAwardedAmount = 0;
+        verdictNotes = `❌ GUGATAN DITOLAK: Tuntutan sebesar IB ${rawClaim.toLocaleString('id-ID')} tidak didukung bukti Akta Notaris / Meterai Digital yang sah di Brankas Kepaniteraan PNAF.`;
+      } else if (c.defendant_present === 0) {
+        verdictStatus = 'VERDICT_APPROVED';
+        verdictType = 'VERSTEK_PLAINTIFF_WIN';
+      } else if (linkedDeed) {
+        verdictStatus = 'VERDICT_APPROVED';
+        verdictType = 'APPROVED_PLAINTIFF_WIN';
+      } else {
+        verdictStatus = 'VERDICT_PKPU';
+        verdictType = 'SETTLED_MEDIATION';
+      }
+    }
+
+    return executeCourtVerdict(this.io, {
+      caseId: c.id,
+      verdictStatus,
+      verdictType,
+      verdictNotes,
+      customAwardedAmount,
+      decidedBy: 'BOT_JUDGE',
+    });
+  }
+}
+
+module.exports = {
+  BOT_JUDGE_NAME,
+  BOT_CLERK_NAME,
+  formatCourtCase,
+  formatCourtMessage,
+  appendCourtChat,
+  executeCourtVerdict,
+  healExistingCourtCases,
+  isAutoJudgeEnabled,
+  setAutoJudgeEnabled,
+  getAutoJudgeStatusPayload,
+  CourtJudgeBotService,
+};
+

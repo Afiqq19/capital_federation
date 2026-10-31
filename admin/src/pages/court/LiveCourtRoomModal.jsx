@@ -97,13 +97,15 @@ export default function LiveCourtRoomModal({ open, onClose, courtCase, onVerdict
     }
   };
 
-  const handleStrikeGavel = async (verdictType) => {
+  const handleStrikeGavel = async (verdictType, verdictStatus) => {
     const confirmMsg =
-      verdictType === 'VERSTEK_PLAINTIFF_WIN'
-        ? '🔨 KETUK PALU VONIS VERSTEK?\n\nGugatan Penggugat dikabulkan PENUH dan sita eksekusi ganti rugi dicairkan dari Tergugat ke Penggugat.'
+      verdictType === 'APPROVED_PLAINTIFF_WIN'
+        ? '🔨 KETUK PALU DIKABULKAN (APPROVED)?\n\nGugatan/permohonan Penggugat dikabulkan PENUH (APPROVED) dan kompensasi dicairkan ke Penggugat.'
+        : verdictType === 'VERSTEK_PLAINTIFF_WIN'
+        ? '🔨 KETUK PALU VONIS PAILIT / VERSTEK?\n\nVonis pailit/sita eksekusi dijatuhkan terhadap Tergugat.'
         : verdictType === 'SETTLED_MEDIATION'
-        ? '🔨 KETUK PALU VONIS MEDIASI / PKPU?\n\nTergugat diwajibkan membayar restrukturisasi 50% kepada Penggugat.'
-        : '🔨 KETUK PALU GUGUR?\n\nGugatan perkara dinyatakan gugur dan dicabut demi hukum.';
+        ? '🔨 KETUK PALU VONIS MEDIASI / PKPU?\n\nRestrukturisasi damai 50% disetujui oleh Majelis Hakim.'
+        : '🔨 KETUK PALU DITOLAK / GUGUR?\n\nGugatan perkara dinyatakan ditolak / gugur demi hukum.';
 
     if (!window.confirm(confirmMsg)) return;
 
@@ -112,6 +114,7 @@ export default function LiveCourtRoomModal({ open, onClose, courtCase, onVerdict
       await adminApi.courtRoomVerdict({
         caseId: courtCase.id,
         forcedVerdictType: verdictType,
+        verdictStatus,
         adminJudgeOverride: true,
       });
       await fetchRoom();
@@ -123,9 +126,24 @@ export default function LiveCourtRoomModal({ open, onClose, courtCase, onVerdict
     }
   };
 
+  const handleAutoBotDecide = async () => {
+    try {
+      setSubmittingVerdict(true);
+      await adminApi.processCourtAutoJudgeNow(courtCase.id);
+      await fetchRoom();
+      if (onVerdictSuccess) onVerdictSuccess();
+    } catch (err) {
+      alert('Gagal memicu putusan Bot Hakim: ' + err.message);
+    } finally {
+      setSubmittingVerdict(false);
+    }
+  };
+
   const plPresent = roomData?.plaintiff_present === 1;
   const defPresent = roomData?.defendant_present === 1;
-  const isClosed = roomData?.status === 'VERDICT_PAILIT' || roomData?.status === 'VERDICT_PKPU' || roomData?.status === 'VERDICT_REJECTED' || roomData?.room_status === 'VERDICT_DELIVERED';
+  const isClosed =
+    (roomData?.status && roomData.status !== 'IN_TRIAL') ||
+    roomData?.room_status === 'VERDICT_DELIVERED';
 
   return (
     <Modal
@@ -297,64 +315,89 @@ export default function LiveCourtRoomModal({ open, onClose, courtCase, onVerdict
         {/* Amar Putusan & Tombol Ketuk Palu Hakim */}
         {!isClosed ? (
           <div className="p-4 rounded-xl bg-gradient-to-r from-amber-500/10 via-slate-900 to-transparent border border-amber-500/30 space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <h5 className="font-bold text-xs uppercase text-amber-300 flex items-center gap-1.5">
                   <Gavel size={15} />
                   Otoritas Majelis Hakim: Ketuk Palu Putusan Inkrah
                 </h5>
                 <p className="text-[11px] text-slate-400 mt-0.5">
-                  Pilih amar putusan untuk mengeksekusi sengketa dan mencairkan sitaan jaminan
+                  Pilih amar putusan resmi (langsung menyinkronkan status APPROVED/Putusan di APK pemain)
                 </p>
               </div>
+              <Button
+                variant="amber"
+                size="xs"
+                icon={Sparkles}
+                disabled={submittingVerdict}
+                onClick={handleAutoBotDecide}
+              >
+                🤖 Biarkan Bot Hakim Putuskan
+              </Button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {/* Verstek (Penggugat Menang Penuh) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {/* 1. Dikabulkan Penuh (APPROVED) */}
               <button
                 type="button"
                 disabled={submittingVerdict}
-                onClick={() => handleStrikeGavel('VERSTEK_PLAINTIFF_WIN')}
+                onClick={() => handleStrikeGavel('APPROVED_PLAINTIFF_WIN', 'VERDICT_APPROVED')}
+                className="p-3 rounded-xl bg-emerald-500/20 border border-emerald-400 text-left hover:bg-emerald-500/30 transition-all text-xs text-emerald-200 space-y-1"
+              >
+                <div className="font-extrabold flex items-center gap-1.5 text-emerald-300">
+                  <CheckCircle2 size={14} />
+                  1. Dikabulkan (APPROVED)
+                </div>
+                <p className="text-[10px] text-slate-300 leading-relaxed">
+                  Gugatan/permohonan Penggugat disetujui PENUH (100%) & dana klaim langsung cair ke APK.
+                </p>
+              </button>
+
+              {/* 2. Mediasi PKPU 50% */}
+              <button
+                type="button"
+                disabled={submittingVerdict}
+                onClick={() => handleStrikeGavel('SETTLED_MEDIATION', 'VERDICT_PKPU')}
+                className="p-3 rounded-xl bg-sky-500/20 border border-sky-400 text-left hover:bg-sky-500/30 transition-all text-xs text-sky-200 space-y-1"
+              >
+                <div className="font-extrabold flex items-center gap-1.5 text-sky-300">
+                  <Scale size={14} />
+                  2. Mediasi / PKPU (50%)
+                </div>
+                <p className="text-[10px] text-slate-300 leading-relaxed">
+                  Perdamaian restrukturisasi 50% tuntutan atau perpanjangan moratorium kredit BCF.
+                </p>
+              </button>
+
+              {/* 3. Vonis Pailit & Sita Eksekusi */}
+              <button
+                type="button"
+                disabled={submittingVerdict}
+                onClick={() => handleStrikeGavel('VERSTEK_PLAINTIFF_WIN', 'VERDICT_PAILIT')}
                 className="p-3 rounded-xl bg-rose-500/20 border border-rose-400 text-left hover:bg-rose-500/30 transition-all text-xs text-rose-200 space-y-1"
               >
                 <div className="font-extrabold flex items-center gap-1.5 text-rose-300">
                   <Gavel size={14} />
-                  1. Putusan Verstek (Sita Eksekusi)
+                  3. Vonis Pailit & Sita
                 </div>
                 <p className="text-[10px] text-slate-300 leading-relaxed">
-                  Tergugat mangkir. Gugatan Penggugat dikabulkan PENUH & uang sitaan dicairkan ke Penggugat!
+                  Tergugat mangkir / pailit. Eksekusi paksa jaminan dan pencairan penuh klaim.
                 </p>
               </button>
 
-              {/* Mediasi PKPU 50% */}
+              {/* 4. Gugur / Ditolak */}
               <button
                 type="button"
                 disabled={submittingVerdict}
-                onClick={() => handleStrikeGavel('SETTLED_MEDIATION')}
-                className="p-3 rounded-xl bg-emerald-500/20 border border-emerald-400 text-left hover:bg-emerald-500/30 transition-all text-xs text-emerald-200 space-y-1"
-              >
-                <div className="font-extrabold flex items-center gap-1.5 text-emerald-300">
-                  <Scale size={14} />
-                  2. Putusan Mediasi PKPU (50%)
-                </div>
-                <p className="text-[10px] text-slate-300 leading-relaxed">
-                  Kompensasi restrukturisasi 50% tuntutan dibayarkan oleh Tergugat kepada Penggugat.
-                </p>
-              </button>
-
-              {/* Gugur / Ditolak */}
-              <button
-                type="button"
-                disabled={submittingVerdict}
-                onClick={() => handleStrikeGavel('GUGUR_DISMISSED')}
+                onClick={() => handleStrikeGavel('GUGUR_DISMISSED', 'VERDICT_REJECTED')}
                 className="p-3 rounded-xl bg-slate-900 border border-slate-700 text-left hover:bg-slate-800 transition-all text-xs text-slate-300 space-y-1"
               >
                 <div className="font-extrabold flex items-center gap-1.5 text-slate-200">
                   <XCircle size={14} />
-                  3. Putusan Gugur / Ditolak
+                  4. Tolak / Gugur
                 </div>
                 <p className="text-[10px] text-slate-400 leading-relaxed">
-                  Penggugat mangkir atau tidak cukup bukti. Gugatan dibatalkan demi hukum.
+                  Tidak cukup bukti atau penggugat mangkir. Gugatan ditolak demi hukum.
                 </p>
               </button>
             </div>

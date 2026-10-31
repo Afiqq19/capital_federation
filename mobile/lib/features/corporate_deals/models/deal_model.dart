@@ -72,8 +72,12 @@ class DealDeedModel {
   final String digitalMeteraiId;
   final String notaryName;
   final double clauseBreachPenaltyPct;
-  final String status; // 'VALID_NOTARIZED', 'DISPUTED_PNAF', 'ANNULLED'
+  final String status; // 'VALID_NOTARIZED', 'ACTIVE', 'BREACHED_WANPRESTASI', 'DISPUTED_PNAF', 'VERDICT_APPROVED', 'SETTLED_PKPU', 'EXECUTED_PAILIT', 'ANNULLED'
   final String signedAt;
+  final String? courtCaseId;
+  final String? courtCaseNumber;
+  final String? courtStatus;
+  final double courtAwardedIb;
 
   DealDeedModel({
     required this.id,
@@ -95,9 +99,18 @@ class DealDeedModel {
     required this.clauseBreachPenaltyPct,
     required this.status,
     required this.signedAt,
+    this.courtCaseId,
+    this.courtCaseNumber,
+    this.courtStatus,
+    this.courtAwardedIb = 0.0,
   });
 
   factory DealDeedModel.fromJson(Map<String, dynamic> json) {
+    final rawCourtStatus = json['court_status']?.toString();
+    String? normCourtStatus = rawCourtStatus;
+    if (rawCourtStatus == 'APPROVED') normCourtStatus = 'VERDICT_APPROVED';
+    if (rawCourtStatus == 'DISMISSED') normCourtStatus = 'VERDICT_REJECTED';
+
     return DealDeedModel(
       id: json['id']?.toString() ?? '',
       deedNumber: json['deed_number']?.toString() ?? 'AKTA-NOMOR-TIDAK-VALID',
@@ -118,6 +131,10 @@ class DealDeedModel {
       clauseBreachPenaltyPct: (json['clause_breach_penalty_pct'] as num?)?.toDouble() ?? 15.0,
       status: json['status']?.toString() ?? 'VALID_NOTARIZED',
       signedAt: json['signed_at']?.toString() ?? json['created_at']?.toString() ?? '',
+      courtCaseId: json['court_case_id']?.toString(),
+      courtCaseNumber: json['court_case_number']?.toString(),
+      courtStatus: normCourtStatus,
+      courtAwardedIb: (json['court_awarded_ib'] as num?)?.toDouble() ?? 0.0,
     );
   }
 }

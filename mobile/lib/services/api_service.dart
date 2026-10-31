@@ -85,9 +85,9 @@ class ApiService {
     return null;
   }
 
-  static const String currentAppVersion = '1.6.7';
-  static const int currentBuildNumber = 21;
-  static const String currentApkDisplayVersion = 'v1.6.7-CFX Production (Build 21)';
+  static const String currentAppVersion = '1.6.8';
+  static const int currentBuildNumber = 22;
+  static const String currentApkDisplayVersion = 'v1.6.8-CFX Production (Build 22)';
 
   // Fetch Live Server Version & Update Detection Info
   static Future<Map<String, dynamic>?> getServerVersion() async {
@@ -1111,6 +1111,96 @@ class ApiService {
       }
     } catch (_) {}
     return [];
+  }
+
+  // Detail Ruang Sidang Live PNAF (termasuk riwayat chat argumen & status putusan)
+  static Future<Map<String, dynamic>?> getCourtRoomDetail(String caseId) async {
+    try {
+      final response = await http
+          .get(Uri.parse('$baseUrl/api/court/room/$caseId'))
+          .timeout(const Duration(seconds: 8));
+      if (response.statusCode == 200) {
+        return Map<String, dynamic>.from(jsonDecode(response.body));
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  // Status Majelis Hakim Bot Otomatis PNAF (ON/OFF)
+  static Future<Map<String, dynamic>?> getCourtAutoJudgeStatus() async {
+    try {
+      final response = await http
+          .get(Uri.parse('$baseUrl/api/court/auto-judge/status'))
+          .timeout(const Duration(seconds: 6));
+      if (response.statusCode == 200) {
+        return Map<String, dynamic>.from(jsonDecode(response.body));
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  // Sakelar ON/OFF Majelis Hakim Bot Otomatis PNAF (Otomatis <-> Manual)
+  static Future<Map<String, dynamic>> toggleCourtAutoJudge(bool enabled) async {
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/api/court/auto-judge/toggle'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'enabled': enabled}),
+          )
+          .timeout(const Duration(seconds: 6));
+      return Map<String, dynamic>.from(jsonDecode(response.body));
+    } catch (e) {
+      return {'error': 'Gagal mengubah mode Majelis Hakim: Gangguan koneksi'};
+    }
+  }
+
+  // Picu Putusan Instan oleh Majelis Hakim Bot PNAF
+  static Future<Map<String, dynamic>> processCourtAutoJudgeNow({String? caseId}) async {
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/api/court/auto-judge/process-now'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({if (caseId != null) 'caseId': caseId}),
+          )
+          .timeout(const Duration(seconds: 8));
+      return Map<String, dynamic>.from(jsonDecode(response.body));
+    } catch (e) {
+      return {'error': 'Gagal memicu putusan Bot Hakim: Gangguan koneksi'};
+    }
+  }
+
+  // Ketuk Palu Putusan Sidang PNAF (Admin / Hakim Agung / Evaluasi Bot)
+  static Future<Map<String, dynamic>> issueCourtVerdict({
+    required String caseId,
+    String? verdictStatus,
+    String? forcedVerdictType,
+    String? verdictNotes,
+    double? awardedAmount,
+    String? userId,
+    bool adminJudgeOverride = false,
+  }) async {
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/api/court/room/verdict'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'caseId': caseId,
+              if (verdictStatus != null) 'verdictStatus': verdictStatus,
+              if (forcedVerdictType != null) 'forcedVerdictType': forcedVerdictType,
+              if (verdictNotes != null) 'verdictNotes': verdictNotes,
+              if (awardedAmount != null) 'awardedAmount': awardedAmount,
+              if (userId != null) 'userId': userId,
+              'adminJudgeOverride': adminJudgeOverride,
+            }),
+          )
+          .timeout(const Duration(seconds: 8));
+      return Map<String, dynamic>.from(jsonDecode(response.body));
+    } catch (e) {
+      return {'error': 'Gagal mengetuk palu putusan PNAF: Gangguan koneksi'};
+    }
   }
 
   // Pendaftaran Pengaduan / Gugatan Sidang ke PNAF
