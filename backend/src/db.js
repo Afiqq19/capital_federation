@@ -473,6 +473,8 @@ async function initDb() {
   await safeAddColumn('users', "credit_tier TEXT DEFAULT 'STANDARD'");
   await safeAddColumn('users', "email TEXT");
   await safeAddColumn('users', "email_verified INTEGER DEFAULT 0");
+  await safeAddColumn('users', "google_id TEXT");
+  await safeAddColumn('users', "avatar_url TEXT");
   await query.exec(`
     CREATE TABLE IF NOT EXISTS market_oversight_log (
       id TEXT PRIMARY KEY,

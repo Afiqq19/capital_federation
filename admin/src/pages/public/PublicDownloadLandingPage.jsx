@@ -23,18 +23,18 @@ import {
 
 export default function PublicDownloadLandingPage() {
   const [versionInfo, setVersionInfo] = useState({
-    version: '1.7.0',
-    buildNumber: 24,
-    apkVersion: 'v1.7.0 (Build 24)',
+    version: '1.8.0',
+    buildNumber: 25,
+    apkVersion: 'v1.8.0 (Build 25)',
     minAndroid: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
-    fileSizeMb: '25.3 MB',
+    fileSizeMb: '56.3 MB',
     downloadUrl: '/api/download/apk',
-    downloadCount: 315,
+    downloadCount: 320,
     totalCompanies: 504,
     totalPlayers: 1053,
     sha256: 'ffbe3d5828261e42b8c0a658b72324ab731cb336d2e4e09d8d0f81370137dbd2',
     releaseNotes:
-      'v1.7.0: Sinkronisasi Tunggal 100% Real-Time Backend–APK–Website–Web Admin, Pembekuan Otomatis ~525 Bot Ritel (100% Player Asli Aman), serta Optimasi Ekstrem Server <50ms Tanpa Lag.',
+      'v1.8.0: Integrasi Resmi Google OAuth & Sign-In (Web & Android), Push Notifikasi Cerdas FCM (Panggilan Sidang Resmi PNAF, Vonis Hakim, Penyitaan Saham/Aset, dan Proposal M&A), serta Pembebasan Notifikasi Bebas Spam Berita Pasar.',
   });
   const [topLeaders, setTopLeaders] = useState([]);
   const [topStocks, setTopStocks] = useState([]);
