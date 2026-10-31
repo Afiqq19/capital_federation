@@ -801,7 +801,16 @@ module.exports = function(io) {
       const defendantUserId = isPlaintiffSeller ? deed.buyer_user_id : deed.seller_user_id;
 
       const caseId = uuidv4();
-      const caseNumber = `0${Math.floor(10 + Math.random() * 90)}/Pdt.Sus-Wanprestasi/${new Date().getFullYear()}/PNAF`;
+      const countRow = await query.get('SELECT COUNT(*) as count FROM court_cases');
+      let caseSeq = (countRow?.count || 0) + 1;
+      let caseNumber = '';
+      while (true) {
+        const randSuffix = Math.floor(1000 + Math.random() * 9000);
+        caseNumber = `${String(caseSeq).padStart(3, '0')}.${randSuffix}/Pdt.Sus-Wanprestasi/${new Date().getFullYear()}/PNAF`;
+        const exists = await query.get('SELECT 1 FROM court_cases WHERE case_number = ?', [caseNumber]);
+        if (!exists) break;
+        caseSeq++;
+      }
       const reasonNote = disputeReason || grievanceReason || `Penggugat menuntut denda penalti wanprestasi 20% (IB ${penaltyAmount.toLocaleString('id-ID')}) atas pelanggaran klausul Akta #${deed.deed_number}.`;
       const nextBotAt = new Date(Date.now() + 8000).toISOString();
 

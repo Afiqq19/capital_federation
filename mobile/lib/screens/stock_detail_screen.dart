@@ -1371,9 +1371,20 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                                 Text('Perdagangan Dibekukan', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                               ],
                             ),
-                            content: Text(
-                              'Perseroan ${c.name} (${c.symbol}) sedang disita negara oleh Pengadilan Niaga PNAF & BCF akibat kredit pinjaman pendiri yang belum diselesaikan. Perdagangan saham dibekukan sementara. Seluruh portofolio investor publik tetap aman tersimpan di kustodian bursa.',
-                              style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 12.5, height: 1.4),
+                            content: Builder(
+                              builder: (_) {
+                                final String reasonText = (c.seizeReason != null && c.seizeReason!.trim().isNotEmpty)
+                                    ? c.seizeReason!
+                                    : (c.umaReason != null && c.umaReason!.trim().isNotEmpty)
+                                        ? c.umaReason!
+                                        : (c.suspendReason != null && c.suspendReason!.trim().isNotEmpty)
+                                            ? c.suspendReason!
+                                            : 'Pergerakan harga tidak wajar / sanksi regulasi bursa & otoritas peradilan PNAF.';
+                                return Text(
+                                  'Perseroan ${c.name} (${c.symbol}) sedang disita & dibekukan oleh Otoritas Bursa & Pengadilan Niaga PNAF.\n\n📌 Keterangan Pembekuan:\n"$reasonText"\n\nPerdagangan saham dikunci sementara sampai evaluasi kepatuhan tuntas. Seluruh portofolio investor publik tetap aman tersimpan di kustodian bursa.',
+                                  style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 12.5, height: 1.45),
+                                );
+                              },
                             ),
                             actions: [
                               TextButton(

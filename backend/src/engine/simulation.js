@@ -468,12 +468,13 @@ class MarketSimulationEngine {
 
         let newPrice = isLockedAra ? maxAllowed : Math.round(comp.current_price * (1 + tickDeltaPct));
         newPrice = Math.max(minAllowed, Math.min(maxAllowed, newPrice));
-        if (comp.status === 'SUSPENDED') {
+        const isFrozen = comp.status === 'SUSPENDED' || comp.is_seized === 1 || comp.status === 'BANKRUPT';
+        if (isFrozen) {
           newPrice = comp.current_price;
         }
 
-        // Bot Intervention Algorithm if drop > 35%
-        if (isAutoIntervention && (refPrice - newPrice) / refPrice > 0.35) {
+        // Bot Intervention Algorithm if drop > 35% (hanya berlaku untuk saham aktif yang tidak dibekukan)
+        if (!isFrozen && isAutoIntervention && (refPrice - newPrice) / refPrice > 0.35) {
           newPrice += Math.round(refPrice * 0.03);
         }
 
@@ -504,7 +505,7 @@ class MarketSimulationEngine {
         const offers = [];
         let totalBidLots = 0;
         let totalOfferLots = 0;
-        const isSuspended = comp.status === 'SUSPENDED';
+        const isSuspended = comp.status === 'SUSPENDED' || comp.is_seized === 1 || comp.status === 'BANKRUPT';
         const isCritical = comp.status === 'CRITICAL';
 
         if (isSuspended) {

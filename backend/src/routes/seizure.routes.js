@@ -59,17 +59,23 @@ module.exports = function(io, simulationEngine) {
       const comp = await query.get('SELECT * FROM companies WHERE id = ?', [id]);
       if (!comp) return res.status(404).json({ error: 'Perusahaan tidak ditemukan' });
 
+      const correctedPrice = Math.max(50, Math.round(Number(comp.current_price || 100) * 0.70));
+      const newFundamental = Math.max(40, Math.min(65, Math.round(Number(comp.fundamental_score || 80) * 0.65)));
+
       await query.run(
-        'UPDATE companies SET is_seized = 0, seized_by = NULL, seized_at = NULL, seizure_deadline = NULL, is_auction_ready = 0, seize_reason = NULL WHERE id = ?',
-        [id]
+        `UPDATE companies 
+         SET is_seized = 0, seized_by = NULL, seized_at = NULL, seizure_deadline = NULL, is_auction_ready = 0, seize_reason = NULL, 
+             status = 'CRITICAL', current_price = ?, fundamental_score = ? 
+         WHERE id = ?`,
+        [correctedPrice, newFundamental, id]
       );
 
       const newsItem = {
         id: uuidv4(),
         title: `✅ PEMULIHAN STATUS: Sitaan atas Perseroan ${comp.symbol} Resmi Dicabut!`,
-        content: `Setelah restrukturisasi dan pelunasan kewajiban, Kepaniteraan PNAF mengembalikan hak kendali perseroan ${comp.name} kepada pemegang saham reguler.`,
+        content: `Setelah restrukturisasi dan pelunasan kewajiban, Kepaniteraan PNAF membuka kembali suspensi perdagangan ${comp.name} dengan penyesuaian harga pasar ke IB ${correctedPrice.toLocaleString('id-ID')} (merintis di level dasar menanti minat investor baru).`,
         affected_sector: comp.sector,
-        sentiment: 'BULLISH',
+        sentiment: 'NEUTRAL',
         published_at: new Date().toISOString()
       };
       await query.run(
@@ -266,26 +272,30 @@ module.exports = function(io, simulationEngine) {
         );
       }
 
-      // Cabut status sitaan dan pulihkan PT
+      // Cabut status sitaan dan pulihkan PT dengan koreksi harga realistis pasca-sitaan (merintis dari bawah)
+      const correctedPrice = Math.max(50, Math.round(Number(comp.current_price || 100) * 0.70));
+      const newFundamental = Math.max(40, Math.min(65, Math.round(Number(comp.fundamental_score || 80) * 0.65)));
+
       await query.run(
         `UPDATE companies 
-         SET is_seized = 0, seized_by = NULL, seized_at = NULL, seizure_deadline = NULL, is_auction_ready = 0, seize_reason = NULL, status = 'HEALTHY' 
+         SET is_seized = 0, seized_by = NULL, seized_at = NULL, seizure_deadline = NULL, is_auction_ready = 0, seize_reason = NULL, 
+             status = 'CRITICAL', current_price = ?, fundamental_score = ?
          WHERE id = ?`,
-        [id]
+        [correctedPrice, newFundamental, id]
       );
 
-      // Rebound trend jika simulationEngine aktif
+      // Reset tren di simulationEngine agar merintis stabil pasca koreksi
       if (simulationEngine && simulationEngine.stockTrends) {
-        simulationEngine.stockTrends.set(id, 15.0); // Dorong tren positif
+        simulationEngine.stockTrends.set(id, -1.5);
       }
 
       // Siarkan Breaking News Penebusan Berhasil
       const newsItem = {
         id: uuidv4(),
-        title: `🏛️ PENEBUSAN SITAAN TUNTAS: Perseroan ${comp.name} (${comp.symbol}) Resmi Bebas!`,
-        content: `Konglomerat ${user.username} telah melunasi Denda Sanksi PNAF sebesar IB ${pnafSanctionFine.toLocaleString('id-ID')} dan melunasi seluruh utang kredit bank beserta bunganya sebesar IB ${totalBankDebt.toLocaleString('id-ID')}. Hak kendali perseroan resmi dikembalikan secara penuh!`,
+        title: `🏛️ SITAAN DICABUT: Perseroan ${comp.name} (${comp.symbol}) Resmi Bebas & Buka Suspensi!`,
+        content: `Konglomerat ${user.username} telah melunasi denda sanksi dan utang kredit bank. Sesuai dinamika bursa nyata pasca suspensi, perdagangan ${comp.symbol} dibuka kembali pada level IB ${correctedPrice.toLocaleString('id-ID')} dan perseroan mulai merintis kembali untuk meyakinkan investor.`,
         affected_sector: comp.sector,
-        sentiment: 'BULLISH',
+        sentiment: 'NEUTRAL',
         published_at: new Date().toISOString()
       };
       await query.run(

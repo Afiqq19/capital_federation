@@ -728,8 +728,8 @@ export default function SettingsPage() {
                 >
                   <Input
                     type="number"
-                    min="10000000"
-                    step="50000000"
+                    min="0"
+                    step="any"
                     value={form.max_loan_limit}
                     onChange={(e) => handleChange('max_loan_limit', e.target.value)}
                     required
@@ -906,8 +906,8 @@ export default function SettingsPage() {
                 >
                   <Input
                     type="number"
-                    min="10000000"
-                    step="10000000"
+                    min="0"
+                    step="any"
                     value={form.min_ipo_capital}
                     onChange={(e) => handleChange('min_ipo_capital', e.target.value)}
                     required
@@ -973,8 +973,8 @@ export default function SettingsPage() {
                 >
                   <Input
                     type="number"
-                    min="1000000"
-                    step="5000000"
+                    min="0"
+                    step="any"
                     value={form.market_manipulation_fine_ib}
                     onChange={(e) => handleChange('market_manipulation_fine_ib', e.target.value)}
                     required

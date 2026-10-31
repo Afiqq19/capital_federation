@@ -2507,7 +2507,16 @@ app.post('/api/court/file-case', async (req, res) => {
     }
 
     const typeCode = caseType === 'BANKRUPTCY' ? 'Pailit' : (caseType === 'DISPUTE' ? 'Sengketa' : 'Bursa');
-    const caseNumber = `${String(Math.floor(10 + Math.random() * 90)).padStart(3, '0')}/Pdt.Sus-${typeCode}/${new Date().getFullYear()}/PNAF`;
+    const countRow = await query.get('SELECT COUNT(*) as count FROM court_cases');
+    let caseSeq = (countRow?.count || 0) + 1;
+    let caseNumber = '';
+    while (true) {
+      const randSuffix = Math.floor(1000 + Math.random() * 9000);
+      caseNumber = `${String(caseSeq).padStart(3, '0')}.${randSuffix}/Pdt.Sus-${typeCode}/${new Date().getFullYear()}/PNAF`;
+      const exists = await query.get('SELECT 1 FROM court_cases WHERE case_number = ?', [caseNumber]);
+      if (!exists) break;
+      caseSeq++;
+    }
     const caseId = uuidv4();
     const hearingSchedule = courtHearingDate || hearingDate || 'Hari Ini, Sidang Segera';
     const timeVal = hearingTime || 'Sesi Aktif WIB';
@@ -7554,7 +7563,7 @@ async function getApkSettingsMap() {
     apk_release_notes: LATEST_RELEASE_NOTES_V190,
     apk_external_url: '',
     apk_download_count: '325',
-    apk_sha256: 'dea4c402cec5e7d41eb518350b782fd9f21fb1cbe432288f5486b2b758af455f',
+    apk_sha256: '7f1f70f7edad00443f3ee6dfaf8fa8c9fb4d85be63be2c1dcd36c4b2f39bd9a6',
     apk_updated_at: new Date().toISOString(),
   };
   try {
@@ -7568,7 +7577,7 @@ async function getApkSettingsMap() {
       defaults.apk_version = '1.9.0';
       defaults.apk_build_number = '26';
       defaults.apk_file_size_mb = '56.4 MB';
-      defaults.apk_sha256 = 'dea4c402cec5e7d41eb518350b782fd9f21fb1cbe432288f5486b2b758af455f';
+      defaults.apk_sha256 = '7f1f70f7edad00443f3ee6dfaf8fa8c9fb4d85be63be2c1dcd36c4b2f39bd9a6';
       defaults.apk_release_notes = LATEST_RELEASE_NOTES_V190;
       defaults.apk_updated_at = new Date().toISOString();
       // Persist directly to central_bank_settings so /api/settings, /api/admin/settings & /api/admin/overview match 100%!

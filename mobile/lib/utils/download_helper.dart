@@ -1,10 +1,15 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class DownloadHelper {
   static const String directApkUrl = 'https://capitalfederation.xie.my.id/api/download/apk';
   static const String webDownloadUrl = 'https://capitalfederation.xie.my.id/download';
+  static const MethodChannel installerChannel = MethodChannel('com.capitalfederation.mobile/apk_installer');
 
   /// Membuka tautan unduhan dengan fallback multi-level dan salin otomatis ke clipboard jika browser terblokir
   static Future<void> openDownload({
@@ -84,6 +89,32 @@ class DownloadHelper {
     }
   }
 
+  /// Unduh APK langsung di dalam aplikasi (In-App Direct Download) dan picu instalasi otomatis
+  static Future<void> startInAppUpdate(
+    BuildContext context, {
+    String? newVer,
+    int? newBuild,
+    String? customUrl,
+  }) async {
+    if (kIsWeb || !Platform.isAndroid) {
+      openDownload(context: context, preferDirectApk: true);
+      return;
+    }
+
+    final downloadUrl = customUrl ?? directApkUrl;
+
+    // Tampilkan Dialog Progress Pengunduhan In-App
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) => _InAppUpdateProgressDialog(
+        downloadUrl: downloadUrl,
+        newVer: newVer ?? 'Terbaru',
+        newBuild: newBuild,
+      ),
+    );
+  }
+
   /// Menampilkan Modal Dialog Pembaruan yang Modern, Elegan & Jelas
   static void showModernUpdateDialog(
     BuildContext context, {
@@ -121,47 +152,40 @@ class DownloadHelper {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Top Header with Badge
+              // Header Badge & Icon
               Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Container(
-                    width: 44,
-                    height: 44,
+                    padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFFF59E0B), Color(0xFFB45309)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
+                      color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(14),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFFF59E0B).withValues(alpha: 0.35),
-                          blurRadius: 10,
-                        )
-                      ],
+                      border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.4)),
                     ),
-                    child: const Icon(Icons.system_update_rounded, color: Colors.white, size: 24),
+                    child: const Icon(Icons.rocket_launch_rounded, color: Color(0xFFF59E0B), size: 24),
                   ),
-                  const SizedBox(width: 14),
+                  const SizedBox(width: 12),
                   const Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Pembaruan Tersedia!',
+                          'PEMBARUAN APLIKASI TERSEDIA',
                           style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 17,
+                            color: Color(0xFFF59E0B),
+                            fontSize: 10,
                             fontWeight: FontWeight.w900,
-                            letterSpacing: -0.3,
+                            letterSpacing: 0.8,
                           ),
                         ),
                         SizedBox(height: 2),
                         Text(
-                          'Otoritas Bursa Capital Federation',
-                          style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
+                          'Capital Federation',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ],
                     ),
@@ -170,13 +194,13 @@ class DownloadHelper {
               ),
               const SizedBox(height: 16),
 
-              // Version Diff Pills
+              // Version Comparison Card
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF0A101D),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFF1E293B)),
+                  color: const Color(0xFF1E293B).withValues(alpha: 0.7),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFF334155)),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -184,18 +208,24 @@ class DownloadHelper {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Versi Terpasang:', style: TextStyle(color: Color(0xFF64748B), fontSize: 10)),
-                        const SizedBox(height: 1),
-                        Text('v$currentVer+$currentBuild', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.bold, fontFamily: 'monospace')),
+                        const Text('Versi Terpasang', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10)),
+                        const SizedBox(height: 2),
+                        Text(
+                          'v$currentVer (B$currentBuild)',
+                          style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
                       ],
                     ),
-                    const Icon(Icons.arrow_forward_rounded, color: Color(0xFFF59E0B), size: 16),
+                    const Icon(Icons.arrow_forward_rounded, color: Color(0xFFF59E0B), size: 18),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        const Text('Versi Rilis Resmi:', style: TextStyle(color: Color(0xFFF59E0B), fontSize: 10, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 1),
-                        Text('v$newVer+$newBuild', style: const TextStyle(color: Color(0xFFFDE68A), fontSize: 11, fontWeight: FontWeight.w900, fontFamily: 'monospace')),
+                        const Text('Versi Terbaru', style: TextStyle(color: Color(0xFF34D399), fontSize: 10, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 2),
+                        Text(
+                          'v$newVer (B$newBuild)',
+                          style: const TextStyle(color: Color(0xFF34D399), fontSize: 13, fontWeight: FontWeight.w900),
+                        ),
                       ],
                     ),
                   ],
@@ -229,18 +259,18 @@ class DownloadHelper {
               const SizedBox(height: 20),
 
               // Action Buttons
-              // 1. Direct Download APK
+              // 1. In-App Direct Download & Install
               SizedBox(
                 width: double.infinity,
                 height: 44,
                 child: ElevatedButton.icon(
                   onPressed: () {
                     Navigator.pop(ctx);
-                    openDownload(context: context, preferDirectApk: true);
+                    startInAppUpdate(context, newVer: newVer, newBuild: newBuild);
                   },
-                  icon: const Icon(Icons.download_rounded, size: 18),
+                  icon: const Icon(Icons.bolt_rounded, size: 20),
                   label: const Text(
-                    'UNDUH & UPDATE SEKARANG (APK)',
+                    'UPDATE OTOMATIS SEKARANG (INSTAN)',
                     style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
                   ),
                   style: ElevatedButton.styleFrom(
@@ -286,6 +316,232 @@ class DownloadHelper {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Widget Dialog Progress Download & Instalasi In-App
+class _InAppUpdateProgressDialog extends StatefulWidget {
+  final String downloadUrl;
+  final String newVer;
+  final int? newBuild;
+
+  const _InAppUpdateProgressDialog({
+    required this.downloadUrl,
+    required this.newVer,
+    this.newBuild,
+  });
+
+  @override
+  State<_InAppUpdateProgressDialog> createState() => _InAppUpdateProgressDialogState();
+}
+
+class _InAppUpdateProgressDialogState extends State<_InAppUpdateProgressDialog> {
+  double _progress = 0.0;
+  int _receivedBytes = 0;
+  int _totalBytes = 0;
+  bool _isDownloading = true;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _startDownloadAndInstall();
+  }
+
+  Future<void> _startDownloadAndInstall() async {
+    try {
+      final client = http.Client();
+      final request = http.Request('GET', Uri.parse(widget.downloadUrl));
+      final response = await client.send(request);
+
+      if (response.statusCode != 200) {
+        throw Exception('Server mengembalikan kode status ${response.statusCode}');
+      }
+
+      final contentLength = response.contentLength ?? 0;
+      setState(() {
+        _totalBytes = contentLength;
+        _isDownloading = true;
+      });
+
+      final tempDir = await getTemporaryDirectory();
+      final targetFile = File('${tempDir.path}/Capital-Federation-v${widget.newVer}.apk');
+      if (await targetFile.exists()) {
+        await targetFile.delete();
+      }
+
+      final sink = targetFile.openWrite();
+      int received = 0;
+
+      await for (final chunk in response.stream) {
+        sink.add(chunk);
+        received += chunk.length;
+        if (mounted) {
+          setState(() {
+            _receivedBytes = received;
+            if (contentLength > 0) {
+              _progress = received / contentLength;
+            }
+          });
+        }
+      }
+
+      await sink.flush();
+      await sink.close();
+      client.close();
+
+      if (!mounted) return;
+
+      setState(() {
+        _isDownloading = false;
+        _progress = 1.0;
+      });
+
+      // Panggil Native Android Method Channel untuk membuka Package Installer
+      try {
+        final success = await DownloadHelper.installerChannel.invokeMethod('installApk', {'filePath': targetFile.path});
+        if (mounted && success == true) {
+          Navigator.of(context, rootNavigator: true).pop();
+        }
+      } catch (err) {
+        if (!mounted) return;
+        setState(() {
+          _errorMessage = 'Gagal memicu instalasi: $err. Anda dapat mengunduh via browser.';
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isDownloading = false;
+        _errorMessage = 'Gagal mengunduh: $e';
+      });
+    }
+  }
+
+  String _formatMb(int bytes) {
+    return (bytes / (1024 * 1024)).toStringAsFixed(1);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final percentInt = (_progress * 100).clamp(0, 100).toInt();
+
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Container(
+        padding: const EdgeInsets.all(22),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0F172A),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: const Color(0xFFF59E0B), width: 1.5),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFFF59E0B).withValues(alpha: 0.2),
+              blurRadius: 20,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.system_update_rounded, color: Color(0xFFF59E0B), size: 28),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              _isDownloading ? 'Mengunduh Pembaruan v${widget.newVer}...' : 'Memulai Pemasangan APK...',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              _isDownloading
+                  ? 'File APK diunduh langsung ke sistem game tanpa perlu membuka browser eksternal.'
+                  : 'Sistem Android sedang membuka Package Installer. Silakan ketuk "Update" pada jendela konfirmasi.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
+            ),
+            const SizedBox(height: 18),
+            if (_errorMessage != null) ...[
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEF4444).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.4)),
+                ),
+                child: Text(
+                  _errorMessage!,
+                  style: const TextStyle(color: Color(0xFFF87171), fontSize: 11),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context, rootNavigator: true).pop(),
+                    child: const Text('Tutup', style: TextStyle(color: Color(0xFF94A3B8))),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: () {
+                      Navigator.of(context, rootNavigator: true).pop();
+                      DownloadHelper.openDownload(context: context, preferDirectApk: true);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF38BDF8),
+                      foregroundColor: const Color(0xFF0F172A),
+                    ),
+                    child: const Text('Unduh Manual via Browser', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                  ),
+                ],
+              ),
+            ] else ...[
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: LinearProgressIndicator(
+                  value: _totalBytes > 0 ? _progress : null,
+                  minHeight: 10,
+                  backgroundColor: const Color(0xFF1E293B),
+                  valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFF59E0B)),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    _totalBytes > 0
+                        ? '${_formatMb(_receivedBytes)} MB / ${_formatMb(_totalBytes)} MB'
+                        : '${_formatMb(_receivedBytes)} MB',
+                    style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    '$percentInt%',
+                    style: const TextStyle(color: Color(0xFFF59E0B), fontSize: 12, fontWeight: FontWeight.w900),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              if (_isDownloading)
+                TextButton(
+                  onPressed: () => Navigator.of(context, rootNavigator: true).pop(),
+                  child: const Text('Batalkan', style: TextStyle(color: Color(0xFF64748B), fontSize: 11)),
+                ),
+            ],
+          ],
         ),
       ),
     );
