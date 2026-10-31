@@ -35,6 +35,25 @@ function createOrdersRouter(io, simulationEngine) {
       const orderId = uuidv4();
 
       if (orderType === 'BUY') {
+        const totalShares = comp.total_shares || 10000000;
+        const regQuotaShares = Math.min(totalShares, Math.max(Math.floor(totalShares * 0.49), comp.circulating_shares || 0));
+        const maxRegularLots = Math.max(1, Math.floor(regQuotaShares / 100));
+        const regQuotaPct = ((regQuotaShares / totalShares) * 100).toFixed(0);
+        const existingPort = await query.get('SELECT lots_owned FROM portfolios WHERE user_id = ? AND company_id = ?', [userId, companyId]);
+        const openBuyRow = await query.get(
+          "SELECT COALESCE(SUM(COALESCE(lots, target_lots, 0) - COALESCE(filled_lots, 0)), 0) as pending_lots FROM market_orders WHERE user_id = ? AND company_id = ? AND (order_type = 'BUY' OR type = 'BUY') AND status IN ('OPEN', 'PARTIAL')",
+          [userId, companyId]
+        );
+        const currentTotalLots = (existingPort?.lots_owned || 0) + (openBuyRow?.pending_lots || 0);
+        if (currentTotalLots + numLots > maxRegularLots) {
+          const remainingLots = Math.max(0, maxRegularLots - currentTotalLots);
+          return res.status(400).json({
+            error: remainingLots > 0
+              ? `Melebihi Sisa Kuota Pasar Reguler! Kuota gabungan Publik & Institusi ${comp.symbol} adalah ${maxRegularLots.toLocaleString('id-ID')} Lot (${regQuotaPct}%). Sisa yang dapat diantre beli: ${remainingLots.toLocaleString('id-ID')} Lot.`
+              : `Kuota Maksimum Pasar Reguler (${regQuotaPct}% = ${maxRegularLots.toLocaleString('id-ID')} Lot) Tercapai! Lanjutkan pengambilalihan mayoritas melalui Akuisisi M&A / Pasar Negosiasi P2P di Bursa Aset.`
+          });
+        }
+
         const grossAmount = numLots * 100 * numPrice;
         const fee = Math.round(grossAmount * feePct);
         const totalEscrow = grossAmount + fee;

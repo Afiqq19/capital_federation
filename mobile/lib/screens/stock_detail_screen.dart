@@ -45,7 +45,8 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
   Future<void> _fetchDetail([String? range]) async {
     final tf = range ?? _selectedTimeframe;
     try {
-      final detail = await ApiService.getCompanyDetail(widget.company.id, range: tf);
+      final uid = mounted ? context.read<GameProvider>().user?.id : null;
+      final detail = await ApiService.getCompanyDetail(widget.company.id, range: tf, userId: uid);
       if (mounted) {
         setState(() {
           _detailedCompany = detail ?? widget.company;
@@ -225,6 +226,52 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
     );
   }
 
+  OrderbookModel _syncOrderbookWithQuota(OrderbookModel raw, CompanyModel c, int availableRegularLots) {
+    if (c.isPreIpo || c.status == 'SUSPENDED') return raw;
+
+    if (availableRegularLots <= 0) {
+      final int buyPct = raw.totalBidLots > 0 ? 100 : 50;
+      return OrderbookModel(
+        bids: raw.bids,
+        offers: const [],
+        totalBidLots: raw.totalBidLots,
+        totalOfferLots: 0,
+        buyPressurePct: buyPct,
+        sellPressurePct: 100 - buyPct,
+      );
+    }
+
+    if (raw.totalOfferLots <= availableRegularLots || raw.offers.isEmpty) {
+      return raw;
+    }
+
+    final double ratio = availableRegularLots / raw.totalOfferLots;
+    int distributed = 0;
+    final List<OrderbookLevel> cappedOffers = [];
+    for (int i = 0; i < raw.offers.length; i++) {
+      final int capped = (i == raw.offers.length - 1)
+          ? max(0, availableRegularLots - distributed)
+          : (raw.offers[i].lots * ratio).floor();
+      distributed += capped;
+      if (capped > 0) {
+        cappedOffers.add(OrderbookLevel(price: raw.offers[i].price, lots: capped));
+      }
+    }
+
+    final int newTotalOffers = cappedOffers.fold<int>(0, (s, o) => s + o.lots);
+    final int totalDepth = raw.totalBidLots + newTotalOffers;
+    final int buyPct = totalDepth > 0 ? ((raw.totalBidLots / totalDepth) * 100).round() : 100;
+
+    return OrderbookModel(
+      bids: raw.bids,
+      offers: cappedOffers,
+      totalBidLots: raw.totalBidLots,
+      totalOfferLots: newTotalOffers,
+      buyPressurePct: buyPct,
+      sellPressurePct: 100 - buyPct,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<GameProvider>();
@@ -248,7 +295,25 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
     final nominalDiff = (c.currentPrice - c.basePrice).round();
     final candlePoints = _getCandlePoints(c);
     final chartPoints = candlePoints.map((e) => e.close).toList();
-    final orderbook = _getFallbackOrderbook(c);
+
+    // Check user holding for this emiten (1-to-1 sum matching TradingModal & Backend)
+    final port = provider.portfolio;
+    final matchingHoldings = port?.holdings.where((h) => h.companyId == c.id || h.symbol == c.symbol).toList() ?? [];
+    final matchingHolding = matchingHoldings.isNotEmpty ? matchingHoldings.first : null;
+    final ownedLots = matchingHoldings.fold<int>(0, (sum, h) => sum + h.lotsOwned);
+    final ownedShares = ownedLots * 100;
+    final avgBuyPrice = matchingHolding?.avgBuyPrice ?? 0.0;
+    final totalInvested = ownedShares * avgBuyPrice;
+    final currentHoldingVal = ownedShares * c.currentPrice;
+    final profitLoss = currentHoldingVal - totalInvested;
+    final profitLossPct = totalInvested > 0 ? ((profitLoss / totalInvested) * 100) : 0.0;
+    final isHoldingProfit = profitLoss >= 0;
+    final user = provider.user;
+    final isOwner = user != null && c.ownerId != null && c.ownerId == user.id;
+
+    final int maxRegularLots = c.regularMarketQuotaLots;
+    final int availableRegularLots = max(0, maxRegularLots - ownedLots);
+    final orderbook = _syncOrderbookWithQuota(_getFallbackOrderbook(c), c, availableRegularLots);
 
     // Calculate maximum volume in orderbook for visual relative bar width
     int maxOrderbookLots = 1;
@@ -258,23 +323,6 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
     for (var o in orderbook.offers) {
       if (o.lots > maxOrderbookLots) maxOrderbookLots = o.lots;
     }
-
-    // Check user holding for this emiten
-    final port = provider.portfolio;
-    final matchingHoldings = port?.holdings.where((h) => h.companyId == c.id || h.symbol == c.symbol) ?? [];
-    final matchingHolding = matchingHoldings.isNotEmpty ? matchingHoldings.first : null;
-    final ownedLots = matchingHolding?.lotsOwned ?? 0;
-    final ownedShares = matchingHolding != null
-        ? (matchingHolding.totalShares > 0 ? matchingHolding.totalShares : ownedLots * 100)
-        : 0;
-    final avgBuyPrice = matchingHolding?.avgBuyPrice ?? 0.0;
-    final totalInvested = ownedShares * avgBuyPrice;
-    final currentHoldingVal = ownedShares * c.currentPrice;
-    final profitLoss = currentHoldingVal - totalInvested;
-    final profitLossPct = totalInvested > 0 ? ((profitLoss / totalInvested) * 100) : 0.0;
-    final isHoldingProfit = profitLoss >= 0;
-    final user = provider.user;
-    final isOwner = user != null && c.ownerId != null && c.ownerId == user.id;
 
     return Scaffold(
       backgroundColor: const Color(0xFF070B14),
@@ -948,14 +996,20 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                               height: 8,
                               child: Row(
                                 children: [
-                                  Expanded(
-                                    flex: orderbook.buyPressurePct,
-                                    child: Container(color: const Color(0xFF10B981)),
-                                  ),
-                                  Expanded(
-                                    flex: orderbook.sellPressurePct,
-                                    child: Container(color: const Color(0xFFEF4444)),
-                                  ),
+                                  if (orderbook.buyPressurePct > 0)
+                                    Expanded(
+                                      flex: orderbook.buyPressurePct,
+                                      child: Container(color: const Color(0xFF10B981)),
+                                    ),
+                                  if (orderbook.sellPressurePct > 0)
+                                    Expanded(
+                                      flex: orderbook.sellPressurePct,
+                                      child: Container(color: const Color(0xFFEF4444)),
+                                    ),
+                                  if (orderbook.buyPressurePct <= 0 && orderbook.sellPressurePct <= 0)
+                                    Expanded(
+                                      child: Container(color: const Color(0xFF334155)),
+                                    ),
                                 ],
                               ),
                             ),
@@ -969,11 +1023,41 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                                 style: const TextStyle(color: Color(0xFF64748B), fontSize: 10),
                               ),
                               Text(
-                                'Total Antre: ${CurrencyFormatter.formatNumberOnly(orderbook.totalOfferLots)} Lot',
-                                style: const TextStyle(color: Color(0xFF64748B), fontSize: 10),
+                                orderbook.totalOfferLots > 0
+                                    ? 'Total Antre: ${CurrencyFormatter.formatNumberOnly(orderbook.totalOfferLots)} Lot'
+                                    : 'Total Antre: 0 Lot (Habis Terserap)',
+                                style: TextStyle(
+                                  color: orderbook.totalOfferLots > 0 ? const Color(0xFF64748B) : const Color(0xFFF59E0B),
+                                  fontSize: 10,
+                                  fontWeight: orderbook.totalOfferLots > 0 ? FontWeight.normal : FontWeight.bold,
+                                ),
                               ),
                             ],
                           ),
+                          if (availableRegularLots <= 0 && !c.isPreIpo && c.status != 'SUSPENDED') ...[
+                            const SizedBox(height: 10),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF59E0B).withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.45)),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Icon(Icons.handshake_rounded, color: Color(0xFFF59E0B), size: 15),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'Seluruh kuota Pasar Reguler (${c.regularMarketQuotaPct.toStringAsFixed(0)}% = ${CurrencyFormatter.formatNumberOnly(maxRegularLots)} Lot) telah habis Anda serap sehingga Offer kosong (0 Lot). Untuk mengakuisisi Saham Pengendali (${(100 - c.regularMarketQuotaPct).toStringAsFixed(0)}%), gunakan menu Bursa Aset (Akuisisi M&A / P2P).',
+                                      style: const TextStyle(color: Color(0xFFFBBF24), fontSize: 10.5, height: 1.35),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -1014,7 +1098,31 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                           const Divider(color: Color(0xFF1E293B), height: 16),
                           _statRow('Harga Dasar (IPO)', CurrencyFormatter.formatFull(c.basePrice), Colors.white),
                           const Divider(color: Color(0xFF1E293B), height: 16),
-                          _statRow('Total Saham Beredar', '${CurrencyFormatter.formatNumberOnly(c.totalShares)} Lembar', const Color(0xFFCBD5E1)),
+                          _statRow(
+                            'Total Saham Perseroan (100%)',
+                            '${CurrencyFormatter.formatNumberOnly(c.totalShares)} lbr (${CurrencyFormatter.formatNumberOnly(c.totalLots)} Lot)',
+                            const Color(0xFFCBD5E1),
+                          ),
+                          const Divider(color: Color(0xFF1E293B), height: 16),
+                          _statRow(
+                            'Saham Pengendali (${(100 - c.regularMarketQuotaPct).toStringAsFixed(0)}% Non-Reguler)',
+                            '${CurrencyFormatter.formatNumberOnly(c.controllingLockedShares)} lbr (${CurrencyFormatter.formatNumberOnly(c.controllingLockedLots)} Lot)',
+                            const Color(0xFF94A3B8),
+                          ),
+                          const Divider(color: Color(0xFF1E293B), height: 16),
+                          _statRow(
+                            'Kuota Pasar Reguler (${c.regularMarketQuotaPct.toStringAsFixed(0)}%)',
+                            '${CurrencyFormatter.formatNumberOnly(c.regularMarketQuotaShares)} lbr (${CurrencyFormatter.formatNumberOnly(maxRegularLots)} Lot)',
+                            const Color(0xFF38BDF8),
+                          ),
+                          const Divider(color: Color(0xFF1E293B), height: 16),
+                          _statRow(
+                            'Sisa Kuota Beli Reguler Anda',
+                            availableRegularLots > 0
+                                ? '${CurrencyFormatter.formatNumberOnly(availableRegularLots)} Lot (${CurrencyFormatter.formatNumberOnly(availableRegularLots * 100)} lbr)'
+                                : '0 Lot (Habis — Lanjut Akuisisi)',
+                            availableRegularLots > 0 ? const Color(0xFF34D399) : const Color(0xFFF59E0B),
+                          ),
                           const Divider(color: Color(0xFF1E293B), height: 16),
                           _statRow(
                             'Kapitalisasi Pasar',
@@ -1649,9 +1757,21 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
   Widget _statRow(String label, String value, Color valColor) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11)),
-        Text(value, style: TextStyle(color: valColor, fontSize: 12, fontWeight: FontWeight.bold)),
+        Expanded(
+          flex: 5,
+          child: Text(label, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11)),
+        ),
+        const SizedBox(width: 8),
+        Flexible(
+          flex: 6,
+          child: Text(
+            value,
+            textAlign: TextAlign.right,
+            style: TextStyle(color: valColor, fontSize: 11.5, fontWeight: FontWeight.bold),
+          ),
+        ),
       ],
     );
   }
@@ -2299,19 +2419,33 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                         const SizedBox(height: 8),
 
                         // Offer Table
-                        ...List.generate(orderbook.offers.length, (idx) {
-                          final o = orderbook.offers[idx];
-                          const brokerCodes = ['XL', 'AK', 'CS', 'KZ', 'GR'];
-                          final broker = brokerCodes[idx % brokerCodes.length];
-                          return _buildQueueCard(
-                            rank: idx + 1,
-                            price: o.price,
-                            lots: o.lots,
-                            isBid: false,
-                            broker: broker,
-                            maxLots: max(1, orderbook.totalOfferLots),
-                          );
-                        }),
+                        if (orderbook.offers.isEmpty)
+                          Container(
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF59E0B).withValues(alpha: 0.10),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.45)),
+                            ),
+                            child: Text(
+                              'Antrean Jual Pasar Reguler kosong (0 Lot). Seluruh kuota gabungan Publik & Institusi (${c.regularMarketQuotaPct.toStringAsFixed(0)}%) telah terserap habis. Untuk mengambil alih porsi Pengendali Utama (${(100 - c.regularMarketQuotaPct).toStringAsFixed(0)}%), ajukan penawaran melalui Akuisisi M&A / Pasar Negosiasi P2P di menu Bursa Aset.',
+                              style: const TextStyle(color: Color(0xFFFBBF24), fontSize: 11, height: 1.35),
+                            ),
+                          )
+                        else
+                          ...List.generate(orderbook.offers.length, (idx) {
+                            final o = orderbook.offers[idx];
+                            const brokerCodes = ['XL', 'AK', 'CS', 'KZ', 'GR'];
+                            final broker = brokerCodes[idx % brokerCodes.length];
+                            return _buildQueueCard(
+                              rank: idx + 1,
+                              price: o.price,
+                              lots: o.lots,
+                              isBid: false,
+                              broker: broker,
+                              maxLots: max(1, orderbook.totalOfferLots),
+                            );
+                          }),
                       ],
                     ),
                   ),

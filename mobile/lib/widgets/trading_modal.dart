@@ -63,10 +63,10 @@ class _TradingModalState extends State<TradingModal> {
 
     final cash = user?.balanceIb ?? 0.0;
     final bool isSuspended = widget.company.status == 'SUSPENDED';
-    final int maxFloatingLots = (widget.company.circulatingShares > 0
-        ? (widget.company.circulatingShares / 100).floor()
-        : ((widget.company.totalShares * 0.3) / 100).floor()).clamp(1, 100000000);
+    final int maxFloatingLots = widget.company.regularMarketQuotaLots;
+    final double regularQuotaPct = widget.company.regularMarketQuotaPct;
     final int availableFloatingLots = max(0, maxFloatingLots - ownedLots);
+    final double quotaFillRatio = maxFloatingLots > 0 ? (ownedLots / maxFloatingLots).clamp(0.0, 1.0) : 0.0;
     final bool isExceedingFloating = _orderType == 'BUY' && (_lots + ownedLots > maxFloatingLots);
     final bool isInsufficientCash = _orderType == 'BUY' && totalAmount > cash;
     final bool isNoHoldings = _orderType == 'SELL' && ownedLots <= 0;
@@ -244,6 +244,72 @@ class _TradingModalState extends State<TradingModal> {
                   ],
                 ),
               ),
+              if (_orderType == 'BUY') ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                  decoration: BoxDecoration(
+                    color: availableFloatingLots <= 0
+                        ? const Color(0xFFF59E0B).withValues(alpha: 0.10)
+                        : const Color(0xFF070B14),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: availableFloatingLots <= 0
+                          ? const Color(0xFFF59E0B).withValues(alpha: 0.55)
+                          : const Color(0xFF38BDF8).withValues(alpha: 0.30),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Kuota Pasar Reguler (${regularQuotaPct.toStringAsFixed(0)}%): ${currencyFormatter.format(maxFloatingLots)} Lot',
+                            style: const TextStyle(
+                              color: Color(0xFFCBD5E1),
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          Text(
+                            'Sisa: ${currencyFormatter.format(availableFloatingLots)} Lot',
+                            style: TextStyle(
+                              color: availableFloatingLots > 0 ? const Color(0xFF38BDF8) : const Color(0xFFF59E0B),
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: quotaFillRatio,
+                          minHeight: 5,
+                          backgroundColor: const Color(0xFF1E293B),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            availableFloatingLots > 0 ? const Color(0xFF38BDF8) : const Color(0xFFF59E0B),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        availableFloatingLots > 0
+                            ? 'Dimiliki Anda: ${currencyFormatter.format(ownedLots)} Lot • Saham Pengendali (${(100 - regularQuotaPct).toStringAsFixed(0)}%) via Akuisisi'
+                            : 'Kuota Pasar Reguler (Publik & Institusi ${regularQuotaPct.toStringAsFixed(0)}%) penuh. Gunakan Akuisisi M&A / Pasar Negosiasi P2P di menu Bursa Aset untuk mengambil alih Saham Pengendali (${(100 - regularQuotaPct).toStringAsFixed(0)}%).',
+                        style: TextStyle(
+                          color: availableFloatingLots > 0 ? const Color(0xFF94A3B8) : const Color(0xFFFBBF24),
+                          fontSize: 10,
+                          height: 1.3,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: 16),
 
               // Volume Order Stepper & Input
@@ -392,7 +458,7 @@ class _TradingModalState extends State<TradingModal> {
                               ScaffoldMessenger.of(context).clearSnackBars();
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content: Text('Anda telah memiliki seluruh saham publik beredar (${currencyFormatter.format(maxFloatingLots)} lot) emiten ini.'),
+                                  content: Text('Kuota Pasar Reguler (${regularQuotaPct.toStringAsFixed(0)}% = ${currencyFormatter.format(maxFloatingLots)} Lot) telah Anda miliki seluruhnya. Lanjutkan lewat Akuisisi M&A / P2P di Bursa Aset.'),
                                   backgroundColor: const Color(0xFFF59E0B),
                                 ),
                               );
@@ -402,7 +468,7 @@ class _TradingModalState extends State<TradingModal> {
                                 ScaffoldMessenger.of(context).clearSnackBars();
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
-                                    content: Text('Lot disesuaikan dengan sisa batas saham publik beredar di bursa: ${currencyFormatter.format(maxBuyable)} Lot.'),
+                                    content: Text('Lot disesuaikan dengan sisa kuota Pasar Reguler (${regularQuotaPct.toStringAsFixed(0)}%): ${currencyFormatter.format(maxBuyable)} Lot.'),
                                     backgroundColor: const Color(0xFF0284C7),
                                     duration: const Duration(milliseconds: 1400),
                                   ),
@@ -502,7 +568,9 @@ class _TradingModalState extends State<TradingModal> {
                                       : isInsufficientCash
                                           ? 'SALDO KAS TIDAK MENCUKUPI'
                                           : isExceedingFloating
-                                              ? 'MELEBIHI KUOTA PUBLIK (MAX: ${currencyFormatter.format(availableFloatingLots)} LOT)'
+                                              ? (availableFloatingLots <= 0
+                                                  ? 'KUOTA REGULER ${regularQuotaPct.toStringAsFixed(0)}% PENUH — LANJUT VIA AKUISISI'
+                                                  : 'MELEBIHI SISA KUOTA REGULER (MAX: ${currencyFormatter.format(availableFloatingLots)} LOT)')
                                               : isInvalidLots
                                                   ? 'MASUKKAN JUMLAH LOT'
                                                   : 'KONFIRMASI ${_orderType == 'BUY' ? 'BELI' : 'JUAL'} ${currencyFormatter.format(_lots)} LOT'),

@@ -1066,85 +1066,155 @@ function formatCorporateName(rawName, isIpo = false) {
   return isIpo ? `${clean} Tbk.` : clean;
 }
 
-// Helper to get or generate shareholder registry (Cap Table)
+// Helper: Kuota Maksimal Saham Pasar Reguler (49% = Gabungan Publik Ritel + Likuiditas Konsorsium Institusi)
+function getRegularMarketQuotaShares(company) {
+  const totalShares = company?.total_shares || 10000000;
+  const minRegularShares = Math.floor(totalShares * 0.49);
+  const circShares = company?.circulating_shares || 0;
+  return Math.min(totalShares, Math.max(minRegularShares, circShares));
+}
+
+// Helper to get or generate shareholder registry (Cap Table) & auto-heal any corrupted percentages
 async function getCompanyShareholders(companyId, ownerUser, compData) {
   let rows = await query.all(
     'SELECT * FROM company_shareholders WHERE company_id = ? ORDER BY percentage DESC',
     [companyId]
   );
+
+  const totalShares = compData?.total_shares || 10000000;
+  const isIpoComp = compData?.is_ipo === 1 || (compData?.name && /\bTbk\.?\b/i.test(compData.name));
+
   if (rows && rows.length > 0) {
-    const isPrimary = (companyId === 'primary' || compData?.owner_id === ownerUser?.id);
-    const founderSold = compData?.founder_shares_sold || ownerUser?.founder_shares_sold || 0;
-    const isIpoComp = compData?.is_ipo === 1 || ownerUser?.is_ipo === 1 || (compData?.name && /\bTbk\.?\b/i.test(compData.name));
-    const totalShares = compData?.total_shares || 10000000;
-    const expectedFounderPct = isPrimary
-      ? Math.max(0, 100.0 - (isIpoComp ? (30.0 + founderSold) : founderSold))
-      : (compData?.ownership_pct || 100.0);
-
+    const sumPct = rows.reduce((acc, r) => acc + (Number(r.percentage) || 0), 0);
+    const hasNegative = rows.some(r => (Number(r.percentage) || 0) < 0 || (Number(r.shares_count) || 0) < 0);
     let pubRow = rows.find(r => r.holder_type === 'PUBLIC');
-    const founderRow = rows.find(r => r.holder_type === 'FOUNDER' || (ownerUser && r.user_id === ownerUser.id));
+    const needsPublicFix = isIpoComp && (!pubRow || (Number(pubRow.percentage) || 0) < 5.0 || (Number(pubRow.shares_count) || 0) <= 0);
+    const isSumValid = Math.abs(sumPct - 100.0) <= 0.25;
 
-    // Jika emiten berstatus Tbk./IPO, pastikan porsi Publik Ritel selalu ada dan tidak 0!
-    if (isIpoComp && (!pubRow || pubRow.shares_count <= 0 || pubRow.percentage <= 0)) {
-      const floatPct = compData?.circulating_shares > 0 
-        ? Math.max(10.0, parseFloat(((compData.circulating_shares / totalShares) * 100.0).toFixed(1)))
-        : 20.0;
-      const publicShares = Math.round(totalShares * (floatPct / 100.0));
+    // Jika Cap Table sudah valid 100% dan bebas negatif, kembalikan langsung tanpa mengubah porsi pendiri/pengendali!
+    if (!hasNegative && !needsPublicFix && isSumValid) {
+      return rows;
+    }
 
-      if (!pubRow) {
-        const newPubId = uuidv4();
-        pubRow = {
-          id: newPubId,
-          company_id: companyId,
-          holder_name: 'Publik Ritel (Bursa Efek)',
-          holder_type: 'PUBLIC',
-          shares_count: publicShares,
-          percentage: floatPct,
-          user_id: null
-        };
-        rows.push(pubRow);
-        await query.run(
-          'INSERT INTO company_shareholders (id, company_id, holder_name, holder_type, shares_count, percentage) VALUES (?, ?, ?, ?, ?, ?)',
-          [newPubId, companyId, pubRow.holder_name, pubRow.holder_type, pubRow.shares_count, pubRow.percentage]
-        );
-      } else {
-        pubRow.shares_count = publicShares;
-        pubRow.percentage = floatPct;
-        await query.run('UPDATE company_shareholders SET shares_count = ?, percentage = ? WHERE id = ?', [pubRow.shares_count, pubRow.percentage, pubRow.id]);
-      }
+    // Auto-Healing Cap Table (menormalkan kembali total menjadi tepat 100.0% tanpa mereset histori kepemilikan)
+    const targetPubPct = isIpoComp
+      ? (pubRow && pubRow.percentage >= 10.0 && pubRow.percentage <= 49.0
+          ? parseFloat(Number(pubRow.percentage).toFixed(1))
+          : (compData?.circulating_shares > 0
+              ? Math.min(49.0, Math.max(10.0, parseFloat(((compData.circulating_shares / totalShares) * 100.0).toFixed(1))))
+              : 20.0))
+      : Math.max(0.0, parseFloat((Number(pubRow?.percentage) || 0).toFixed(1)));
 
-      if (founderRow && founderRow.percentage > (100.0 - floatPct)) {
-        founderRow.percentage = parseFloat((100.0 - floatPct).toFixed(1));
-        founderRow.shares_count = Math.round(totalShares * (founderRow.percentage / 100.0));
-        await query.run('UPDATE company_shareholders SET percentage = ?, shares_count = ? WHERE id = ?', [founderRow.percentage, founderRow.shares_count, founderRow.id]);
-      }
+    if (isIpoComp && !pubRow) {
+      const newPubId = uuidv4();
+      const publicShares = Math.round(totalShares * (targetPubPct / 100.0));
+      pubRow = {
+        id: newPubId,
+        company_id: companyId,
+        holder_name: 'Publik Masyarakat (Bursa Efek)',
+        holder_type: 'PUBLIC',
+        shares_count: publicShares,
+        percentage: targetPubPct,
+        user_id: null
+      };
+      rows.push(pubRow);
+      await query.run(
+        'INSERT INTO company_shareholders (id, company_id, holder_name, holder_type, shares_count, percentage) VALUES (?, ?, ?, ?, ?, ?)',
+        [newPubId, companyId, pubRow.holder_name, pubRow.holder_type, pubRow.shares_count, pubRow.percentage]
+      );
+    }
 
+    const founderRow = rows.find(r => r.holder_type === 'FOUNDER') || rows[0];
+    const coFounderRows = rows.filter(r => r.id !== founderRow?.id && r.holder_type === 'CO_FOUNDER');
+    const instRows = rows.filter(r => r.id !== founderRow?.id && r.holder_type !== 'CO_FOUNDER' && r.holder_type !== 'PUBLIC');
+
+    let coFounderSum = 0.0;
+    for (const cf of coFounderRows) {
+      cf.percentage = Math.max(0.0, parseFloat((Number(cf.percentage) || 0).toFixed(1)));
+      coFounderSum += cf.percentage;
+    }
+    coFounderSum = Math.min(49.0, parseFloat(coFounderSum.toFixed(1)));
+
+    if (pubRow) {
+      pubRow.percentage = targetPubPct;
+    }
+
+    const maxAvailableForFounder = Math.max(0.0, parseFloat((100.0 - coFounderSum - targetPubPct).toFixed(1)));
+    let targetFounderPct = maxAvailableForFounder;
+
+    if (compData?.is_acquired === 1 || coFounderRows.length > 0) {
+      let deedPct = 51.0;
       try {
-        await query.run('UPDATE companies SET circulating_shares = ? WHERE id = ? AND (circulating_shares IS NULL OR circulating_shares <= 0)', [publicShares, companyId]);
+        const latestDeed = await query.get(
+          'SELECT percentage_transferred FROM deal_deeds WHERE company_id = ? ORDER BY created_at DESC LIMIT 1',
+          [companyId]
+        );
+        if (latestDeed && Number(latestDeed.percentage_transferred) > 0) {
+          deedPct = Number(latestDeed.percentage_transferred);
+        }
+      } catch (_) {}
+      targetFounderPct = Math.min(maxAvailableForFounder, parseFloat(deedPct.toFixed(1)));
+    } else if (isIpoComp) {
+      const sold = Math.max(0.0, Number(compData?.founder_shares_sold) || 0.0);
+      if (instRows.length > 0) {
+        const defaultFounder = Math.max(0.0, parseFloat((60.0 - sold).toFixed(1)));
+        targetFounderPct = Math.min(maxAvailableForFounder, defaultFounder);
+      } else {
+        targetFounderPct = maxAvailableForFounder;
+      }
+    } else {
+      const instExistingSum = instRows.reduce((acc, r) => acc + Math.max(0.0, Number(r.percentage) || 0), 0);
+      targetFounderPct = Math.max(0.0, parseFloat((maxAvailableForFounder - instExistingSum).toFixed(1)));
+    }
+
+    if (founderRow) {
+      founderRow.percentage = parseFloat(targetFounderPct.toFixed(1));
+    }
+
+    const remForInst = Math.max(0.0, parseFloat((100.0 - (founderRow ? founderRow.percentage : 0) - coFounderSum - targetPubPct).toFixed(1)));
+    if (instRows.length > 0) {
+      const rawInstSum = instRows.reduce((acc, r) => acc + Math.max(0.1, Number(r.percentage) || 0), 0);
+      let allocated = 0.0;
+      for (let i = 0; i < instRows.length; i++) {
+        if (i === instRows.length - 1) {
+          instRows[i].percentage = Math.max(0.0, parseFloat((remForInst - allocated).toFixed(1)));
+        } else {
+          const weight = Math.max(0.1, Number(instRows[i].percentage) || 0) / rawInstSum;
+          const sharePct = parseFloat((remForInst * weight).toFixed(1));
+          instRows[i].percentage = sharePct;
+          allocated += sharePct;
+        }
+      }
+    } else if (remForInst > 0 && founderRow) {
+      founderRow.percentage = parseFloat((founderRow.percentage + remForInst).toFixed(1));
+    }
+
+    for (const r of rows) {
+      r.shares_count = Math.max(0, Math.round(totalShares * ((Number(r.percentage) || 0) / 100.0)));
+      await query.run(
+        'UPDATE company_shareholders SET percentage = ?, shares_count = ? WHERE id = ?',
+        [r.percentage, r.shares_count, r.id]
+      );
+    }
+
+    if (isIpoComp && pubRow && pubRow.shares_count > 0) {
+      try {
+        await query.run(
+          'UPDATE companies SET circulating_shares = ? WHERE id = ? AND (circulating_shares IS NULL OR circulating_shares <= 0)',
+          [pubRow.shares_count, companyId]
+        );
       } catch (_) {}
     }
 
-    if (founderRow && Math.abs(founderRow.percentage - expectedFounderPct) > 0.05) {
-      const diff = parseFloat((founderRow.percentage - expectedFounderPct).toFixed(1));
-      founderRow.percentage = parseFloat(expectedFounderPct.toFixed(1));
-      founderRow.shares_count = Math.round(totalShares * (expectedFounderPct / 100.0));
-      await query.run('UPDATE company_shareholders SET percentage = ?, shares_count = ? WHERE id = ?', [founderRow.percentage, founderRow.shares_count, founderRow.id]);
-
-      if (pubRow) {
-        pubRow.percentage = parseFloat((pubRow.percentage + diff).toFixed(1));
-        pubRow.shares_count = Math.round(totalShares * (pubRow.percentage / 100.0));
-        await query.run('UPDATE company_shareholders SET percentage = ?, shares_count = ? WHERE id = ?', [pubRow.percentage, pubRow.shares_count, pubRow.id]);
-      }
-    }
+    rows.sort((a, b) => (Number(b.percentage) || 0) - (Number(a.percentage) || 0));
     return rows;
   }
 
-  const totalShares = compData.total_shares || 10000000;
-  const isPrimary = (companyId === 'primary' || compData.owner_id === ownerUser?.id);
-  const founderSold = compData.founder_shares_sold || 0;
+  const isPrimary = (companyId === 'primary' || (ownerUser?.id && compData?.owner_id === ownerUser.id));
+  const founderSold = compData?.founder_shares_sold || 0;
   const founderPct = isPrimary
-    ? Math.max(0, 100.0 - (compData.is_ipo ? (30.0 + founderSold) : founderSold))
-    : (compData.ownership_pct || 51.0);
+    ? Math.max(0, 100.0 - (isIpoComp ? (40.0 + founderSold) : founderSold))
+    : (compData?.ownership_pct || (isIpoComp ? 60.0 : 100.0));
   const remainingPct = Math.max(0, 100.0 - founderPct);
 
   const list = [];
@@ -1152,43 +1222,50 @@ async function getCompanyShareholders(companyId, ownerUser, compData) {
     list.push({
       id: uuidv4(),
       company_id: companyId,
-      holder_name: `${ownerUser ? ownerUser.username : 'Pendiri Utama'} (Pendiri & Pengendali)`,
+      holder_name: `${ownerUser ? ownerUser.username : (compData?.founder_name || 'Pendiri Utama')} (Pendiri & Pengendali)`,
       holder_type: 'FOUNDER',
       shares_count: Math.round(totalShares * (founderPct / 100.0)),
       percentage: parseFloat(founderPct.toFixed(1)),
-      user_id: ownerUser?.id
+      user_id: compData?.owner_id || ownerUser?.id || null
     });
   }
 
   if (remainingPct > 0) {
-    const inst1 = parseFloat((remainingPct * 0.50).toFixed(1));
-    const inst2 = parseFloat((remainingPct * 0.30).toFixed(1));
-    const pub = parseFloat((remainingPct - inst1 - inst2).toFixed(1));
+    const pub = isIpoComp ? Math.min(remainingPct, 20.0) : parseFloat((remainingPct * 0.20).toFixed(1));
+    const remInst = Math.max(0.0, parseFloat((remainingPct - pub).toFixed(1)));
+    const inst1 = parseFloat((remInst * 0.60).toFixed(1));
+    const inst2 = parseFloat((remInst - inst1).toFixed(1));
 
-    list.push({
-      id: uuidv4(),
-      company_id: companyId,
-      holder_name: 'Konsorsium Astra Investama',
-      holder_type: 'INSTITUTION',
-      shares_count: Math.round(totalShares * (inst1 / 100.0)),
-      percentage: inst1
-    });
-    list.push({
-      id: uuidv4(),
-      company_id: companyId,
-      holder_name: 'Dana Pensiun Mandiri Investama',
-      holder_type: 'INSTITUTION',
-      shares_count: Math.round(totalShares * (inst2 / 100.0)),
-      percentage: inst2
-    });
-    list.push({
-      id: uuidv4(),
-      company_id: companyId,
-      holder_name: 'Publik Ritel (Bursa Efek)',
-      holder_type: 'PUBLIC',
-      shares_count: Math.round(totalShares * (pub / 100.0)),
-      percentage: pub
-    });
+    if (inst1 > 0) {
+      list.push({
+        id: uuidv4(),
+        company_id: companyId,
+        holder_name: 'Konsorsium Astra Investama',
+        holder_type: 'INSTITUTION',
+        shares_count: Math.round(totalShares * (inst1 / 100.0)),
+        percentage: inst1
+      });
+    }
+    if (inst2 > 0) {
+      list.push({
+        id: uuidv4(),
+        company_id: companyId,
+        holder_name: 'Dana Pensiun Mandiri Investama',
+        holder_type: 'INSTITUTION',
+        shares_count: Math.round(totalShares * (inst2 / 100.0)),
+        percentage: inst2
+      });
+    }
+    if (pub > 0) {
+      list.push({
+        id: uuidv4(),
+        company_id: companyId,
+        holder_name: 'Publik Ritel (Bursa Efek)',
+        holder_type: 'PUBLIC',
+        shares_count: Math.round(totalShares * (pub / 100.0)),
+        percentage: pub
+      });
+    }
   }
 
   for (const s of list) {
@@ -1199,6 +1276,37 @@ async function getCompanyShareholders(companyId, ownerUser, compData) {
   }
 
   return list;
+}
+
+// Auto-heal semua Cap Table yang tidak sama dengan 100% atau negatif saat server boot (tanpa mereset DB)
+async function healAllCorruptedCapTables() {
+  try {
+    await query.run(
+      `UPDATE companies
+       SET circulating_shares = CAST(ROUND(COALESCE(total_shares, 10000000) * 0.20) AS INTEGER)
+       WHERE is_ipo = 1 AND (circulating_shares IS NULL OR circulating_shares <= 0)`
+    );
+
+    const affected = await query.all(`
+      SELECT DISTINCT c.*
+      FROM companies c
+      INNER JOIN company_shareholders sh ON c.id = sh.company_id
+      GROUP BY c.id
+      HAVING ABS(SUM(sh.percentage) - 100.0) > 0.25
+          OR MIN(sh.percentage) < 0
+          OR MIN(sh.shares_count) < 0
+          OR (c.is_ipo = 1 AND SUM(CASE WHEN sh.holder_type = 'PUBLIC' THEN sh.percentage ELSE 0 END) < 5.0)
+    `);
+
+    if (affected && affected.length > 0) {
+      for (const comp of affected) {
+        await getCompanyShareholders(comp.id, null, comp);
+      }
+      console.log(`🛠️ [CapTable Auto-Heal] Berhasil menormalkan ${affected.length} struktur pemegang saham emiten kembali ke tepat 100.0%.`);
+    }
+  } catch (err) {
+    console.error('⚠️ Non-fatal warning in healAllCorruptedCapTables:', err.message);
+  }
 }
 
 // ----------------------------------------------------
@@ -1258,7 +1366,7 @@ app.post('/api/company/ipo', async (req, res) => {
       const numFloatingPct = Math.min(49.0, Math.max(10.0, parseFloat(floatingPct) || 10.0));
       const totalShares = parseInt(req.body.totalShares) || 10000000; // 100% total saham (default 10 Juta lembar = 100 Ribu lot)
       const publicShares = Math.round(totalShares * (numFloatingPct / 100.0));
-      const strategicPct = Math.min(40.0, parseFloat((100.0 - numFloatingPct - 50.0).toFixed(1)));
+      const strategicPct = Math.min(39.0, Math.max(0.0, parseFloat((100.0 - numFloatingPct - 60.0).toFixed(1))));
       const founderPct = parseFloat((100.0 - numFloatingPct - strategicPct).toFixed(1));
 
       // Nama PT otomatis diberi akhiran "Tbk." dengan format PT. [Nama] Tbk.
@@ -1465,7 +1573,7 @@ app.post('/api/company/ipo', async (req, res) => {
       const numFloatingPct = Math.min(49.0, Math.max(10.0, parseFloat(floatingPct) || 10.0));
       const totalShares = parseInt(req.body.totalShares) || comp.total_shares || 10000000;
       const publicShares = Math.round(totalShares * (numFloatingPct / 100.0));
-      const strategicPct = Math.min(40.0, parseFloat((100.0 - numFloatingPct - 50.0).toFixed(1)));
+      const strategicPct = Math.min(39.0, Math.max(0.0, parseFloat((100.0 - numFloatingPct - 60.0).toFixed(1))));
       const founderPct = parseFloat((100.0 - numFloatingPct - strategicPct).toFixed(1));
 
       const officialName = formatCorporateName(comp.name, true);
@@ -2268,7 +2376,14 @@ app.get('/api/user/conglomerate/:userId', async (req, res) => {
         const isIpo = primaryComp.is_ipo === 1;
         const officialPtName = formatCorporateName(primaryComp.name, isIpo);
         const founderSold = primaryComp.founder_shares_sold || user.founder_shares_sold || 0;
-        let founderPct = Math.max(0, 100.0 - (isIpo ? (30.0 + founderSold) : founderSold));
+        let founderPct = Math.max(0, 100.0 - (isIpo ? (40.0 + founderSold) : founderSold));
+        try {
+          const shList = await getCompanyShareholders(primaryComp.id, user, primaryComp);
+          const ownFounderRow = shList.find(r => r.user_id === userId || r.holder_type === 'FOUNDER');
+          if (ownFounderRow && Number(ownFounderRow.percentage) >= 0) {
+            founderPct = Number(ownFounderRow.percentage);
+          }
+        } catch (_) {}
 
         // Jika founder melakukan buyback saham sendiri di pasar sekunder, tambahkan ke kepemilikan PT Utama
         const ownPort = await query.get('SELECT lots_owned FROM portfolios WHERE user_id = ? AND company_id = ?', [userId, primaryComp.id]);
@@ -3183,7 +3298,15 @@ app.get('/api/companies', async (req, res) => {
 
     sql += ' ORDER BY current_price DESC';
     const companies = await query.all(sql, params);
-    res.json(companies);
+    const enriched = companies.map((c) => {
+      const regShares = getRegularMarketQuotaShares(c);
+      return {
+        ...c,
+        regular_quota_shares: regShares,
+        regular_quota_lots: Math.max(1, Math.floor(regShares / 100)),
+      };
+    });
+    res.json(enriched);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -3371,6 +3494,18 @@ app.get('/api/companies/:id', async (req, res) => {
     let totalOfferLots = 0;
 
     const isSuspended = company.status === 'SUSPENDED';
+    const regularQuotaShares = getRegularMarketQuotaShares(company);
+    const regularQuotaLots = Math.max(1, Math.floor(regularQuotaShares / 100));
+
+    let availableRegularLots = regularQuotaLots;
+    if (req.query.userId) {
+      const userPort = await query.get(
+        'SELECT lots_owned FROM portfolios WHERE user_id = ? AND company_id = ?',
+        [req.query.userId, company.id]
+      );
+      const userOwnedLots = userPort?.lots_owned || 0;
+      availableRegularLots = Math.max(0, regularQuotaLots - userOwnedLots);
+    }
 
     if (isSuspended) {
       // Status SUSPENSI: Perdagangan dibekukan oleh IPMC
@@ -3386,10 +3521,35 @@ app.get('/api/companies/:id', async (req, res) => {
         const offerLots = isCritical ? Math.round(baseLot * 1.45) : Math.round(baseLot * 0.95);
 
         totalBidLots += bidLots;
-        totalOfferLots += offerLots;
-
         bids.push({ price: bidPrice, lots: bidLots, freq: Math.floor(bidLots / 120) + 3 });
-        offers.push({ price: offerPrice, lots: offerLots, freq: Math.floor(offerLots / 120) + 3 });
+
+        if (availableRegularLots > 0) {
+          totalOfferLots += offerLots;
+          offers.push({ price: offerPrice, lots: offerLots, freq: Math.floor(offerLots / 120) + 3 });
+        }
+      }
+
+      // Sinkronkan antrean jual (offers) agar tidak melebihi sisa kuota pasar reguler yang tersisa
+      if (availableRegularLots > 0 && totalOfferLots > availableRegularLots) {
+        const ratio = availableRegularLots / totalOfferLots;
+        let distributed = 0;
+        const cappedOffers = [];
+        for (let idx = 0; idx < offers.length; idx++) {
+          const cappedLot = idx === offers.length - 1
+            ? Math.max(0, availableRegularLots - distributed)
+            : Math.floor(offers[idx].lots * ratio);
+          distributed += cappedLot;
+          if (cappedLot > 0) {
+            cappedOffers.push({
+              price: offers[idx].price,
+              lots: cappedLot,
+              freq: Math.max(1, Math.floor(cappedLot / 120) + 1),
+            });
+          }
+        }
+        offers.length = 0;
+        offers.push(...cappedOffers);
+        totalOfferLots = cappedOffers.reduce((s, o) => s + o.lots, 0);
       }
     }
 
@@ -3399,6 +3559,8 @@ app.get('/api/companies/:id', async (req, res) => {
 
     res.json({
       ...company,
+      regular_quota_shares: regularQuotaShares,
+      regular_quota_lots: regularQuotaLots,
       timeframe: range,
       history: generatedHistory,
       orderbook: {
@@ -3457,17 +3619,23 @@ app.post('/api/trade/order', async (req, res) => {
     const fee = Math.round(grossAmount * feePct);
 
     if (type === 'BUY') {
-      // Guard: Cek batas maksimum saham yang beredar di bursa reguler (Floating Shares)
-      const maxPublicLots = Math.max(1, Math.floor((company.circulating_shares || (company.total_shares * 0.3)) / 100));
+      // Guard: Kuota Pasar Reguler (49% = Gabungan Saham Publik Ritel + Likuiditas Konsorsium Institusi)
+      const totalShares = company.total_shares || 10000000;
+      const regularQuotaShares = getRegularMarketQuotaShares(company);
+      const maxRegularLots = Math.max(1, Math.floor(regularQuotaShares / 100));
+      const regularQuotaPct = ((regularQuotaShares / totalShares) * 100).toFixed(0);
       const existingPortfolio = await query.get(
         'SELECT * FROM portfolios WHERE user_id = ? AND company_id = ?',
         [userId, companyId]
       );
       const currentLots = existingPortfolio?.lots_owned || 0;
-      if (currentLots + lots > maxPublicLots) {
-        const founderHoldLots = Math.floor((company.total_shares - (company.circulating_shares || (company.total_shares * 0.3))) / 100);
+      if (currentLots + lots > maxRegularLots) {
+        const controllingHoldLots = Math.max(0, Math.floor((totalShares - regularQuotaShares) / 100));
+        const remainingLots = Math.max(0, maxRegularLots - currentLots);
         return res.status(400).json({
-          error: `Batas Maksimum Saham Publik! Saham ${company.symbol} yang beredar di bursa reguler hanya ${maxPublicLots.toLocaleString('id-ID')} lot (${(((company.circulating_shares || (company.total_shares * 0.3)) / company.total_shares) * 100).toFixed(0)}%). Sisa ${founderHoldLots.toLocaleString('id-ID')} lot dipegang oleh Pendiri & Pengendali (Non-Floating).`
+          error: remainingLots > 0
+            ? `Melebihi Sisa Kuota Pasar Reguler! Kuota gabungan Publik & Institusi ${company.symbol} adalah ${maxRegularLots.toLocaleString('id-ID')} Lot (${regularQuotaPct}%). Anda sudah memegang ${currentLots.toLocaleString('id-ID')} Lot — sisa yang dapat dibeli di pasar reguler: ${remainingLots.toLocaleString('id-ID')} Lot.`
+            : `Kuota Maksimum Pasar Reguler (${regularQuotaPct}% = ${maxRegularLots.toLocaleString('id-ID')} Lot) Tercapai! Sisa ${controllingHoldLots.toLocaleString('id-ID')} Lot (51%) dikunci sebagai Saham Pengendali Utama. Untuk mengambil alih mayoritas PT, gunakan Akuisisi M&A / Pasar Negosiasi P2P di menu Bursa Aset.`
         });
       }
 
@@ -3873,7 +4041,19 @@ app.post('/api/company/emergency-sale', async (req, res) => {
       ['HEALTHY', numPct, companyId]
     );
 
-    // Update shareholder cap table: Konsorsium Penyelamat IPMC masuk sebagai pemegang saham baru
+    // Update shareholder cap table: kurangi porsi FOUNDER dan masukkan Konsorsium Penyelamat IPMC
+    const founderSh = await query.get(
+      "SELECT * FROM company_shareholders WHERE company_id = ? AND holder_type = 'FOUNDER' ORDER BY percentage DESC LIMIT 1",
+      [companyId]
+    );
+    if (founderSh) {
+      const nextFounderPct = Math.max(0, parseFloat(((Number(founderSh.percentage) || 0) - numPct).toFixed(1)));
+      const nextFounderShares = Math.max(0, Math.round((company.total_shares || 10000000) * (nextFounderPct / 100.0)));
+      await query.run(
+        'UPDATE company_shareholders SET percentage = ?, shares_count = ? WHERE id = ?',
+        [nextFounderPct, nextFounderShares, founderSh.id]
+      );
+    }
     await query.run(
       'INSERT INTO company_shareholders (id, company_id, holder_name, holder_type, shares_count, percentage) VALUES (?, ?, ?, ?, ?, ?)',
       [uuidv4(), companyId, 'Konsorsium Penyelamat IPMC (Investor Baru)', 'INSTITUTION', sharesSold, numPct]
@@ -4309,26 +4489,32 @@ async function executeApprovedAcquisition({
   }
 
   if (remainingPctForOthers > 0) {
-    const inst1 = parseFloat((remainingPctForOthers * 0.55).toFixed(1));
-    const pub = parseFloat((remainingPctForOthers - inst1).toFixed(1));
-    newShareholders.push({
-      id: uuidv4(),
-      company_id: companyId,
-      holder_name: 'Konsorsium Institusi Federasi',
-      holder_type: 'INSTITUTION',
-      shares_count: Math.round(totalShares * (inst1 / 100.0)),
-      percentage: inst1,
-      user_id: null
-    });
-    newShareholders.push({
-      id: uuidv4(),
-      company_id: companyId,
-      holder_name: 'Publik Masyarakat (Bursa Efek)',
-      holder_type: 'PUBLIC',
-      shares_count: Math.round(totalShares * (pub / 100.0)),
-      percentage: pub,
-      user_id: null
-    });
+    const pub = remainingPctForOthers >= 20.0
+      ? 20.0
+      : parseFloat((remainingPctForOthers * 0.55).toFixed(1));
+    const inst1 = Math.max(0.0, parseFloat((remainingPctForOthers - pub).toFixed(1)));
+    if (inst1 > 0) {
+      newShareholders.push({
+        id: uuidv4(),
+        company_id: companyId,
+        holder_name: 'Konsorsium Institusi Federasi',
+        holder_type: 'INSTITUTION',
+        shares_count: Math.round(totalShares * (inst1 / 100.0)),
+        percentage: inst1,
+        user_id: null
+      });
+    }
+    if (pub > 0) {
+      newShareholders.push({
+        id: uuidv4(),
+        company_id: companyId,
+        holder_name: 'Publik Masyarakat (Bursa Efek)',
+        holder_type: 'PUBLIC',
+        shares_count: Math.round(totalShares * (pub / 100.0)),
+        percentage: pub,
+        user_id: null
+      });
+    }
   }
 
   for (const sh of newShareholders) {
@@ -6217,14 +6403,14 @@ const localBuiltApkPath = path.join(__dirname, '../../mobile/build/app/outputs/f
 
 async function getApkSettingsMap() {
   const defaults = {
-    apk_version: '1.6.6',
-    apk_build_number: '20',
+    apk_version: '1.6.7',
+    apk_build_number: '21',
     apk_min_android: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
     apk_file_size_mb: '25.1 MB',
-    apk_release_notes: 'v1.6.6: Chat Global otomatis menggulir ke pesan terbaru (plus tombol "Pesan baru"), buka instan dengan data tersimpan, jam & tanggal sesuai WIB.',
+    apk_release_notes: 'v1.6.7: Kuota beli Pasar Reguler diperluas hingga 49% (Publik + Konsorsium Institusi), sinkronisasi antrean Offer Orderbook real-time, transparansi struktur Lembar & Lot, serta normalisasi Cap Table 100%.',
     apk_external_url: '',
     apk_download_count: '315',
-    apk_sha256: 'b12a5fb9c70f2cf11222c4a618fb45eb1f95c1c5ba40c8c9d6ac86d7c9093342',
+    apk_sha256: '4722c4ad5c1d49ad3c9651a2779727946bb39febb5f8575d83f3cfde2a1576e0',
     apk_updated_at: new Date().toISOString(),
   };
   try {
@@ -6234,12 +6420,12 @@ async function getApkSettingsMap() {
         defaults[r.key] = String(r.value);
       }
     }
-    if (parseInt(defaults.apk_build_number || '0', 10) < 20) {
-      defaults.apk_version = '1.6.6';
-      defaults.apk_build_number = '20';
+    if (parseInt(defaults.apk_build_number || '0', 10) < 21) {
+      defaults.apk_version = '1.6.7';
+      defaults.apk_build_number = '21';
       defaults.apk_file_size_mb = '25.1 MB';
-      defaults.apk_sha256 = 'b12a5fb9c70f2cf11222c4a618fb45eb1f95c1c5ba40c8c9d6ac86d7c9093342';
-      defaults.apk_release_notes = 'v1.6.6: Chat Global otomatis menggulir ke pesan terbaru (plus tombol "Pesan baru"), buka instan dengan data tersimpan, jam & tanggal sesuai WIB.';
+      defaults.apk_sha256 = '4722c4ad5c1d49ad3c9651a2779727946bb39febb5f8575d83f3cfde2a1576e0';
+      defaults.apk_release_notes = 'v1.6.7: Kuota beli Pasar Reguler diperluas hingga 49% (Publik + Konsorsium Institusi), sinkronisasi antrean Offer Orderbook real-time, transparansi struktur Lembar & Lot, serta normalisasi Cap Table 100%.';
     }
   } catch (_) {}
   return defaults;
@@ -6624,6 +6810,7 @@ async function start() {
       // Pastikan 250+ emiten Tbk. dan 265 bot konglomerat/ritel aktif di database yang sudah berjalan
       const { ensureMarketPopulation } = require('./seed');
       await ensureMarketPopulation();
+      await healAllCorruptedCapTables();
       await syncAllToMariaDb();
     }
   } catch (seedErr) {

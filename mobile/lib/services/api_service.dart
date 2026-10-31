@@ -85,9 +85,9 @@ class ApiService {
     return null;
   }
 
-  static const String currentAppVersion = '1.6.6';
-  static const int currentBuildNumber = 20;
-  static const String currentApkDisplayVersion = 'v1.6.6-CFX Production (Build 20)';
+  static const String currentAppVersion = '1.6.7';
+  static const int currentBuildNumber = 21;
+  static const String currentApkDisplayVersion = 'v1.6.7-CFX Production (Build 21)';
 
   // Fetch Live Server Version & Update Detection Info
   static Future<Map<String, dynamic>?> getServerVersion() async {
@@ -505,9 +505,13 @@ class ApiService {
   }
 
   // Get Company Detail with Price History & Orderbook
-  static Future<CompanyModel?> getCompanyDetail(String id, {String range = '1D'}) async {
+  static Future<CompanyModel?> getCompanyDetail(String id, {String range = '1D', String? userId}) async {
     try {
-      final response = await http.get(Uri.parse('$baseUrl/api/companies/$id?range=$range')).timeout(const Duration(seconds: 20));
+      String url = '$baseUrl/api/companies/$id?range=$range';
+      if (userId != null && userId.isNotEmpty) {
+        url += '&userId=$userId';
+      }
+      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 20));
       if (response.statusCode == 200) {
         return CompanyModel.fromJson(jsonDecode(response.body));
       }

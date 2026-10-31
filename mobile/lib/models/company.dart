@@ -1,3 +1,4 @@
+import 'dart:math';
 import '../utils/wib_time.dart';
 class PricePoint {
   final double open;
@@ -97,6 +98,7 @@ class CompanyModel {
   final double priceChangePct;
   final int totalShares;
   final int circulatingShares;
+  final int? regularQuotaShares;
   final double dividendRate;
   final double fundamentalScore;
   final bool isBot;
@@ -135,6 +137,7 @@ class CompanyModel {
     required this.priceChangePct,
     this.totalShares = 10000000,
     this.circulatingShares = 2000000,
+    this.regularQuotaShares,
     this.dividendRate = 0.05,
     this.fundamentalScore = 85.0,
     this.isBot = true,
@@ -162,6 +165,24 @@ class CompanyModel {
   });
 
   double get lotPrice => (isPreIpo ? basePrice : currentPrice) * 100; // 1 Lot = 100 Lembar
+
+  int get totalLots => max(1, (totalShares / 100).floor());
+
+  int get regularMarketQuotaShares {
+    final int min49 = (totalShares * 0.49).floor();
+    final int best = max(min49, max(circulatingShares, regularQuotaShares ?? 0));
+    return best.clamp(100, max(100, totalShares));
+  }
+
+  int get regularMarketQuotaLots => max(1, (regularMarketQuotaShares / 100).floor());
+
+  double get regularMarketQuotaPct => totalShares > 0
+      ? (regularMarketQuotaShares / totalShares) * 100.0
+      : 49.0;
+
+  int get controllingLockedShares => max(0, totalShares - regularMarketQuotaShares);
+
+  int get controllingLockedLots => (controllingLockedShares / 100).floor();
 
   bool get isSuspended => status == 'SUSPENDED' || (suspendUntil != null && suspendUntil!.isNotEmpty);
 
@@ -208,6 +229,7 @@ class CompanyModel {
       priceChangePct: double.parse(changePct.toStringAsFixed(2)),
       totalShares: json['total_shares'] ?? 10000000,
       circulatingShares: (json['circulating_shares'] ?? json['circulatingShares'] ?? ((json['total_shares'] ?? 10000000) * 0.2).round()).toInt(),
+      regularQuotaShares: (json['regular_quota_shares'] as num?)?.toInt(),
       dividendRate: (json['dividend_rate'] ?? 0.05).toDouble(),
       fundamentalScore: (json['fundamental_score'] ?? 85.0).toDouble(),
       isBot: json['is_bot'] == 1 || json['is_bot'] == true || json['isBot'] == true,
@@ -260,6 +282,8 @@ class CompanyModel {
       basePrice: basePrice ?? this.basePrice,
       priceChangePct: priceChangePct ?? this.priceChangePct,
       totalShares: totalShares,
+      circulatingShares: circulatingShares,
+      regularQuotaShares: regularQuotaShares,
       dividendRate: dividendRate,
       fundamentalScore: fundamentalScore,
       isBot: isBot,
@@ -278,6 +302,12 @@ class CompanyModel {
       isBumn: isBumn ?? this.isBumn,
       suspendUntil: suspendUntil,
       suspendReason: suspendReason,
+      ownerId: ownerId,
+      ownerUsername: ownerUsername,
+      ownerPtName: ownerPtName,
+      listingStatus: listingStatus,
+      listingDate: listingDate,
+      ipoStatus: ipoStatus,
     );
   }
 }

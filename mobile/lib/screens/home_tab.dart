@@ -4582,7 +4582,11 @@ class _HomeTabState extends State<HomeTab> {
                   String badgeLabel = 'PENGENDALI';
                   IconData icon = Icons.shield_rounded;
 
-                  if (type == 'INSTITUTION') {
+                  if (type == 'CO_FOUNDER') {
+                    badgeColor = const Color(0xFF38BDF8);
+                    badgeLabel = 'PENDIRI LAMA';
+                    icon = Icons.person_pin_rounded;
+                  } else if (type == 'INSTITUTION') {
                     badgeColor = name.contains('Astra') ? const Color(0xFF38BDF8) : const Color(0xFF8B5CF6);
                     badgeLabel = 'INSTITUSI';
                     icon = Icons.corporate_fare_rounded;
