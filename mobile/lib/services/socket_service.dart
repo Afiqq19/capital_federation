@@ -22,6 +22,9 @@ class SocketService {
     Function(dynamic)? onSubsidiesUpdated,
     Function(dynamic)? onTendersUpdated,
     Function(dynamic)? onDebtReliefUpdated,
+    Function(dynamic)? onConglomerateUpdated,
+    Function(dynamic)? onCompanyDeleted,
+    Function(dynamic)? onMarketRefreshRequested,
   }) {
     try {
       socket = socket_io.io(
@@ -101,6 +104,34 @@ class SocketService {
 
       socket!.on('company:status_changed', (data) {
         if (onCompanyStatusChanged != null) onCompanyStatusChanged(data);
+      });
+
+      socket!.on('market:company_status_changed', (data) {
+        if (onCompanyStatusChanged != null) onCompanyStatusChanged(data);
+      });
+
+      socket!.on('company:seized_status', (data) {
+        if (onMarketRefreshRequested != null) onMarketRefreshRequested(data);
+      });
+
+      socket!.on('company:deleted', (data) {
+        if (onCompanyDeleted != null) onCompanyDeleted(data);
+      });
+
+      socket!.on('user:conglomerate_updated', (data) {
+        if (onConglomerateUpdated != null) onConglomerateUpdated(data);
+      });
+
+      socket!.on('macro:event_triggered', (data) {
+        if (onMarketRefreshRequested != null) onMarketRefreshRequested(data);
+      });
+
+      socket!.on('market:macro_shock', (data) {
+        if (onMarketRefreshRequested != null) onMarketRefreshRequested(data);
+      });
+
+      socket!.on('market:session_rollover', (data) {
+        if (onMarketRefreshRequested != null) onMarketRefreshRequested(data);
       });
 
       socket!.on('market:uma_changed', (data) {

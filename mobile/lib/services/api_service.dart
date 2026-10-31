@@ -85,17 +85,21 @@ class ApiService {
   // Fetch Central Bank & Monetary Settings
   static Future<Map<String, dynamic>?> getSettings() async {
     try {
-      final res = await http.get(Uri.parse('$baseUrl/api/admin/settings')).timeout(const Duration(seconds: 20));
+      final res = await http.get(Uri.parse('$baseUrl/api/settings')).timeout(const Duration(seconds: 6));
       if (res.statusCode == 200) {
         return jsonDecode(res.body);
+      }
+      final fallback = await http.get(Uri.parse('$baseUrl/api/admin/settings')).timeout(const Duration(seconds: 6));
+      if (fallback.statusCode == 200) {
+        return jsonDecode(fallback.body);
       }
     } catch (_) {}
     return null;
   }
 
-  static const String currentAppVersion = '1.6.9';
-  static const int currentBuildNumber = 23;
-  static const String currentApkDisplayVersion = 'v1.6.9-CFX Production (Build 23)';
+  static const String currentAppVersion = '1.7.0';
+  static const int currentBuildNumber = 24;
+  static const String currentApkDisplayVersion = 'v1.7.0-CFX Production (Build 24)';
 
   // Fetch Live Server Version & Update Detection Info
   static Future<Map<String, dynamic>?> getServerVersion() async {

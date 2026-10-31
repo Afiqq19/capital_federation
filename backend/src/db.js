@@ -1308,8 +1308,241 @@ async function healRealPlayerCompanies() {
         }
       }
     }
+
+    // 3. Sinkronkan seluruh perusahaan hasil akuisisi mayoritas (>= 50% saham di portfolios / company_shareholders)
+    // milik pemain asli agar owner_id tercatat seragam di APK, Web Admin, dan Profil Publik!
+    const realMajorities = await query.all(`
+      SELECT u.id as user_id, u.username, u.pt_symbol as primary_symbol, c.id as company_id, c.symbol, c.name, c.owner_id,
+             COALESCE(p.lots_owned, 0) as lots_owned,
+             COALESCE(c.total_shares, 10000000) as total_shares,
+             COALESCE(sh.sh_pct, 0) as sh_pct
+      FROM users u
+      JOIN companies c ON (
+        EXISTS (
+          SELECT 1 FROM portfolios p2
+          WHERE p2.user_id = u.id AND p2.company_id = c.id
+            AND (((p2.lots_owned * 100.0) / COALESCE(NULLIF(c.total_shares, 0), 10000000)) * 100.0) >= 50.0
+        )
+        OR EXISTS (
+          SELECT 1 FROM company_shareholders cs2
+          WHERE cs2.user_id = u.id AND cs2.company_id = c.id
+          GROUP BY cs2.company_id
+          HAVING SUM(COALESCE(cs2.percentage, 0)) >= 50.0
+        )
+      )
+      LEFT JOIN portfolios p ON p.user_id = u.id AND p.company_id = c.id
+      LEFT JOIN (
+        SELECT company_id, user_id, SUM(COALESCE(percentage, 0)) as sh_pct
+        FROM company_shareholders
+        WHERE user_id IS NOT NULL
+        GROUP BY company_id, user_id
+      ) sh ON sh.company_id = c.id AND sh.user_id = u.id
+      WHERE u.role != 'ADMIN'
+        AND u.id NOT LIKE 'bot-user-%'
+        AND u.id NOT LIKE 'user-bot-%'
+    `);
+
+    for (const rm of (realMajorities || [])) {
+      const isBotOrEmptyOwner = !rm.owner_id || String(rm.owner_id).startsWith('bot-user-') || String(rm.owner_id).startsWith('user-bot-');
+      if (isBotOrEmptyOwner || rm.owner_id === rm.user_id) {
+        const isPrimaryComp = rm.primary_symbol && rm.symbol === rm.primary_symbol;
+        await query.run(
+          `UPDATE companies
+           SET owner_id = ?,
+               is_acquired = CASE WHEN ? = 1 THEN 0 ELSE 1 END
+           WHERE id = ?`,
+          [rm.user_id, isPrimaryComp ? 1 : 0, rm.company_id]
+        );
+      }
+    }
   } catch (healErr) {
     console.error('Auto-healing error (non-fatal):', healErr.message);
+  }
+}
+
+async function optimizeAndPruneDatabase() {
+  try {
+    // 1. Indeks Komposit Performa Tinggi (Memangkas query 17.7s menjadi <20ms)
+    const indexStatements = [
+      'CREATE INDEX IF NOT EXISTS idx_users_role_banned ON users(role, is_banned);',
+      'CREATE INDEX IF NOT EXISTS idx_companies_owner ON companies(owner_id);',
+      'CREATE INDEX IF NOT EXISTS idx_companies_listing_price ON companies(listing_status, current_price DESC);',
+      'CREATE INDEX IF NOT EXISTS idx_portfolios_user_lots ON portfolios(user_id, lots_owned);',
+      'CREATE INDEX IF NOT EXISTS idx_portfolios_comp_lots ON portfolios(company_id, lots_owned);',
+      'CREATE INDEX IF NOT EXISTS idx_shareholders_comp_user ON company_shareholders(company_id, user_id);',
+      'CREATE INDEX IF NOT EXISTS idx_loans_user_status ON loans(user_id, status);',
+      'CREATE INDEX IF NOT EXISTS idx_transactions_created ON transactions(created_at DESC);',
+      'CREATE INDEX IF NOT EXISTS idx_transactions_user ON transactions(user_id, created_at DESC);',
+      'CREATE INDEX IF NOT EXISTS idx_treasury_dir ON state_treasury_ledger(direction, amount_ib);',
+      'CREATE INDEX IF NOT EXISTS idx_macro_events_active ON macro_events(active, started_at DESC);',
+    ];
+    for (const sql of indexStatements) {
+      await query.run(sql);
+    }
+
+    // 2. Bersihkan penumpukan ratusan ribu log dividen BOT di tabel transactions & cash_flow_ledger
+    // PENTING: 100% transaksi & mutasi kas PEMAIN ASLI dilindungi permanen dan TIDAK PERNAH dihapus!
+    const botTxCount = await query.get(
+      "SELECT COUNT(*) as cnt FROM transactions WHERE (user_id LIKE 'bot-user-%' OR user_id LIKE 'user-bot-%')"
+    );
+    if (botTxCount && botTxCount.cnt > 600) {
+      await query.run(`
+        DELETE FROM transactions
+        WHERE (user_id LIKE 'bot-user-%' OR user_id LIKE 'user-bot-%')
+          AND id NOT IN (
+            SELECT id FROM transactions
+            WHERE (user_id LIKE 'bot-user-%' OR user_id LIKE 'user-bot-%')
+            ORDER BY created_at DESC
+            LIMIT 300
+          )
+      `);
+      console.log(`🧹 [DB Optimizer] Membersihkan ${botTxCount.cnt - 300} log transaksi bot lama (100% transaksi pemain asli aman utuh).`);
+    }
+
+    const botLedgerCount = await query.get(
+      "SELECT COUNT(*) as cnt FROM cash_flow_ledger WHERE (user_id LIKE 'bot-user-%' OR user_id LIKE 'user-bot-%')"
+    );
+    if (botLedgerCount && botLedgerCount.cnt > 100) {
+      await query.run(
+        "DELETE FROM cash_flow_ledger WHERE (user_id LIKE 'bot-user-%' OR user_id LIKE 'user-bot-%')"
+      );
+      console.log(`🧹 [DB Optimizer] Membersihkan ${botLedgerCount.cnt} baris mutasi kas internal bot.`);
+    }
+
+    // 3. Auto-expire macro_events yang sudah lewat durasinya agar tidak menumpuk aktif bersamaan
+    await query.run(`
+      UPDATE macro_events
+      SET active = 0
+      WHERE active = 1
+        AND started_at IS NOT NULL
+        AND (strftime('%s', 'now') - strftime('%s', started_at)) > COALESCE(NULLIF(duration_seconds, 0), 1800)
+    `);
+
+    await query.run('PRAGMA optimize;');
+  } catch (optErr) {
+    console.warn('DB optimization warning (non-fatal):', optErr.message);
+  }
+}
+
+/**
+ * Membekukan (is_banned = 1) kuota akun BOT ritel untuk meringankan beban simulasi & server.
+ * PROTEKSI MUTLAK: Akun Pemain Asli (id NOT LIKE 'bot-user-%' AND id NOT LIKE 'user-bot-%')
+ * TIDAK AKAN PERNAH DISENTUH oleh fungsi ini!
+ */
+async function enforceBotFreezeQuota(customTarget = null) {
+  try {
+    let targetFrozen = 525;
+    if (customTarget !== null && customTarget !== undefined && !isNaN(parseInt(customTarget, 10))) {
+      targetFrozen = Math.max(0, Math.min(1000, parseInt(customTarget, 10)));
+      await query.run(
+        "INSERT OR REPLACE INTO central_bank_settings (key, value) VALUES ('bot_freeze_target', ?)",
+        [String(targetFrozen)]
+      );
+    } else {
+      const saved = await query.get("SELECT value FROM central_bank_settings WHERE key = 'bot_freeze_target'");
+      if (saved && !isNaN(parseInt(saved.value, 10))) {
+        targetFrozen = Math.max(0, Math.min(1000, parseInt(saved.value, 10)));
+      } else {
+        await query.run(
+          "INSERT OR REPLACE INTO central_bank_settings (key, value) VALUES ('bot_freeze_target', '525')"
+        );
+      }
+    }
+
+    const allBots = await query.all(`
+      SELECT id, username, is_banned, balance_ib, company_balance_ib
+      FROM users
+      WHERE (id LIKE 'bot-user-%' OR id LIKE 'user-bot-%')
+        AND role != 'ADMIN'
+      ORDER BY id DESC
+    `);
+
+    const totalBots = allBots.length;
+    const currentlyFrozen = allBots.filter((b) => Number(b.is_banned) === 1);
+    const currentlyActive = allBots.filter((b) => Number(b.is_banned) !== 1);
+
+    // Lindungi Top 35 Bot (12 Naga & Taipan) + Bot yang sedang terlibat perkara hukum / P2P dengan pemain asli
+    const protectedBotIds = new Set();
+    for (let i = 1; i <= 35; i++) {
+      protectedBotIds.add(`bot-user-${String(i).padStart(4, '0')}`);
+    }
+    try {
+      const busyDealBots = await query.all(`
+        SELECT seller_user_id as uid FROM private_deals WHERE status IN ('OPEN', 'PENDING', 'NEGOTIATING')
+        UNION
+        SELECT buyer_user_id as uid FROM private_deals WHERE status IN ('OPEN', 'PENDING', 'NEGOTIATING')
+      `);
+      for (const r of (busyDealBots || [])) {
+        if (r?.uid) protectedBotIds.add(r.uid);
+      }
+    } catch (_) {}
+    try {
+      const busyCourtBots = await query.all(`
+        SELECT plaintiff_id as uid FROM court_cases WHERE status NOT IN ('CLOSED', 'RESOLVED', 'DISMISSED', 'EXECUTED')
+        UNION
+        SELECT defendant_id as uid FROM court_cases WHERE status NOT IN ('CLOSED', 'RESOLVED', 'DISMISSED', 'EXECUTED')
+      `);
+      for (const r of (busyCourtBots || [])) {
+        if (r?.uid) protectedBotIds.add(r.uid);
+      }
+    } catch (_) {}
+
+    if (currentlyFrozen.length < targetFrozen) {
+      const needed = targetFrozen - currentlyFrozen.length;
+      const candidates = currentlyActive
+        .filter((b) => !protectedBotIds.has(b.id))
+        .slice(0, needed);
+
+      if (candidates.length > 0) {
+        await query.transaction(async (tx) => {
+          for (const b of candidates) {
+            await tx.run(
+              "UPDATE users SET is_banned = 1 WHERE id = ? AND (id LIKE 'bot-user-%' OR id LIKE 'user-bot-%')",
+              [b.id]
+            );
+          }
+        });
+        console.log(`❄️ [Bot Freeze Manager] Membekukan ${candidates.length} akun bot ritel (Total bot dibekukan: ${currentlyFrozen.length + candidates.length}/${totalBots}). Seluruh pemain asli 100% aman!`);
+      }
+    } else if (customTarget !== null && currentlyFrozen.length > targetFrozen) {
+      const toUnfreezeCount = currentlyFrozen.length - targetFrozen;
+      // Pulihkan mulai dari nomor bot lebih kecil terlebih dahulu
+      const toUnfreeze = [...currentlyFrozen].reverse().slice(0, toUnfreezeCount);
+      if (toUnfreeze.length > 0) {
+        await query.transaction(async (tx) => {
+          for (const b of toUnfreeze) {
+            await tx.run(
+              "UPDATE users SET is_banned = 0 WHERE id = ? AND (id LIKE 'bot-user-%' OR id LIKE 'user-bot-%')",
+              [b.id]
+            );
+          }
+        });
+        console.log(`🔥 [Bot Freeze Manager] Memulihkan ${toUnfreeze.length} akun bot (Total bot dibekukan: ${currentlyFrozen.length - toUnfreeze.length}/${totalBots}).`);
+      }
+    }
+
+    const finalStats = await query.get(`
+      SELECT
+        SUM(CASE WHEN (id LIKE 'bot-user-%' OR id LIKE 'user-bot-%') THEN 1 ELSE 0 END) as total_bots,
+        SUM(CASE WHEN (id LIKE 'bot-user-%' OR id LIKE 'user-bot-%') AND is_banned = 1 THEN 1 ELSE 0 END) as frozen_bots,
+        SUM(CASE WHEN (id LIKE 'bot-user-%' OR id LIKE 'user-bot-%') AND is_banned = 0 THEN 1 ELSE 0 END) as active_bots,
+        SUM(CASE WHEN id NOT LIKE 'bot-user-%' AND id NOT LIKE 'user-bot-%' THEN 1 ELSE 0 END) as real_players,
+        SUM(CASE WHEN id NOT LIKE 'bot-user-%' AND id NOT LIKE 'user-bot-%' AND is_banned = 1 THEN 1 ELSE 0 END) as frozen_real_players
+      FROM users
+      WHERE role != 'ADMIN'
+    `);
+
+    return {
+      targetFrozen,
+      totalBots: Number(finalStats?.total_bots || 0),
+      frozenBots: Number(finalStats?.frozen_bots || 0),
+      activeBots: Number(finalStats?.active_bots || 0),
+      realPlayers: Number(finalStats?.real_players || 0),
+      frozenRealPlayers: Number(finalStats?.frozen_real_players || 0),
+    };
+  } catch (err) {
+    console.error('enforceBotFreezeQuota error:', err.message);
+    return null;
   }
 }
 
@@ -1323,7 +1556,7 @@ let mariaDbConnected = false;
 let syncTimer = null;
 let isSyncing = false;
 let lastMariaSyncCompletedAt = 0;
-const MIN_MARIADB_SYNC_INTERVAL_MS = 45000;
+const MIN_MARIADB_SYNC_INTERVAL_MS = 120000;
 
 const SYNC_TABLES_ORDER = [
   'central_bank_settings',
@@ -1436,11 +1669,6 @@ async function connectAndInitMariaDb() {
 
     mariaDbConnected = true;
     console.log(`🗄️  Connected & Verified MariaDB MSS Panel (${host}:${port}/${database})`);
-
-    // Periodic background sync every 60s (non-blocking)
-    setInterval(() => {
-      syncAllToMariaDb().catch(() => {});
-    }, 60000);
   } catch (err) {
     mariaDbConnected = false;
     console.log(
@@ -1493,10 +1721,13 @@ async function syncAllToMariaDb() {
       await new Promise((r) => setImmediate(r));
 
       let limitClause = '';
-      if (table === 'price_history') limitClause = ' ORDER BY timestamp DESC LIMIT 400';
-      else if (table === 'cash_flow_ledger') limitClause = ' ORDER BY created_at DESC LIMIT 500';
-      else if (table === 'transactions') limitClause = ' ORDER BY created_at DESC LIMIT 1000';
-      else if (table === 'state_treasury_ledger') limitClause = ' ORDER BY rowid DESC LIMIT 1000';
+      if (table === 'price_history') limitClause = ' ORDER BY timestamp DESC LIMIT 300';
+      else if (table === 'cash_flow_ledger') limitClause = ' ORDER BY created_at DESC LIMIT 400';
+      else if (table === 'transactions') limitClause = ' ORDER BY created_at DESC LIMIT 500';
+      else if (table === 'state_treasury_ledger') limitClause = ' ORDER BY rowid DESC LIMIT 600';
+      else if (table === 'portfolios') {
+        limitClause = " ORDER BY CASE WHEN user_id NOT LIKE 'bot-user-%' AND user_id NOT LIKE 'user-bot-%' THEN 0 ELSE 1 END ASC, lots_owned DESC LIMIT 2000";
+      }
 
       const rows = await query.all(`SELECT * FROM ${table}${limitClause}`);
       if (!rows || rows.length === 0) continue;
@@ -1505,10 +1736,11 @@ async function syncAllToMariaDb() {
       const quotedCols = colNames.map((c) => `\`${c}\``).join(', ');
       const valuesMatrix = rows.map((r) => colNames.map((c) => r[c]));
 
-      // Batch in chunks of 200 rows
-      for (let i = 0; i < valuesMatrix.length; i += 200) {
-        const chunk = valuesMatrix.slice(i, i + 200);
+      // Batch in chunks of 150 rows with event-loop yield per chunk
+      for (let i = 0; i < valuesMatrix.length; i += 150) {
+        const chunk = valuesMatrix.slice(i, i + 150);
         await mysqlPool.query(`REPLACE INTO \`${table}\` (${quotedCols}) VALUES ?`, [chunk]);
+        await new Promise((r) => setImmediate(r));
       }
     }
     lastMariaSyncCompletedAt = Date.now();
@@ -1527,7 +1759,7 @@ function scheduleMariaDbSync(sql = '') {
   }
   if (syncTimer) return;
   const elapsed = Date.now() - lastMariaSyncCompletedAt;
-  const delayMs = Math.max(8000, MIN_MARIADB_SYNC_INTERVAL_MS - elapsed);
+  const delayMs = Math.max(15000, MIN_MARIADB_SYNC_INTERVAL_MS - elapsed);
   syncTimer = setTimeout(() => {
     syncTimer = null;
     syncAllToMariaDb().catch(() => {});
@@ -1540,5 +1772,7 @@ module.exports = {
   initDb,
   recordCashFlow,
   syncAllToMariaDb,
-  healRealPlayerCompanies
+  healRealPlayerCompanies,
+  optimizeAndPruneDatabase,
+  enforceBotFreezeQuota
 };

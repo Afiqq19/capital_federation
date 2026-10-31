@@ -149,13 +149,25 @@ module.exports = function registerBankRoutes(app, { query, io }) {
       const user = await query.get('SELECT * FROM users WHERE id = ?', [loan.user_id]);
       if (!user) return res.status(404).json({ error: 'Debitur tidak ditemukan' });
 
+      const primaryComp = await query.get(
+        'SELECT id, company_balance_ib FROM companies WHERE owner_id = ? ORDER BY is_acquired ASC, is_bot ASC, founded_at ASC LIMIT 1',
+        [user.id]
+      );
+      const effectiveCompCash = primaryComp
+        ? Math.max(Number(user.company_balance_ib || 0), Number(primaryComp.company_balance_ib || 0))
+        : Number(user.company_balance_ib || 0);
+
       const debt = loan.remaining_amount;
       let fromCompany = 0;
       let fromPersonal = 0;
 
-      if (user.company_balance_ib > 0) {
-        fromCompany = Math.min(user.company_balance_ib, debt);
-        await query.run('UPDATE users SET company_balance_ib = company_balance_ib - ? WHERE id = ?', [fromCompany, user.id]);
+      if (effectiveCompCash > 0) {
+        fromCompany = Math.min(effectiveCompCash, debt);
+        const nextCompCash = Math.max(0, effectiveCompCash - fromCompany);
+        await query.run('UPDATE users SET company_balance_ib = ? WHERE id = ?', [nextCompCash, user.id]);
+        if (primaryComp) {
+          await query.run('UPDATE companies SET company_balance_ib = ? WHERE id = ?', [nextCompCash, primaryComp.id]);
+        }
       }
       const rest = debt - fromCompany;
       if (rest > 0 && user.balance_ib > 0) {
@@ -173,10 +185,14 @@ module.exports = function registerBankRoutes(app, { query, io }) {
         [remainingAfter, totalSeized, newStatus, loan.id]
       );
 
+      const postUser = await query.get('SELECT balance_ib, company_balance_ib, credit_score FROM users WHERE id = ?', [user.id]);
       io.emit('user:balance_updated', {
         userId: user.id,
-        newBalance: user.balance_ib - fromPersonal,
-        companyBalance: user.company_balance_ib - fromCompany,
+        newBalance: postUser ? postUser.balance_ib : (user.balance_ib - fromPersonal),
+        companyBalance: postUser ? postUser.company_balance_ib : Math.max(0, effectiveCompCash - fromCompany),
+        balance_ib: postUser ? postUser.balance_ib : (user.balance_ib - fromPersonal),
+        company_balance_ib: postUser ? postUser.company_balance_ib : Math.max(0, effectiveCompCash - fromCompany),
+        credit_score: postUser ? postUser.credit_score : user.credit_score,
       });
       io.emit('market:breaking_news', {
         title: '🚨 BANK SENTRAL IPMC EKSEKUSI SITA ASET DEBITUR',

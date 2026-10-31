@@ -114,12 +114,14 @@ class CommunitySimulationService {
   // 1. DYNAMIC MARKET NEWS GENERATOR
   // ============================================================================
   async generateDynamicNews(isInitialSeed = false) {
-    // Ambil emiten Tbk / terdaftar acak dari database
+    // Ambil emiten Tbk / terdaftar acak dari database (hanya emiten aktif / pemilik tidak dibekukan)
     const companies = await this.query.all(`
       SELECT c.*, u.username as owner_username, u.role as owner_role
       FROM companies c
       LEFT JOIN users u ON c.owner_id = u.id
-      WHERE (c.listing_status = 'LISTED' OR c.is_ipo = 1) AND (c.is_seized = 0 OR c.is_seized IS NULL)
+      WHERE (c.listing_status = 'LISTED' OR c.is_ipo = 1)
+        AND (c.is_seized = 0 OR c.is_seized IS NULL)
+        AND (u.is_banned = 0 OR u.is_banned IS NULL)
       ORDER BY RANDOM() LIMIT 10
     `);
 
@@ -249,11 +251,13 @@ class CommunitySimulationService {
   // 2. ACTIVE BOT COMMUNITY CHAT GENERATOR
   // ============================================================================
   async generateBotChat(isInitialSeed = false) {
-    // Pilih bot user acak dari database yang bukan admin dan bukan akun pemain utama
+    // Pilih bot user acak yang AKTIF (is_banned = 0) dan MURNI BOT (tidak pernah memakai akun pemain asli!)
     const botUser = await this.query.get(`
       SELECT id, username, pt_name, has_pt, sector, role, is_blue_chip
       FROM users
-      WHERE role != 'ADMIN' AND username != 'msyafiq19'
+      WHERE (id LIKE 'bot-user-%' OR id LIKE 'user-bot-%')
+        AND is_banned = 0
+        AND role != 'ADMIN'
       ORDER BY RANDOM() LIMIT 1
     `);
 

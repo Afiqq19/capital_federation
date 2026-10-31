@@ -387,58 +387,53 @@ async function ensureMarketPopulation() {
   }
 
   // 5. Seed 1.050 Bot Investors, Konglomerat 12 Naga, Pemilik Emiten Tbk., PT Privat & Ritel
-  const botPass = await bcrypt.hash('botpass123', 8);
-  let addedBots = 0;
-  for (let idx = 0; idx < BOT_ROSTER.length; idx++) {
-    const b = BOT_ROSTER[idx];
-    const existing = await query.get('SELECT id FROM users WHERE username = ?', [b.username]);
-    let botUserId = existing?.id;
-    const empCount = b.employees_count !== undefined ? b.employees_count : (b.has_pt ? (idx < 12 ? 300 : (idx < 35 ? 80 : 25)) : 0);
-    const rdLvl = b.rd_level !== undefined ? b.rd_level : (b.has_pt ? (idx < 12 ? 14 : (idx < 35 ? 7 : 3)) : 1);
-    const mktLvl = b.has_pt ? (idx < 12 ? 8 : (idx < 35 ? 5 : 3)) : 1;
-    const capLvl = b.has_pt ? (idx < 12 ? 8 : (idx < 35 ? 5 : 3)) : 1;
-    const ptLvl = b.pt_level || (idx < 12 ? 5 : (idx < 35 ? 4 : 2));
+  // Preload dalam bulk Map + 1 transaksi SQLite agar boot <200ms & tidak pernah mereset status is_banned bot yang dibekukan!
+  const existingUsersList = await query.all('SELECT id, username, has_pt, pt_name, is_banned FROM users');
+  const userByUsername = new Map((existingUsersList || []).map((u) => [u.username, u]));
 
-    if (!existing) {
-      botUserId = b.id || uuidv4();
-      await query.run(
-        `INSERT INTO users (id, username, password_hash, balance_ib, company_balance_ib, has_pt, pt_name, sector, pt_level, credit_score, role, is_blue_chip, employees_count, rd_level, marketing_level, capacity_level, fundamental_score)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 90.0)`,
-        [
-          botUserId,
-          b.username,
-          botPass,
-          b.balance_ib,
-          b.company_balance_ib,
-          b.has_pt,
-          b.pt_name,
-          b.sector,
-          ptLvl,
-          b.credit_score,
-          b.role,
-          b.is_blue_chip,
-          empCount,
-          rdLvl,
-          mktLvl,
-          capLvl
-        ]
-      );
-      addedBots++;
-    } else {
-      // Pastikan atribut operasional bot memadai agar mencetak laba & menyetor PPh Badan ke Kas Negara
-      await query.run(
-        `UPDATE users SET employees_count = ?,
-                          rd_level = ?,
-                          marketing_level = ?,
-                          capacity_level = ?,
-                          pt_level = ?,
-                          role = CASE WHEN ? = 'VIP' THEN 'VIP' ELSE role END,
-                          is_blue_chip = ?
-         WHERE id = ?`,
-        [empCount, rdLvl, mktLvl, capLvl, ptLvl, b.role, b.is_blue_chip, botUserId]
-      );
+  const needBotPass = BOT_ROSTER.some((b) => !userByUsername.has(b.username));
+  const botPass = needBotPass ? await bcrypt.hash('botpass123', 8) : '';
+  let addedBots = 0;
+
+  await query.transaction(async (tx) => {
+    for (let idx = 0; idx < BOT_ROSTER.length; idx++) {
+      const b = BOT_ROSTER[idx];
+      const existing = userByUsername.get(b.username);
+      const empCount = b.employees_count !== undefined ? b.employees_count : (b.has_pt ? (idx < 12 ? 300 : (idx < 35 ? 80 : 25)) : 0);
+      const rdLvl = b.rd_level !== undefined ? b.rd_level : (b.has_pt ? (idx < 12 ? 14 : (idx < 35 ? 7 : 3)) : 1);
+      const mktLvl = b.has_pt ? (idx < 12 ? 8 : (idx < 35 ? 5 : 3)) : 1;
+      const capLvl = b.has_pt ? (idx < 12 ? 8 : (idx < 35 ? 5 : 3)) : 1;
+      const ptLvl = b.pt_level || (idx < 12 ? 5 : (idx < 35 ? 4 : 2));
+
+      if (!existing) {
+        const botUserId = b.id || uuidv4();
+        await tx.run(
+          `INSERT INTO users (id, username, password_hash, balance_ib, company_balance_ib, has_pt, pt_name, sector, pt_level, credit_score, role, is_blue_chip, employees_count, rd_level, marketing_level, capacity_level, fundamental_score)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 90.0)`,
+          [
+            botUserId,
+            b.username,
+            botPass,
+            b.balance_ib,
+            b.company_balance_ib,
+            b.has_pt,
+            b.pt_name,
+            b.sector,
+            ptLvl,
+            b.credit_score,
+            b.role,
+            b.is_blue_chip,
+            empCount,
+            rdLvl,
+            mktLvl,
+            capLvl
+          ]
+        );
+        userByUsername.set(b.username, { id: botUserId, username: b.username, has_pt: b.has_pt, pt_name: b.pt_name, is_banned: 0 });
+        addedBots++;
+      }
     }
-  }
+  });
   if (addedBots > 0) {
     console.log(`✅ ${addedBots} bot pemain baru berhasil dimasukkan ke bursa (Total ${BOT_ROSTER.length} Bot).`);
   }
@@ -488,99 +483,100 @@ async function ensureMarketPopulation() {
     }
   }
 
-  for (let idx = 0; idx < BOT_ROSTER.length; idx++) {
-    const b = BOT_ROSTER[idx];
-    const botRow = await query.get('SELECT id, username, has_pt, pt_name FROM users WHERE username = ?', [b.username]);
-    if (!botRow) continue;
+  const shCountRows = await query.all('SELECT company_id, COUNT(*) as cnt FROM company_shareholders GROUP BY company_id');
+  const shCountMap = new Map((shCountRows || []).map((r) => [r.company_id, r.cnt]));
+  const portCountRows = await query.all('SELECT user_id, COUNT(*) as cnt FROM portfolios GROUP BY user_id');
+  const portCountMap = new Map((portCountRows || []).map((r) => [r.user_id, r.cnt]));
 
-    if (idx < orderedCompaniesForBots.length && idx < 600) {
-      const comp = orderedCompaniesForBots[idx];
-      const botEmp = b.employees_count || (idx < 12 ? 350 : (idx < 35 ? 90 : 25));
-      const botRd = b.rd_level || (idx < 12 ? 14 : (idx < 35 ? 7 : 3));
-      const botPtLvl = b.pt_level || (idx < 12 ? 5 : (idx < 35 ? 4 : 2));
+  await query.transaction(async (tx) => {
+    for (let idx = 0; idx < BOT_ROSTER.length; idx++) {
+      const b = BOT_ROSTER[idx];
+      const botRow = userByUsername.get(b.username);
+      if (!botRow) continue;
 
-      if (comp.owner_id !== botRow.id || comp.listing_status !== 'LISTED') {
-        // Hubungkan perusahaan Tbk. Bot di Bursa Saham ke Bot ini sebagai Pendiri & Pemilik
-        await query.run(
-          `UPDATE companies 
-           SET owner_id = ?, founder_name = ?, employees_count = COALESCE(NULLIF(employees_count, 0), ?),
-               rd_level = MAX(COALESCE(rd_level, 1), ?),
-               pt_level = MAX(COALESCE(pt_level, 1), ?),
-               is_ipo = 1,
-               listing_status = 'LISTED'
-           WHERE id = ? AND is_bot = 1`,
-          [botRow.id, botRow.username, botEmp, botRd, botPtLvl, comp.id]
-        );
-      }
-      if (!botRow.has_pt || botRow.pt_name !== comp.name) {
-        await query.run(
-          'UPDATE users SET has_pt = 1, pt_name = ?, sector = ? WHERE id = ?',
-          [comp.name, comp.sector, botRow.id]
-        );
-      }
-
-      // Pastikan susunan pemegang saham (Cap Table) mencatat Bot ini sebagai Pendiri & Pemegang Saham Terbesar (60%)
-      const existingSh = await query.get('SELECT COUNT(*) as count FROM company_shareholders WHERE company_id = ?', [comp.id]);
-      if (!existingSh || existingSh.count === 0) {
-        const totalShares = comp.total_shares || 10000000;
-        await query.run(
-          `INSERT INTO company_shareholders (id, company_id, holder_name, holder_type, shares_count, percentage, user_id)
-           VALUES (?, ?, ?, 'FOUNDER', ?, 60.0, ?)`,
-          [uuidv4(), comp.id, `${botRow.username} (Pendiri & Pengendali)`, Math.round(totalShares * 0.60), botRow.id]
-        );
-        await query.run(
-          `INSERT INTO company_shareholders (id, company_id, holder_name, holder_type, shares_count, percentage, user_id)
-           VALUES (?, ?, 'Konsorsium Institusi Federasi', 'INSTITUTION', ?, 20.0, NULL)`,
-          [uuidv4(), comp.id, Math.round(totalShares * 0.20)]
-        );
-        await query.run(
-          `INSERT INTO company_shareholders (id, company_id, holder_name, holder_type, shares_count, percentage, user_id)
-           VALUES (?, ?, 'Publik Masyarakat (Bursa Efek)', 'PUBLIC', ?, 20.0, NULL)`,
-          [uuidv4(), comp.id, Math.round(totalShares * 0.20)]
-        );
-      }
-    } else if (b.has_pt === 1) {
-      // Bot dengan PT Privat Non-Tbk (belum IPO di Bursa Saham)
-      await query.run(
-        'UPDATE users SET has_pt = 1, pt_name = ?, sector = ? WHERE id = ?',
-        [b.pt_name, b.sector, botRow.id]
-      );
-    } else {
-      // Ritel Murni (Belum mendirikan PT)
-      await query.run(
-        "UPDATE users SET has_pt = 0, pt_name = '' WHERE id = ?",
-        [botRow.id]
-      );
-    }
-
-    // Pastikan setiap bot memiliki portofolio saham di bursa
-    const existingPort = await query.get('SELECT COUNT(*) as count FROM portfolios WHERE user_id = ?', [botRow.id]);
-    if (!existingPort || existingPort.count === 0) {
-      // Jika memiliki emiten Tbk sendiri, tambahkan kepemilikan saham emitennya + 2 saham lain
       if (idx < orderedCompaniesForBots.length && idx < 600) {
-        const ownComp = orderedCompaniesForBots[idx];
-        const founderLots = idx < 12 ? 25000 : (idx < 35 ? 6500 : 1500);
-        await query.run(
-          `INSERT OR IGNORE INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price)
-           VALUES (?, ?, ?, ?, ?)`,
-          [uuidv4(), botRow.id, ownComp.id, founderLots, ownComp.base_price || ownComp.current_price]
-        );
-      }
-      const stockCount = idx < 12 ? 4 : (idx < 35 ? 3 : 2);
-      const startOffset = (idx * 5 + 3) % Math.max(1, orderedCompaniesForBots.length - 5);
-      for (let s = 0; s < stockCount; s++) {
-        const comp = orderedCompaniesForBots[(startOffset + s) % orderedCompaniesForBots.length];
-        if (comp) {
-          const lots = idx < 12 ? 4500 : (idx < 35 ? 1200 : 120);
-          await query.run(
-            `INSERT OR IGNORE INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price)
-             VALUES (?, ?, ?, ?, ?)`,
-            [uuidv4(), botRow.id, comp.id, lots, comp.base_price || comp.current_price]
+        const comp = orderedCompaniesForBots[idx];
+        const botEmp = b.employees_count || (idx < 12 ? 350 : (idx < 35 ? 90 : 25));
+        const botRd = b.rd_level || (idx < 12 ? 14 : (idx < 35 ? 7 : 3));
+        const botPtLvl = b.pt_level || (idx < 12 ? 5 : (idx < 35 ? 4 : 2));
+
+        if (comp.owner_id !== botRow.id || comp.listing_status !== 'LISTED') {
+          await tx.run(
+            `UPDATE companies 
+             SET owner_id = ?, founder_name = ?, employees_count = COALESCE(NULLIF(employees_count, 0), ?),
+                 rd_level = MAX(COALESCE(rd_level, 1), ?),
+                 pt_level = MAX(COALESCE(pt_level, 1), ?),
+                 is_ipo = 1,
+                 listing_status = 'LISTED'
+             WHERE id = ? AND is_bot = 1`,
+            [botRow.id, botRow.username, botEmp, botRd, botPtLvl, comp.id]
           );
         }
+        if (!botRow.has_pt || botRow.pt_name !== comp.name) {
+          await tx.run(
+            'UPDATE users SET has_pt = 1, pt_name = ?, sector = ? WHERE id = ?',
+            [comp.name, comp.sector, botRow.id]
+          );
+        }
+
+        if (!shCountMap.get(comp.id)) {
+          const totalShares = comp.total_shares || 10000000;
+          await tx.run(
+            `INSERT INTO company_shareholders (id, company_id, holder_name, holder_type, shares_count, percentage, user_id)
+             VALUES (?, ?, ?, 'FOUNDER', ?, 60.0, ?)`,
+            [uuidv4(), comp.id, `${botRow.username} (Pendiri & Pengendali)`, Math.round(totalShares * 0.60), botRow.id]
+          );
+          await tx.run(
+            `INSERT INTO company_shareholders (id, company_id, holder_name, holder_type, shares_count, percentage, user_id)
+             VALUES (?, ?, 'Konsorsium Institusi Federasi', 'INSTITUTION', ?, 20.0, NULL)`,
+            [uuidv4(), comp.id, Math.round(totalShares * 0.20)]
+          );
+          await tx.run(
+            `INSERT INTO company_shareholders (id, company_id, holder_name, holder_type, shares_count, percentage, user_id)
+             VALUES (?, ?, 'Publik Masyarakat (Bursa Efek)', 'PUBLIC', ?, 20.0, NULL)`,
+            [uuidv4(), comp.id, Math.round(totalShares * 0.20)]
+          );
+          shCountMap.set(comp.id, 3);
+        }
+      } else if (b.has_pt === 1 && (!botRow.has_pt || botRow.pt_name !== b.pt_name)) {
+        await tx.run(
+          'UPDATE users SET has_pt = 1, pt_name = ?, sector = ? WHERE id = ?',
+          [b.pt_name, b.sector, botRow.id]
+        );
+      } else if (!b.has_pt && botRow.has_pt) {
+        await tx.run(
+          "UPDATE users SET has_pt = 0, pt_name = '' WHERE id = ?",
+          [botRow.id]
+        );
+      }
+
+      if (!portCountMap.get(botRow.id) && orderedCompaniesForBots.length > 0) {
+        if (idx < orderedCompaniesForBots.length && idx < 600) {
+          const ownComp = orderedCompaniesForBots[idx];
+          const founderLots = idx < 12 ? 25000 : (idx < 35 ? 6500 : 1500);
+          await tx.run(
+            `INSERT OR IGNORE INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price)
+             VALUES (?, ?, ?, ?, ?)`,
+            [uuidv4(), botRow.id, ownComp.id, founderLots, ownComp.base_price || ownComp.current_price]
+          );
+        }
+        const stockCount = idx < 12 ? 4 : (idx < 35 ? 3 : 2);
+        const startOffset = (idx * 5 + 3) % Math.max(1, orderedCompaniesForBots.length - 5);
+        for (let s = 0; s < stockCount; s++) {
+          const comp = orderedCompaniesForBots[(startOffset + s) % orderedCompaniesForBots.length];
+          if (comp) {
+            const lots = idx < 12 ? 4500 : (idx < 35 ? 1200 : 120);
+            await tx.run(
+              `INSERT OR IGNORE INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price)
+               VALUES (?, ?, ?, ?, ?)`,
+              [uuidv4(), botRow.id, comp.id, lots, comp.base_price || comp.current_price]
+            );
+          }
+        }
+        portCountMap.set(botRow.id, stockCount + 1);
       }
     }
-  }
+  });
 
   // 5C. Seed Setoran Pajak Transaksi & PPh Badan Bot ke Brankas Kas Negara jika masih minim
   const treasuryCount = await query.get('SELECT COUNT(*) as count FROM state_treasury_ledger');

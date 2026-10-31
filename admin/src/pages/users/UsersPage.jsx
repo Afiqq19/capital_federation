@@ -28,10 +28,18 @@ export default function UsersPage() {
   const [selectedUserForEdit, setSelectedUserForEdit] = useState(null);
   const [selectedUserForDetail, setSelectedUserForDetail] = useState(null);
 
-  // State untuk modal konfirmasi hapus permanen
+  // State untuk modal konfirmasi hapus permanen & aksi bulk bot freeze
   const [userToDelete, setUserToDelete] = useState(null);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [isDeletingUser, setIsDeletingUser] = useState(false);
+  const [isFreezingBots, setIsFreezingBots] = useState(false);
+
+  const isBotUser = (u) =>
+    Boolean(
+      u?.is_bot_account ||
+      String(u?.id || '').startsWith('bot-user-') ||
+      String(u?.id || '').startsWith('user-bot-')
+    );
 
   const totalWealth = (users || []).reduce(
     (acc, u) => acc + (Number(u.net_worth) || Number(u.balance_ib) || Number(u.cash_balance_ib) || 0),
@@ -39,6 +47,19 @@ export default function UsersPage() {
   );
 
   const bannedCount = (users || []).filter((u) => u.is_banned).length;
+  const realPlayersCount = (users || []).filter((u) => !isBotUser(u)).length;
+  const frozenBotsCount = (users || []).filter((u) => isBotUser(u) && u.is_banned).length;
+  const activeBotsCount = (users || []).filter((u) => isBotUser(u) && !u.is_banned).length;
+
+  const handleBulkFreezeBots = async (targetFrozen) => {
+    if (!actions?.freezeBotsBulk) return;
+    setIsFreezingBots(true);
+    try {
+      await actions.freezeBotsBulk(targetFrozen);
+    } finally {
+      setIsFreezingBots(false);
+    }
+  };
 
   const filtered = (users || []).filter((u) => {
     const q = search.toLowerCase();
@@ -51,10 +72,14 @@ export default function UsersPage() {
 
     const rank = Number(u.rank) || 999;
     let matchesStatus = true;
-    if (statusFilter === '12_NAGA') {
-      matchesStatus = rank <= 12;
+    if (statusFilter === 'REAL_PLAYERS') {
+      matchesStatus = !isBotUser(u);
+    } else if (statusFilter === 'BOTS_ONLY') {
+      matchesStatus = isBotUser(u);
+    } else if (statusFilter === '12_NAGA') {
+      matchesStatus = !u.is_banned && rank <= 12;
     } else if (statusFilter === 'TAIPAN') {
-      matchesStatus = rank > 12 && rank <= 35;
+      matchesStatus = !u.is_banned && rank > 12 && rank <= 35;
     } else if (statusFilter === 'VIP') {
       matchesStatus = u.is_vip || u.role === 'VIP';
     } else if (statusFilter === 'REGULER') {
@@ -129,19 +154,41 @@ export default function UsersPage() {
             />
           </div>
 
-          <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+            <Button
+              variant={frozenBotsCount >= 500 ? 'ghost' : 'rose'}
+              size="xs"
+              disabled={isFreezingBots}
+              onClick={() => handleBulkFreezeBots(525)}
+              title="Bekukan 525 Bot ritel agar server ultra-ringan (100% Player Asli aman!)"
+            >
+              {isFreezingBots ? 'Memproses...' : `❄️ Bekukan 525 Bot (${frozenBotsCount} Beku)`}
+            </Button>
+            {frozenBotsCount > 0 && (
+              <Button
+                variant="ghost"
+                size="xs"
+                disabled={isFreezingBots}
+                onClick={() => handleBulkFreezeBots(0)}
+                title="Aktifkan kembali seluruh Bot"
+              >
+                Aktifkan Semua Bot
+              </Button>
+            )}
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
               className="select text-xs py-2 px-3 bg-slate-900 border-slate-800 rounded-xl w-full sm:w-auto text-slate-200"
             >
-              <option value="ALL">Semua Kasta Pemain ({users?.length || 0})</option>
+              <option value="ALL">Semua Akun ({users?.length || 0})</option>
+              <option value="REAL_PLAYERS">👤 Player Asli ({realPlayersCount})</option>
+              <option value="BOTS_ONLY">🤖 Akun Bot ({activeBotsCount} Aktif / {frozenBotsCount} Beku)</option>
               <option value="12_NAGA">🐉 12 Naga (Rank 1 - 12)</option>
               <option value="TAIPAN">👑 Taipan (Rank 13 - 35)</option>
               <option value="VIP">💎 Akun VIP</option>
               <option value="REGULER">Ritel & Reguler</option>
-              <option value="ACTIVE">Status Aktif</option>
-              <option value="BANNED">Dibekukan (Banned)</option>
+              <option value="ACTIVE">Status Aktif ({Math.max(0, (users?.length || 0) - bannedCount)})</option>
+              <option value="BANNED">Dibekukan ({bannedCount})</option>
             </select>
           </div>
         </div>
@@ -195,13 +242,18 @@ export default function UsersPage() {
                           <div className="min-w-0">
                             <div className="font-semibold text-slate-100 flex items-center gap-1.5 flex-wrap">
                               <span className="truncate">{u.name || u.username}</span>
-                              {is12Naga && <Badge tone="amber">🐉 12 NAGA #{rank}</Badge>}
-                              {isTaipan && <Badge tone="sky">👑 TAIPAN #{rank}</Badge>}
+                              {!isBotUser(u) ? (
+                                <Badge tone="emerald">👤 PLAYER ASLI</Badge>
+                              ) : (
+                                <Badge tone="slate">🤖 BOT</Badge>
+                              )}
+                              {!u.is_banned && is12Naga && <Badge tone="amber">🐉 12 NAGA #{rank}</Badge>}
+                              {!u.is_banned && isTaipan && <Badge tone="sky">👑 TAIPAN #{rank}</Badge>}
                               {isVip && <Badge tone="gold">💎 VIP</Badge>}
                               {u.role === 'ADMIN' && <Badge tone="rose">ADMIN</Badge>}
                             </div>
                             <div className="text-[11px] font-mono text-slate-400 truncate">
-                              @{u.username} • {u.pt_name || 'PT Mandiri Konglomerat'}
+                              @{u.username} • {u.pt_name || 'PT Mandiri Konglomerat'} ({u.companies_owned?.length || 0} PT)
                             </div>
                           </div>
                         </div>

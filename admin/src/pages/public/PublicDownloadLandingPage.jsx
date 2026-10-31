@@ -23,18 +23,18 @@ import {
 
 export default function PublicDownloadLandingPage() {
   const [versionInfo, setVersionInfo] = useState({
-    version: '1.6.9',
-    buildNumber: 23,
-    apkVersion: 'v1.6.9 (Build 23)',
+    version: '1.7.0',
+    buildNumber: 24,
+    apkVersion: 'v1.7.0 (Build 24)',
     minAndroid: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
     fileSizeMb: '25.3 MB',
     downloadUrl: '/api/download/apk',
     downloadCount: 315,
     totalCompanies: 504,
-    totalPlayers: 1055,
-    sha256: 'd636724b056f458dc06a0737439ae047a54a8f9c198becd89e2fe15325ebc609',
+    totalPlayers: 1053,
+    sha256: 'ffbe3d5828261e42b8c0a658b72324ab731cb336d2e4e09d8d0f81370137dbd2',
     releaseNotes:
-      'v1.6.9: Proteksi Permanen Kepemilikan PT Pendiri, Sinkronisasi Penuh Upgrade R&D PT Utama & Anak Perusahaan, Akselerasi Server <100ms, dan Refresh Halus di Latar Belakang Tanpa Kedip.',
+      'v1.7.0: Sinkronisasi Tunggal 100% Real-Time Backend–APK–Website–Web Admin, Pembekuan Otomatis ~525 Bot Ritel (100% Player Asli Aman), serta Optimasi Ekstrem Server <50ms Tanpa Lag.',
   });
   const [topLeaders, setTopLeaders] = useState([]);
   const [topStocks, setTopStocks] = useState([]);

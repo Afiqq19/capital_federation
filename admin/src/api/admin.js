@@ -33,6 +33,7 @@ export const adminApi = {
   toggleBan: (userId) => request(`/api/admin/users/${userId}/ban`, { method: 'POST' }),
   editUser: (userId, form) => request(`/api/admin/users/${userId}/edit`, { method: 'POST', body: form }),
   deleteUser: (userId) => request(`/api/admin/users/${userId}`, { method: 'DELETE' }),
+  freezeBotsBulk: (targetFrozen = 525) => request('/api/admin/bots/freeze-bulk', { method: 'POST', body: { targetFrozen } }),
 
   // ---- Bot & Makro ----
   setBotStatus: (companyId, status) => request(`/api/admin/bots/${companyId}/status`, { method: 'PUT', body: { status } }),

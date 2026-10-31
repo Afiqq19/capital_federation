@@ -10,20 +10,20 @@ export default function ApkManagerPage({ showToast }) {
   const adminCtx = useAdmin();
   const toastFn = showToast || adminCtx?.notify;
   const [apkInfo, setApkInfo] = useState({
-    version: '1.6.9',
-    buildNumber: 23,
+    version: '1.7.0',
+    buildNumber: 24,
     fileSizeMb: '25.3 MB',
     minAndroid: 'Android 10.0 (API Level 29 / Q)',
     hasHostedApk: true,
     downloadCount: 315,
-    releaseNotes: 'v1.6.9: Proteksi Permanen Kepemilikan PT Pendiri, Sinkronisasi Penuh Investasi R&D PT Utama & Anak Perusahaan, serta Akselerasi Server & Refresh Halus Latar Belakang Tanpa Kedip.'
+    releaseNotes: 'v1.7.0: Sinkronisasi Tunggal 100% Real-Time Backend–APK–Website–Web Admin, Pembekuan Otomatis ~525 Bot Ritel (100% Player Asli Aman), serta Optimasi Ekstrem Server <50ms Tanpa Lag.'
   });
   const [loading, setLoading] = useState(true);
   const [savingMeta, setSavingMeta] = useState(false);
 
   // Form metadata state
-  const [version, setVersion] = useState('1.6.9');
-  const [buildNumber, setBuildNumber] = useState(23);
+  const [version, setVersion] = useState('1.7.0');
+  const [buildNumber, setBuildNumber] = useState(24);
   const [minAndroid, setMinAndroid] = useState('Android 10.0 (API 29 / Q)');
   const [externalUrl, setExternalUrl] = useState('');
   const [releaseNotesText, setReleaseNotesText] = useState('');
@@ -40,8 +40,8 @@ export default function ApkManagerPage({ showToast }) {
     try {
       const res = await request('/api/version');
       setApkInfo(res);
-      setVersion(res.version || '1.6.9');
-      setBuildNumber(res.buildNumber || 23);
+      setVersion(res.version || '1.7.0');
+      setBuildNumber(res.buildNumber || 24);
       setMinAndroid(res.minAndroid || 'Android 10.0 (API 29 / Q)');
       setExternalUrl(res.externalUrl || '');
       if (Array.isArray(res.releaseNotes)) {

@@ -5,6 +5,24 @@ import { FormField, Input, Select } from '../../components/ui/Form';
 import { Users, Shield, Building2, CreditCard } from 'lucide-react';
 import { ib } from '../../lib/format';
 
+const SECTORS_LIST = [
+  'Teknologi',
+  'Keuangan',
+  'Energi',
+  'Properti',
+  'F&B',
+  'Manufaktur',
+  'Kesehatan',
+  'Pertambangan',
+  'Transportasi',
+  'Agribisnis',
+  'Ritel',
+  'Telekomunikasi',
+  'Strategis',
+];
+
+const CREDIT_TIERS_LIST = ['AAA', 'AA', 'A', 'BBB', 'BB', 'STANDARD'];
+
 export default function EditUserModal({ open, onClose, user, onConfirm }) {
   const [balance, setBalance] = useState('');
   const [companyBalance, setCompanyBalance] = useState('');
@@ -23,7 +41,7 @@ export default function EditUserModal({ open, onClose, user, onConfirm }) {
       setCreditTier(user.credit_tier ?? 'STANDARD');
       setRole(user.role ?? 'PLAYER');
       setPtName(user.pt_name ?? '');
-      setSector(user.sector ?? 'Finance');
+      setSector(user.sector || 'Teknologi');
     }
   }, [user]);
 
@@ -101,12 +119,12 @@ export default function EditUserModal({ open, onClose, user, onConfirm }) {
 
           <FormField label="Sektor Usaha">
             <Select value={sector} onChange={(e) => setSector(e.target.value)}>
-              <option value="Finance">Finance</option>
-              <option value="Technology">Technology</option>
-              <option value="Energy">Energy</option>
-              <option value="Consumer Goods">Consumer Goods</option>
-              <option value="Property">Property</option>
-              <option value="Healthcare">Healthcare</option>
+              {sector && !SECTORS_LIST.includes(sector) && (
+                <option value={sector}>{sector}</option>
+              )}
+              {SECTORS_LIST.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
             </Select>
           </FormField>
         </div>
@@ -125,11 +143,12 @@ export default function EditUserModal({ open, onClose, user, onConfirm }) {
 
           <FormField label="Tingkat Kredit (Tier)">
             <Select value={creditTier} onChange={(e) => setCreditTier(e.target.value)}>
-              <option value="STANDARD">Standard</option>
-              <option value="BRONZE">Bronze</option>
-              <option value="SILVER">Silver</option>
-              <option value="GOLD">Gold</option>
-              <option value="PLATINUM">Platinum</option>
+              {creditTier && !CREDIT_TIERS_LIST.includes(creditTier) && (
+                <option value={creditTier}>{creditTier}</option>
+              )}
+              {CREDIT_TIERS_LIST.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
             </Select>
           </FormField>
 

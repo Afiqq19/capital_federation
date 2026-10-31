@@ -149,6 +149,9 @@ export function AdminProvider({ children }) {
     socket.on('company:uma_changed', onUma);
     socket.on('market:uma_changed', onUma);
     socket.on('user:balance_updated', onUserUpdate);
+    socket.on('user:conglomerate_updated', onUserUpdate);
+    socket.on('user:account_status_changed', onUserUpdate);
+    socket.on('admin:bots_freeze_updated', onUserUpdate);
     socket.on('treasury:updated', onTreasury);
     socket.on('market:breaking_news', onNews);
     socket.on('market:intervention', onIntervention);
@@ -171,6 +174,9 @@ export function AdminProvider({ children }) {
       socket.off('company:uma_changed', onUma);
       socket.off('market:uma_changed', onUma);
       socket.off('user:balance_updated', onUserUpdate);
+      socket.off('user:conglomerate_updated', onUserUpdate);
+      socket.off('user:account_status_changed', onUserUpdate);
+      socket.off('admin:bots_freeze_updated', onUserUpdate);
       socket.off('treasury:updated', onTreasury);
       socket.off('market:breaking_news', onNews);
       socket.off('market:intervention', onIntervention);
@@ -219,7 +225,12 @@ export function AdminProvider({ children }) {
         run(async () => {
           const r = await adminApi.toggleBan(userId);
           return { message: r.isBanned ? 'Akun pemain dibekukan' : 'Akun pemain dipulihkan' };
-        }, { refresh: [refreshUsers] }),
+        }, { refresh: [refreshUsers, refreshOverview] }),
+      freezeBotsBulk: (targetFrozen = 525) =>
+        run(async () => {
+          const r = await adminApi.freezeBotsBulk(targetFrozen);
+          return { message: r.message || 'Status pembekuan massal Bot berhasil diperbarui' };
+        }, { refresh: [refreshUsers, refreshOverview] }),
       editUser: (userId, form) =>
         run(async () => {
           await adminApi.editUser(userId, form);

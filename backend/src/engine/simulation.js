@@ -39,6 +39,39 @@ class MarketSimulationEngine {
 
     // Cache of individual stock target drifts
     this.stockTrends = new Map();
+    this.activeBotsCache = [];
+    this.activeBotsCacheTs = 0;
+  }
+
+  setStockTrend(symbolOrId, trendBoost = 0) {
+    if (!symbolOrId || !trendBoost) return;
+    const current = this.stockTrends.get(symbolOrId);
+    if (typeof current === 'number') {
+      const next = Math.max(-25, Math.min(30, parseFloat((current + Number(trendBoost)).toFixed(2))));
+      this.stockTrends.set(symbolOrId, next);
+    }
+  }
+
+  async _getActiveBots() {
+    if (this.activeBotsCache.length > 0 && (Date.now() - this.activeBotsCacheTs) < 30000) {
+      return this.activeBotsCache;
+    }
+    try {
+      const rows = await query.all(`
+        SELECT id, username
+        FROM users
+        WHERE (id LIKE 'bot-user-%' OR id LIKE 'user-bot-%')
+          AND is_banned = 0
+          AND role != 'ADMIN'
+        ORDER BY id ASC
+      `);
+      if (rows && rows.length > 0) {
+        this.activeBotsCache = rows;
+        this.activeBotsCacheTs = Date.now();
+        return rows;
+      }
+    } catch (_) {}
+    return BOT_ROSTER.slice(0, 35);
   }
 
   _generateInitialIpmcHistory(targetPoints = 7385.40, openPoints = 7350.00) {
@@ -254,7 +287,16 @@ class MarketSimulationEngine {
   async tick() {
     this.tickCount++;
     try {
-      const activeEvents = await query.all('SELECT * FROM macro_events WHERE active = 1');
+      if (this.tickCount % 15 === 1) {
+        await query.run(`
+          UPDATE macro_events
+          SET active = 0
+          WHERE active = 1
+            AND started_at IS NOT NULL
+            AND (strftime('%s', 'now') - strftime('%s', started_at)) > COALESCE(NULLIF(duration_seconds, 0), 1800)
+        `).catch(() => {});
+      }
+      const activeEvents = await query.all('SELECT * FROM macro_events WHERE active = 1 ORDER BY started_at DESC LIMIT 3');
       const recentNews = await query.all('SELECT * FROM news ORDER BY published_at DESC LIMIT 3');
 
       const interventionSetting = await query.get(
@@ -505,9 +547,10 @@ class MarketSimulationEngine {
       this.io.emit('market:ticker', updatedList);
       this.io.emit('market:overview', overview);
 
-      // Generate 1-3 real-time market trades for Running Trade tape (Bandar 9 Naga & Investor Ritel)
+      // Generate 1-2 real-time market trades for Running Trade tape (HANYA Bot Aktif is_banned = 0!)
       const tradeableList = updatedList.filter(c => c.status !== 'SUSPENDED');
       if (tradeableList.length > 0) {
+        const activeBots = await this._getActiveBots();
         const tradesCount = Math.floor(Math.random() * 2) + 1;
         const nowObj = new Date();
         const hh = String(nowObj.getHours()).padStart(2, '0');
@@ -522,8 +565,9 @@ class MarketSimulationEngine {
         for (let t = 0; t < tradesCount; t++) {
           const randComp = tradeableList[Math.floor(Math.random() * tradeableList.length)];
           const isBuy = Math.random() > 0.44;
-          const botIdx = Math.floor(Math.random() * BOT_ROSTER.length);
-          const randomBot = BOT_ROSTER[botIdx];
+          const poolLen = activeBots.length > 0 ? activeBots.length : 1;
+          const botIdx = Math.floor(Math.random() * poolLen);
+          const randomBot = activeBots[botIdx];
           // Bandar (Top 30 Konglomerat) transaksi blok besar 120-950 lot, Ritel 5-95 lot
           const isBandar = botIdx < 30;
           const lotSize = isBandar
@@ -536,27 +580,24 @@ class MarketSimulationEngine {
           if (randomBot) lastBotTraderName = randomBot.username;
           lastBotSymbol = randComp.symbol;
 
-          // Update kepemilikan saham bot di tabel portfolios secara nyata
-          if (randomBot && randComp.id) {
+          // Update kepemilikan saham bot setiap 5 tick agar ringan & bebas antrean SQLite
+          if (this.tickCount % 5 === 0 && t === 0 && randomBot && randomBot.id && randComp.id) {
             try {
-              const botDb = await query.get('SELECT id, balance_ib FROM users WHERE username = ?', [randomBot.username]);
-              if (botDb) {
-                const existPort = await query.get(
-                  'SELECT id, lots_owned FROM portfolios WHERE user_id = ? AND company_id = ?',
-                  [botDb.id, randComp.id]
-                );
-                if (isBuy) {
-                  if (existPort) {
-                    await query.run('UPDATE portfolios SET lots_owned = lots_owned + ? WHERE id = ?', [lotSize, existPort.id]);
-                  } else {
-                    await query.run(
-                      'INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price) VALUES (?, ?, ?, ?, ?)',
-                      [uuidv4(), botDb.id, randComp.id, lotSize, randComp.current_price]
-                    );
-                  }
-                } else if (existPort && existPort.lots_owned > lotSize + 50) {
-                  await query.run('UPDATE portfolios SET lots_owned = lots_owned - ? WHERE id = ?', [lotSize, existPort.id]);
+              const existPort = await query.get(
+                'SELECT id, lots_owned FROM portfolios WHERE user_id = ? AND company_id = ?',
+                [randomBot.id, randComp.id]
+              );
+              if (isBuy) {
+                if (existPort) {
+                  await query.run('UPDATE portfolios SET lots_owned = lots_owned + ? WHERE id = ?', [lotSize, existPort.id]);
+                } else {
+                  await query.run(
+                    'INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price) VALUES (?, ?, ?, ?, ?)',
+                    [uuidv4(), randomBot.id, randComp.id, lotSize, randComp.current_price]
+                  );
                 }
+              } else if (existPort && existPort.lots_owned > lotSize + 50) {
+                await query.run('UPDATE portfolios SET lots_owned = lots_owned - ? WHERE id = ?', [lotSize, existPort.id]);
               }
             } catch (_) {}
           }
@@ -805,7 +846,7 @@ class MarketSimulationEngine {
           if ((existingBids || []).length < 3) {
             const existingBidderIds = new Set((existingBids || []).map(b => b.bidder_user_id));
             const botCandidates = await query.all(
-              "SELECT id, username, pt_name, company_balance_ib FROM users WHERE (id LIKE 'bot-user-%' OR id LIKE 'user-bot-%') AND has_pt = 1 AND company_balance_ib >= 1500000000 LIMIT 8"
+              "SELECT id, username, pt_name, company_balance_ib FROM users WHERE (id LIKE 'bot-user-%' OR id LIKE 'user-bot-%') AND is_banned = 0 AND has_pt = 1 AND company_balance_ib >= 1500000000 LIMIT 8"
             );
             const pitches = [
               'Aliansi strategis integrasi rantai pasok & distribusi regional Capital Federation.',
@@ -953,12 +994,46 @@ class MarketSimulationEngine {
       const processedCompanyIds = new Set();
       let collectiveBotTaxIb = 0;
       let collectiveBotCompaniesCount = 0;
-      const ptOwners = await query.all('SELECT * FROM users WHERE has_pt = 1 AND is_banned = 0');
+
+      // Preload seluruh emiten & status banned owner sekali saja (Zero N+1 Query!)
+      const [ptOwners, allCompsForRev] = await Promise.all([
+        query.all('SELECT * FROM users WHERE has_pt = 1 AND is_banned = 0'),
+        query.all(`
+          SELECT c.*, u.is_banned as owner_is_banned
+          FROM companies c
+          LEFT JOIN users u ON c.owner_id = u.id
+        `),
+      ]);
+
+      const primaryCompByOwner = new Map();
+      for (const c of (allCompsForRev || [])) {
+        if (!c.owner_id) continue;
+        if (!primaryCompByOwner.has(c.owner_id)) {
+          primaryCompByOwner.set(c.owner_id, c);
+        } else {
+          const cur = primaryCompByOwner.get(c.owner_id);
+          if (cur.is_acquired && !c.is_acquired) {
+            primaryCompByOwner.set(c.owner_id, c);
+          }
+        }
+      }
+
+      // Kumpulkan seluruh update bot dalam antrean batch 1 transaksi SQLite (<10ms!)
+      const pendingBotUserUpdates = [];
+      const pendingBotCompUpdates = [];
+      const pendingBotTreasuryInserts = [];
+
       for (const u of ptOwners) {
-        const isBotUser = String(u.id || '').startsWith('bot-user-');
-        const isTop9Bot = isBotUser && parseInt(String(u.id).replace('bot-user-', ''), 10) <= 9;
-        // Cek apakah PT Utama user sedang disita negara/PNAF atau BANGKRUT (PAILIT)
-        const primaryComp = await query.get('SELECT id, is_seized, status, name, symbol, sector FROM companies WHERE owner_id = ?', [u.id]);
+        const isBotUser = String(u.id || '').startsWith('bot-user-') || String(u.id || '').startsWith('user-bot-');
+        const isTop9Bot = String(u.id || '').startsWith('bot-user-') && parseInt(String(u.id).replace('bot-user-', ''), 10) <= 9;
+        // Cocokkan PT Utama dengan pt_symbol/pt_name jika ada beberapa emiten
+        let primaryComp = primaryCompByOwner.get(u.id) || null;
+        if (u.pt_symbol || u.pt_name) {
+          const exact = (allCompsForRev || []).find(
+            (c) => c.owner_id === u.id && ((u.pt_symbol && c.symbol === u.pt_symbol) || (u.pt_name && c.name === u.pt_name))
+          );
+          if (exact) primaryComp = exact;
+        }
         if (primaryComp) {
           processedCompanyIds.add(primaryComp.id);
           if (primaryComp.is_seized === 1 || primaryComp.status === 'BANKRUPT') {
@@ -1010,27 +1085,36 @@ class MarketSimulationEngine {
           const corporateTax = Math.round(netRev * currentTaxRate); // PPh Badan disesuaikan dengan subsidi / regulasi
           const netAfterTax = netRev - corporateTax;
 
-          // Setor PPh Badan ke Kas Negara Federasi (Pemain asli & Top 9 Naga dicatat per PT, sisanya dikonsolidasi agar buku kas rapi)
-          if (!isBotUser || isTop9Bot) {
+          if (isBotUser) {
+            if (isTop9Bot) {
+              pendingBotTreasuryInserts.push([
+                uuidv4(), 'CORPORATE_TAX',
+                `Penerimaan PPh Badan (${currentTaxPct}%) - ${u.pt_name || 'PT Utama'} (${u.username})`,
+                corporateTax, 'INCOME', u.id,
+                `Setoran PPh Badan ${currentTaxPct}% atas laba operasional periode ${intervalDesc}`
+              ]);
+            } else {
+              collectiveBotTaxIb += corporateTax;
+              collectiveBotCompaniesCount++;
+            }
+            pendingBotUserUpdates.push([netAfterTax, u.id]);
+            if (primaryComp) {
+              pendingBotCompUpdates.push([netAfterTax, primaryComp.id]);
+            }
+          } else {
             await query.run(
               'INSERT INTO state_treasury_ledger (id, source_type, title, amount_ib, direction, reference_id, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
               [uuidv4(), 'CORPORATE_TAX', `Penerimaan PPh Badan (${currentTaxPct}%) - ${u.pt_name || 'PT Utama'} (${u.username})`, corporateTax, 'INCOME', u.id, `Setoran PPh Badan ${currentTaxPct}% atas laba operasional periode ${intervalDesc}`]
             );
-          } else {
-            collectiveBotTaxIb += corporateTax;
-            collectiveBotCompaniesCount++;
-          }
+            await query.run(
+              'UPDATE users SET company_balance_ib = company_balance_ib + ? WHERE id = ?',
+              [netAfterTax, u.id]
+            );
+            if (primaryComp) {
+              await query.run('UPDATE companies SET company_balance_ib = COALESCE(company_balance_ib, 0) + ? WHERE id = ?', [netAfterTax, primaryComp.id]);
+            }
 
-          await query.run(
-            'UPDATE users SET company_balance_ib = company_balance_ib + ? WHERE id = ?',
-            [netAfterTax, u.id]
-          );
-          if (primaryComp) {
-            await query.run('UPDATE companies SET company_balance_ib = COALESCE(company_balance_ib, 0) + ? WHERE id = ?', [netAfterTax, primaryComp.id]);
-          }
-
-          if (!isBotUser) {
-            const updatedUser = await query.get('SELECT company_balance_ib FROM users WHERE id = ?', [u.id]);
+            const updatedUser = await query.get('SELECT balance_ib, company_balance_ib FROM users WHERE id = ?', [u.id]);
 
             await recordCashFlow({
               userId: u.id,
@@ -1056,6 +1140,7 @@ class MarketSimulationEngine {
             });
 
             this.io.to(u.id).emit('company:revenue', {
+              userId: u.id,
               amount: netAfterTax,
               grossRevenue: totalGross,
               expenses: totalExpenses,
@@ -1063,7 +1148,13 @@ class MarketSimulationEngine {
               netRevenue: netAfterTax,
               newCompanyBalance: updatedUser.company_balance_ib,
             });
-            this.io.emit('user:balance_updated', { userId: u.id, companyBalance: updatedUser.company_balance_ib });
+            this.io.emit('user:balance_updated', {
+              userId: u.id,
+              newBalance: updatedUser.balance_ib,
+              companyBalance: updatedUser.company_balance_ib,
+              balance_ib: updatedUser.balance_ib,
+              company_balance_ib: updatedUser.company_balance_ib,
+            });
           }
         } else if (netRev < 0 && !isBotUser) {
           // Fase Defisit / Bakar Modal (Biaya operasional & gaji melebihi omzet)
@@ -1101,6 +1192,7 @@ class MarketSimulationEngine {
             ]);
 
             this.io.to(u.id).emit('company:revenue', {
+              userId: u.id,
               amount: netRev,
               grossRevenue: totalGross,
               expenses: totalExpenses,
@@ -1111,7 +1203,7 @@ class MarketSimulationEngine {
               message: '🚨 PERINGATAN INSOLVENSI: Perseroan Anda resmi dinyatakan Bangkrut & Ditutup karena defisit kas mencapai -IB 50.000.000! Segera lakukan suntik modal penyelamatan atau ajukan pinjaman bank.'
             });
 
-            this.io.emit('user:balance_updated', { userId: u.id, companyBalance: finalBal });
+            this.io.emit('user:balance_updated', { userId: u.id, companyBalance: finalBal, company_balance_ib: finalBal });
           } else {
             // Masih dalam masa toleransi defisit (-50 Juta < saldo < 0)
             await query.run('UPDATE users SET company_balance_ib = ? WHERE id = ?', [candidateBal, u.id]);
@@ -1132,6 +1224,7 @@ class MarketSimulationEngine {
             });
 
             this.io.to(u.id).emit('company:revenue', {
+              userId: u.id,
               amount: netRev,
               grossRevenue: totalGross,
               expenses: totalExpenses,
@@ -1142,37 +1235,22 @@ class MarketSimulationEngine {
               deficitRemaining: Math.abs(BANKRUPTCY_LIMIT - candidateBal),
             });
 
-            this.io.emit('user:balance_updated', { userId: u.id, companyBalance: candidateBal });
+            this.io.emit('user:balance_updated', { userId: u.id, companyBalance: candidateBal, company_balance_ib: candidateBal });
           }
         }
       }
 
-      if (collectiveBotTaxIb > 0) {
-        await query.run(
-          'INSERT INTO state_treasury_ledger (id, source_type, title, amount_ib, direction, reference_id, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          [
-            uuidv4(),
-            'CORPORATE_TAX',
-            `Penerimaan Kolektif PPh Badan (${taxRatePct}%) - ${collectiveBotCompaniesCount} Emiten Bursa CFX`,
-            collectiveBotTaxIb,
-            'INCOME',
-            'CFX-EMITEN-BATCH',
-            `Setoran PPh Badan otomatis ${collectiveBotCompaniesCount} perusahaan Tbk. periode ${intervalDesc}`
-          ]
-        );
-        this.io.emit('treasury:updated');
-      }
+      // Seluruh Unit Anak Perusahaan & Konglomerasi Pemain (lewati milik bot yang dibekukan is_banned = 1!)
+      const subComps = (allCompsForRev || []).filter(
+        (c) =>
+          c.owner_id &&
+          !processedCompanyIds.has(c.id) &&
+          (!c.is_seized || c.is_seized === 0) &&
+          (!c.status || c.status !== 'BANKRUPT') &&
+          (!c.owner_is_banned || c.owner_is_banned === 0)
+      );
 
-      // Seluruh Unit Anak Perusahaan & Konglomerasi Pemain (termasuk hasil akuisisi seperti TECH04)
-      const subComps = await query.all(`
-        SELECT c.* 
-        FROM companies c 
-        WHERE c.owner_id IS NOT NULL 
-          AND (c.is_seized = 0 OR c.is_seized IS NULL)
-          AND (c.status IS NULL OR c.status != 'BANKRUPT')
-      `);
       for (const sc of subComps) {
-        if (processedCompanyIds.has(sc.id)) continue;
         processedCompanyIds.add(sc.id);
         const isBotSubOwner = String(sc.owner_id || '').startsWith('bot-user-') || String(sc.owner_id || '').startsWith('user-bot-');
 
@@ -1199,10 +1277,14 @@ class MarketSimulationEngine {
           const corporateTax = Math.round(net * taxMultiplier); // PPh Badan dinamis
           const netAfterTax = net - corporateTax;
 
-          await query.run('UPDATE companies SET company_balance_ib = COALESCE(company_balance_ib, 0) + ? WHERE id = ?', [netAfterTax, sc.id]);
-          const updatedBal = (sc.company_balance_ib || 0) + netAfterTax;
+          if (isBotSubOwner) {
+            pendingBotCompUpdates.push([netAfterTax, sc.id]);
+            collectiveBotTaxIb += corporateTax;
+            collectiveBotCompaniesCount++;
+          } else {
+            await query.run('UPDATE companies SET company_balance_ib = COALESCE(company_balance_ib, 0) + ? WHERE id = ?', [netAfterTax, sc.id]);
+            const updatedBal = (sc.company_balance_ib || 0) + netAfterTax;
 
-          if (!isBotSubOwner) {
             await query.run(
               'INSERT INTO state_treasury_ledger (id, source_type, title, amount_ib, direction, reference_id, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
               [uuidv4(), 'CORPORATE_TAX', `Penerimaan PPh Badan (${taxRatePct}%) - ${sc.name}`, corporateTax, 'INCOME', sc.id, `Setoran PPh Badan ${taxRatePct}% anak perusahaan periode ${intervalDesc}`]
@@ -1232,8 +1314,9 @@ class MarketSimulationEngine {
               notes: `Setoran Pajak Penghasilan Badan ${taxRatePct}% ke Kas Negara`
             });
 
-            this.io.emit('user:balance_updated', { userId: sc.owner_id, companyId: sc.id, companyBalance: updatedBal });
+            this.io.emit('user:balance_updated', { userId: sc.owner_id, companyId: sc.id, companyBalance: updatedBal, company_balance_ib: updatedBal });
             this.io.to(sc.owner_id).emit('company:revenue', {
+              userId: sc.owner_id,
               companyId: sc.id,
               companyName: sc.name,
               amount: netAfterTax,
@@ -1274,6 +1357,7 @@ class MarketSimulationEngine {
             ]);
 
             this.io.to(sc.owner_id).emit('company:revenue', {
+              userId: sc.owner_id,
               companyId: sc.id,
               companyName: sc.name,
               amount: net,
@@ -1286,7 +1370,7 @@ class MarketSimulationEngine {
               isSub: true,
               message: `🚨 PERINGATAN INSOLVENSI: Perusahaan ${sc.name} resmi dinyatakan Bangkrut & Ditutup karena defisit kas mencapai -IB 50.000.000! Segera lakukan suntik modal penyelamatan atau pinjam bank.`
             });
-            this.io.emit('user:balance_updated', { userId: sc.owner_id, companyId: sc.id, companyBalance: BANKRUPTCY_LIMIT });
+            this.io.emit('user:balance_updated', { userId: sc.owner_id, companyId: sc.id, companyBalance: BANKRUPTCY_LIMIT, company_balance_ib: BANKRUPTCY_LIMIT });
           } else {
             await query.run('UPDATE companies SET company_balance_ib = ? WHERE id = ?', [candidateBal, sc.id]);
 
@@ -1303,6 +1387,7 @@ class MarketSimulationEngine {
             });
 
             this.io.to(sc.owner_id).emit('company:revenue', {
+              userId: sc.owner_id,
               companyId: sc.id,
               companyName: sc.name,
               amount: net,
@@ -1315,9 +1400,42 @@ class MarketSimulationEngine {
               deficitRemaining: Math.abs(BANKRUPTCY_LIMIT - candidateBal),
               isSub: true,
             });
-            this.io.emit('user:balance_updated', { userId: sc.owner_id, companyId: sc.id, companyBalance: candidateBal });
+            this.io.emit('user:balance_updated', { userId: sc.owner_id, companyId: sc.id, companyBalance: candidateBal, company_balance_ib: candidateBal });
           }
         }
+      }
+
+      // Commit seluruh pembaruan omzet bot dalam 1 transaksi atomik (<10ms!)
+      if (pendingBotUserUpdates.length > 0 || pendingBotCompUpdates.length > 0 || pendingBotTreasuryInserts.length > 0 || collectiveBotTaxIb > 0) {
+        await query.transaction(async (tx) => {
+          for (const uUpd of pendingBotUserUpdates) {
+            await tx.run('UPDATE users SET company_balance_ib = company_balance_ib + ? WHERE id = ?', uUpd);
+          }
+          for (const cUpd of pendingBotCompUpdates) {
+            await tx.run('UPDATE companies SET company_balance_ib = COALESCE(company_balance_ib, 0) + ? WHERE id = ?', cUpd);
+          }
+          for (const tIns of pendingBotTreasuryInserts) {
+            await tx.run(
+              'INSERT INTO state_treasury_ledger (id, source_type, title, amount_ib, direction, reference_id, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
+              tIns
+            );
+          }
+          if (collectiveBotTaxIb > 0) {
+            await tx.run(
+              'INSERT INTO state_treasury_ledger (id, source_type, title, amount_ib, direction, reference_id, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
+              [
+                uuidv4(),
+                'CORPORATE_TAX',
+                `Penerimaan Kolektif PPh Badan (${taxRatePct}%) - ${collectiveBotCompaniesCount} Emiten Bursa CFX`,
+                collectiveBotTaxIb,
+                'INCOME',
+                'CFX-EMITEN-BATCH',
+                `Setoran PPh Badan otomatis ${collectiveBotCompaniesCount} perusahaan Tbk. periode ${intervalDesc}`
+              ]
+            );
+          }
+        });
+        this.io.emit('treasury:updated');
       }
 
       // PILAR 1: Pembayaran Kupon Bunga Obligasi Negara Berkala
@@ -1339,7 +1457,7 @@ class MarketSimulationEngine {
         FROM user_bond_holdings h
         JOIN sovereign_bonds b ON h.bond_id = b.id
         JOIN users u ON h.user_id = u.id
-        WHERE h.status = 'ACTIVE' AND b.status IN ('OPEN', 'SOLD_OUT')
+        WHERE h.status = 'ACTIVE' AND b.status IN ('OPEN', 'SOLD_OUT') AND u.is_banned = 0
       `);
 
       if (!activeHoldings || activeHoldings.length === 0) return;
@@ -1370,6 +1488,7 @@ class MarketSimulationEngine {
           ]
         );
 
+        const nextBal = (h.balance_ib || 0) + couponPayout;
         this.io.emit('bonds:coupon_paid', {
           userId: h.user_id,
           bondCode: h.bond_code,
@@ -1378,7 +1497,9 @@ class MarketSimulationEngine {
         });
         this.io.emit('user:balance_updated', {
           userId: h.user_id,
-          balance: (h.balance_ib || 0) + couponPayout
+          newBalance: nextBal,
+          balance_ib: nextBal,
+          balance: nextBal
         });
       }
       this.io.emit('treasury:updated');
@@ -1387,54 +1508,96 @@ class MarketSimulationEngine {
     }
   }
 
-  // Distribute dividends into players' PERSONAL balance every 30 minutes (Lewati emiten disita)
+  // Distribute dividends into players' PERSONAL balance every 30 minutes (Lewati emiten disita & akun dibekukan!)
+  // Bulk single-query + batch transaction untuk bot (TANPA membanjiri tabel transactions & cash_flow_ledger dengan log bot!)
   async distributeDividends() {
     try {
-      const healthyCompanies = await query.all(
-        "SELECT * FROM companies WHERE status = 'HEALTHY' AND (is_seized = 0 OR is_seized IS NULL) AND dividend_rate > 0"
-      );
+      const dividendRows = await query.all(`
+        SELECT p.user_id, p.lots_owned,
+               u.balance_ib, u.username,
+               c.id as company_id, c.symbol, c.name, c.current_price, c.dividend_rate
+        FROM portfolios p
+        JOIN companies c ON p.company_id = c.id
+        JOIN users u ON p.user_id = u.id
+        WHERE c.status = 'HEALTHY'
+          AND (c.is_seized = 0 OR c.is_seized IS NULL)
+          AND c.dividend_rate > 0
+          AND p.lots_owned > 0
+          AND u.is_banned = 0
+      `);
 
-      for (const comp of healthyCompanies) {
-        const portfolios = await query.all(
-          'SELECT p.*, u.balance_ib, u.username FROM portfolios p JOIN users u ON p.user_id = u.id WHERE p.company_id = ? AND p.lots_owned > 0',
-          [comp.id]
+      if (!dividendRows || dividendRows.length === 0) return;
+
+      const botDividendTotals = new Map();
+      const realPlayerPayouts = [];
+
+      for (const row of dividendRows) {
+        const sharesOwned = row.lots_owned * 100;
+        const dividendPerShare = (row.current_price * row.dividend_rate * 0.10);
+        const totalDividend = Math.round(sharesOwned * dividendPerShare);
+        if (totalDividend <= 0) continue;
+
+        const isBotUser = String(row.user_id || '').startsWith('bot-user-') || String(row.user_id || '').startsWith('user-bot-');
+        if (isBotUser) {
+          botDividendTotals.set(row.user_id, (botDividendTotals.get(row.user_id) || 0) + totalDividend);
+        } else {
+          realPlayerPayouts.push({ ...row, dividendPerShare, totalDividend });
+        }
+      }
+
+      if (botDividendTotals.size > 0) {
+        await query.transaction(async (tx) => {
+          for (const [botId, sumDiv] of botDividendTotals.entries()) {
+            await tx.run('UPDATE users SET balance_ib = balance_ib + ? WHERE id = ?', [sumDiv, botId]);
+          }
+        });
+      }
+
+      const notifiedRealUsers = new Set();
+      for (const port of realPlayerPayouts) {
+        await query.run(
+          'UPDATE users SET balance_ib = balance_ib + ? WHERE id = ?',
+          [port.totalDividend, port.user_id]
+        );
+        const latestUser = await query.get('SELECT balance_ib, company_balance_ib FROM users WHERE id = ?', [port.user_id]);
+        const newBal = latestUser ? latestUser.balance_ib : ((port.balance_ib || 0) + port.totalDividend);
+
+        await query.run(
+          `INSERT INTO transactions (id, user_id, company_id, type, lots, price_per_share, total_amount, fee, status)
+           VALUES (?, ?, ?, 'DIVIDEND', ?, ?, ?, 0, 'COMPLETED')`,
+          [uuidv4(), port.user_id, port.company_id, port.lots_owned, port.dividendPerShare, port.totalDividend]
         );
 
-        for (const port of portfolios) {
-          const sharesOwned = port.lots_owned * 100;
-          const dividendPerShare = (comp.current_price * comp.dividend_rate * 0.10);
-          const totalDividend = Math.round(sharesOwned * dividendPerShare);
+        await recordCashFlow({
+          userId: port.user_id,
+          companyId: port.company_id,
+          accountType: 'PERSONAL',
+          category: 'DIVIDEND_INCOME',
+          title: `Dividen Tunai Saham ${port.symbol}`,
+          amountIb: port.totalDividend,
+          direction: 'INCOME',
+          balanceAfter: newBal,
+          notes: `Dividen tunai dari kepemilikan ${port.lots_owned.toLocaleString('id-ID')} Lot saham ${port.name}`
+        });
 
-          if (totalDividend > 0) {
-            await query.run(
-              'UPDATE users SET balance_ib = balance_ib + ? WHERE id = ?',
-              [totalDividend, port.user_id]
-            );
+        this.io.to(port.user_id).emit('user:dividend', {
+          symbol: port.symbol,
+          name: port.name,
+          amount: port.totalDividend,
+        });
+        notifiedRealUsers.add(port.user_id);
+      }
 
-            await query.run(
-              `INSERT INTO transactions (id, user_id, company_id, type, lots, price_per_share, total_amount, fee, status)
-               VALUES (?, ?, ?, 'DIVIDEND', ?, ?, ?, 0, 'COMPLETED')`,
-              [uuidv4(), port.user_id, comp.id, port.lots_owned, dividendPerShare, totalDividend]
-            );
-
-            await recordCashFlow({
-              userId: port.user_id,
-              companyId: comp.id,
-              accountType: 'PERSONAL',
-              category: 'DIVIDEND_INCOME',
-              title: `Dividen Tunai Saham ${comp.symbol}`,
-              amountIb: totalDividend,
-              direction: 'INCOME',
-              balanceAfter: (port.balance_ib || 0) + totalDividend,
-              notes: `Dividen tunai dari kepemilikan ${port.lots_owned.toLocaleString('id-ID')} Lot saham ${comp.name}`
-            });
-
-            this.io.to(port.user_id).emit('user:dividend', {
-              symbol: comp.symbol,
-              name: comp.name,
-              amount: totalDividend,
-            });
-          }
+      for (const realUid of notifiedRealUsers) {
+        const latestUser = await query.get('SELECT balance_ib, company_balance_ib FROM users WHERE id = ?', [realUid]);
+        if (latestUser) {
+          this.io.emit('user:balance_updated', {
+            userId: realUid,
+            newBalance: latestUser.balance_ib,
+            companyBalance: latestUser.company_balance_ib,
+            balance_ib: latestUser.balance_ib,
+            company_balance_ib: latestUser.company_balance_ib,
+          });
         }
       }
     } catch (err) {

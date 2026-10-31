@@ -324,13 +324,34 @@ class GameProvider extends ChangeNotifier {
         }
       },
       onBalanceUpdated: (data) {
-        if (data is Map && _user != null && data['userId'] == _user!.id) {
-          final double? nextPersonal = (data['newBalance'] as num?)?.toDouble();
-          final double? nextComp = (data['companyBalance'] as num?)?.toDouble();
+        if (data is Map && _user != null && (data['userId'] == null || data['userId'].toString() == _user!.id)) {
+          final rawPersonal = data['newBalance'] ?? data['balance_ib'] ?? data['balance'];
+          final rawComp = data['companyBalance'] ?? data['company_balance_ib'];
+          final double? nextPersonal = (rawPersonal is num) ? rawPersonal.toDouble() : double.tryParse(rawPersonal?.toString() ?? '');
+          final double? nextComp = (rawComp is num) ? rawComp.toDouble() : double.tryParse(rawComp?.toString() ?? '');
+          final int? nextCredit = (data['credit_score'] is num)
+              ? (data['credit_score'] as num).toInt()
+              : (data['creditScore'] is num ? (data['creditScore'] as num).toInt() : null);
+          final String? nextCreditTier = data['credit_tier']?.toString();
+          final String? nextRole = data['role']?.toString();
+          final String? nextPtNameRaw = (data['ptName'] ?? data['pt_name'])?.toString();
+          final String? nextSector = data['sector']?.toString();
           final String? targetCompId = data['companyId']?.toString();
           bool changed = false;
+
           if (nextPersonal != null) {
             _user = _user!.copyWith(balanceIb: nextPersonal);
+            changed = true;
+          }
+          if (nextCredit != null || nextCreditTier != null || nextRole != null || nextPtNameRaw != null || nextSector != null) {
+            final cleanPt = nextPtNameRaw?.replaceFirst(RegExp(r'^(PT\.?\s*)+', caseSensitive: false), '').trim();
+            _user = _user!.copyWith(
+              creditScore: nextCredit ?? _user!.creditScore,
+              creditTier: (nextCreditTier != null && nextCreditTier.isNotEmpty) ? nextCreditTier : _user!.creditTier,
+              role: (nextRole != null && nextRole.isNotEmpty) ? nextRole : _user!.role,
+              ptName: (cleanPt != null && cleanPt.isNotEmpty) ? cleanPt : _user!.ptName,
+              sector: (nextSector != null && nextSector.isNotEmpty) ? nextSector : _user!.sector,
+            );
             changed = true;
           }
           if (nextComp != null) {
@@ -419,6 +440,37 @@ class GameProvider extends ChangeNotifier {
         if (_user != null) {
           refreshPortfolio();
           fetchUserLoans();
+        }
+      },
+      onConglomerateUpdated: (data) {
+        if (_user != null) {
+          if (data is Map && data['userId'] != null && data['userId'].toString() != _user!.id) {
+            return;
+          }
+          unawaited(fetchConglomerate());
+          _scheduleSilentPortfolioSync();
+        }
+      },
+      onCompanyDeleted: (data) {
+        if (data is Map) {
+          final deletedId = data['companyId']?.toString();
+          if (deletedId != null && deletedId.isNotEmpty) {
+            _companies = _companies.where((c) => c.id != deletedId).toList();
+            _conglomerate = _conglomerate.where((e) => (e['companyDbId'] ?? e['id'])?.toString() != deletedId).toList();
+            notifyListeners();
+          }
+        }
+        _scheduleSilentPortfolioSync();
+      },
+      onMarketRefreshRequested: (_) {
+        unawaited(ApiService.getCompanies().then((list) {
+          if (list.isNotEmpty) {
+            _companies = list;
+            notifyListeners();
+          }
+        }));
+        if (_user != null) {
+          _scheduleSilentPortfolioSync(delay: const Duration(milliseconds: 1200));
         }
       },
     );
