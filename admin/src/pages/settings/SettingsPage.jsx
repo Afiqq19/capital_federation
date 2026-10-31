@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useAdmin } from '../../context/AdminContext';
 import Card, { CardHeader } from '../../components/ui/Card';
 import StatCard from '../../components/ui/StatCard';
@@ -86,6 +86,7 @@ export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState('fiscal');
   const [isSaving, setIsSaving] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
+  const isDirtyRef = useRef(false);
   const [backupSnapshots, setBackupSnapshots] = useState([]);
   const [isSnapshotting, setIsSnapshotting] = useState(false);
 
@@ -125,20 +126,24 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (settings && Object.keys(settings).length > 0) {
-      setForm((prev) => ({
-        ...prev,
-        ...settings,
-      }));
-      setIsDirty(false);
+      // PENTING: Jangan timpa input admin saat sedang mengetik (isDirty)
+      if (!isDirtyRef.current) {
+        setForm((prev) => ({
+          ...prev,
+          ...settings,
+        }));
+      }
     }
   }, [settings]);
 
   const handleChange = (key, value) => {
+    isDirtyRef.current = true;
     setForm((prev) => ({ ...prev, [key]: value }));
     setIsDirty(true);
   };
 
   const handlePreset = (presetName) => {
+    isDirtyRef.current = true;
     if (presetName === 'stimulus') {
       setForm((prev) => ({
         ...prev,
@@ -182,6 +187,7 @@ export default function SettingsPage() {
     setIsSaving(true);
     try {
       await actions.saveSettings(form);
+      isDirtyRef.current = false;
       setIsDirty(false);
     } finally {
       setIsSaving(false);
@@ -388,7 +394,14 @@ export default function SettingsPage() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-2 border-t border-slate-800/80">
                   <FormField
-                    label="Bea Meterai Digital Korporasi (IB)"
+                    label={
+                      <div className="flex items-center justify-between w-full">
+                        <span>Bea Meterai Digital Korporasi (IB)</span>
+                        <span className="text-[11px] font-mono font-bold text-sky-400 bg-sky-950/80 px-2 py-0.5 rounded border border-sky-800/60">
+                          IB {Number(form.stamp_duty_fee_ib || 0).toLocaleString('id-ID')}
+                        </span>
+                      </div>
+                    }
                     hint="Biaya pengesahan Akta Notaris Elektronik untuk setiap penandatanganan perjanjian saham P2P."
                   >
                     <Input
@@ -398,12 +411,19 @@ export default function SettingsPage() {
                       value={form.stamp_duty_fee_ib}
                       onChange={(e) => handleChange('stamp_duty_fee_ib', e.target.value)}
                       required
-                      className="font-mono"
+                      className="font-mono text-base font-bold text-slate-100"
                     />
                   </FormField>
 
                   <FormField
-                    label="Biaya Pendaftaran Gugatan PNAF (IB)"
+                    label={
+                      <div className="flex items-center justify-between w-full">
+                        <span>Biaya Pendaftaran Gugatan PNAF (IB)</span>
+                        <span className="text-[11px] font-mono font-bold text-amber-400 bg-amber-950/80 px-2 py-0.5 rounded border border-amber-800/60">
+                          IB {Number(form.pnk_filing_fee_ib || 0).toLocaleString('id-ID')}
+                        </span>
+                      </div>
+                    }
                     hint="Biaya pendaftaran perkara sengketa wanprestasi di Pengadilan Niaga Federasi yang disetor penggugat."
                   >
                     <Input
@@ -413,7 +433,7 @@ export default function SettingsPage() {
                       value={form.pnk_filing_fee_ib}
                       onChange={(e) => handleChange('pnk_filing_fee_ib', e.target.value)}
                       required
-                      className="font-mono"
+                      className="font-mono text-base font-bold text-slate-100"
                     />
                   </FormField>
                 </div>
@@ -507,7 +527,14 @@ export default function SettingsPage() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-2 border-t border-slate-800/80">
                   <FormField
-                    label="Batas Toleransi Defisit Pailit (IB)"
+                    label={
+                      <div className="flex items-center justify-between w-full">
+                        <span>Batas Toleransi Defisit Pailit (IB)</span>
+                        <span className="text-[11px] font-mono font-bold text-rose-400 bg-rose-950/80 px-2 py-0.5 rounded border border-rose-800/60">
+                          IB {Number(form.bankruptcy_limit_ib || 0).toLocaleString('id-ID')}
+                        </span>
+                      </div>
+                    }
                     hint="Batas maksimum saldo kas perusahaan minus. Jika kas PT tembus di bawah angka ini, PT dibekukan (PAILIT)."
                   >
                     <Input
@@ -521,7 +548,14 @@ export default function SettingsPage() {
                   </FormField>
 
                   <FormField
-                    label="Beban Operasional Dasar PT (IB / Siklus)"
+                    label={
+                      <div className="flex items-center justify-between w-full">
+                        <span>Beban Operasional Dasar PT (IB / Siklus)</span>
+                        <span className="text-[11px] font-mono font-bold text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800/60">
+                          IB {Number(form.base_operational_cost_ib || 0).toLocaleString('id-ID')}
+                        </span>
+                      </div>
+                    }
                     hint="Beban tetap pemeliharaan kantor, server, dan legalitas yang wajib dibayar PT tiap siklus waktu."
                   >
                     <Input
@@ -531,14 +565,21 @@ export default function SettingsPage() {
                       value={form.base_operational_cost_ib}
                       onChange={(e) => handleChange('base_operational_cost_ib', e.target.value)}
                       required
-                      className="font-mono text-slate-200"
+                      className="font-mono font-bold text-slate-100"
                     />
                   </FormField>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-5 pt-2 border-t border-slate-800/80">
                   <FormField
-                    label="Gaji Pegawai (IB / Kepala)"
+                    label={
+                      <div className="flex items-center justify-between w-full">
+                        <span>Gaji Pegawai (IB)</span>
+                        <span className="text-[11px] font-mono font-bold text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800/60">
+                          IB {Number(form.employee_salary_per_head_ib || 0).toLocaleString('id-ID')}
+                        </span>
+                      </div>
+                    }
                     hint="Beban upah per unit karyawan"
                   >
                     <Input
@@ -548,12 +589,19 @@ export default function SettingsPage() {
                       value={form.employee_salary_per_head_ib}
                       onChange={(e) => handleChange('employee_salary_per_head_ib', e.target.value)}
                       required
-                      className="font-mono"
+                      className="font-mono font-bold text-slate-100"
                     />
                   </FormField>
 
                   <FormField
-                    label="Biaya Pendirian PT (IB)"
+                    label={
+                      <div className="flex items-center justify-between w-full">
+                        <span>Biaya Pendirian PT (IB)</span>
+                        <span className="text-[11px] font-mono font-bold text-amber-400 bg-amber-950/80 px-2 py-0.5 rounded border border-amber-800/60">
+                          IB {Number(form.pt_establishment_cost_ib || 0).toLocaleString('id-ID')}
+                        </span>
+                      </div>
+                    }
                     hint="Modal setor awal saat dirikan PT"
                   >
                     <Input
@@ -563,12 +611,19 @@ export default function SettingsPage() {
                       value={form.pt_establishment_cost_ib}
                       onChange={(e) => handleChange('pt_establishment_cost_ib', e.target.value)}
                       required
-                      className="font-mono"
+                      className="font-mono font-bold text-slate-100"
                     />
                   </FormField>
 
                   <FormField
-                    label="Kas Saldo Awal PT (IB)"
+                    label={
+                      <div className="flex items-center justify-between w-full">
+                        <span>Kas Saldo Awal PT (IB)</span>
+                        <span className="text-[11px] font-mono font-bold text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800/60">
+                          IB {Number(form.initial_pt_cash_ib || 0).toLocaleString('id-ID')}
+                        </span>
+                      </div>
+                    }
                     hint="Saldo awal rekening PT baru"
                   >
                     <Input
@@ -578,7 +633,7 @@ export default function SettingsPage() {
                       value={form.initial_pt_cash_ib}
                       onChange={(e) => handleChange('initial_pt_cash_ib', e.target.value)}
                       required
-                      className="font-mono"
+                      className="font-mono font-bold text-slate-100"
                     />
                   </FormField>
                 </div>
@@ -661,7 +716,14 @@ export default function SettingsPage() {
                 </FormField>
 
                 <FormField
-                  label="Plafon Pinjaman Maksimum Per Debitur (IB)"
+                  label={
+                    <div className="flex items-center justify-between w-full">
+                      <span>Plafon Pinjaman Maksimum Per Debitur (IB)</span>
+                      <span className="text-[11px] font-mono font-bold text-sky-400 bg-sky-950/80 px-2 py-0.5 rounded border border-sky-800/60">
+                        IB {Number(form.max_loan_limit || 0).toLocaleString('id-ID')}
+                      </span>
+                    </div>
+                  }
                   hint="Batas tertinggi akumulasi fasilitas pinjaman kredit yang dapat disetujui untuk satu akun pemain."
                 >
                   <Input
@@ -832,7 +894,14 @@ export default function SettingsPage() {
               />
               <div className="space-y-4">
                 <FormField
-                  label="Modal Minimum Pengajuan E-IPO (IB)"
+                  label={
+                    <div className="flex items-center justify-between w-full">
+                      <span>Modal Minimum Pengajuan E-IPO (IB)</span>
+                      <span className="text-[11px] font-mono font-bold text-violet-400 bg-violet-950/80 px-2 py-0.5 rounded border border-violet-800/60">
+                        IB {Number(form.min_ipo_capital || 0).toLocaleString('id-ID')}
+                      </span>
+                    </div>
+                  }
                   hint="Kekayaan bersih / kas minimum yang wajib dimiliki konglomerat sebelum diizinkan menerbitkan prospektus IPO."
                 >
                   <Input
@@ -892,7 +961,14 @@ export default function SettingsPage() {
               />
               <div className="space-y-4">
                 <FormField
-                  label="Denda Pelanggaran Manipulasi Pasar (IB)"
+                  label={
+                    <div className="flex items-center justify-between w-full">
+                      <span>Denda Pelanggaran Manipulasi Pasar (IB)</span>
+                      <span className="text-[11px] font-mono font-bold text-rose-400 bg-rose-950/80 px-2 py-0.5 rounded border border-rose-800/60">
+                        IB {Number(form.market_manipulation_fine_ib || 0).toLocaleString('id-ID')}
+                      </span>
+                    </div>
+                  }
                   hint="Besaran denda ganti rugi yang diputuskan Hakim Pengadilan Niaga Federasi (PNAF) terhadap pelaku manipulasi saham atau insider trading."
                 >
                   <Input
@@ -1054,6 +1130,7 @@ export default function SettingsPage() {
               variant="outline"
               onClick={() => {
                 if (settings) setForm((prev) => ({ ...prev, ...settings }));
+                isDirtyRef.current = false;
                 setIsDirty(false);
               }}
               disabled={isSaving || !isDirty}

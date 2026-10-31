@@ -175,7 +175,17 @@ export default function WithdrawModal({ open, onClose, users, companies, treasur
         </div>
 
         {/* Custom Input */}
-        <FormField label="Nominal Pencairan (IB)" hint="Ketik nominal manual jika di luar preset">
+        <FormField
+          label={
+            <div className="flex items-center justify-between w-full">
+              <span>Nominal Pencairan (IB)</span>
+              <span className="text-[11px] font-mono font-bold text-amber-400 bg-amber-950/80 px-2 py-0.5 rounded border border-amber-800/60">
+                IB {Number(amountIb || 0).toLocaleString('id-ID')}
+              </span>
+            </div>
+          }
+          hint="Ketik nominal manual jika di luar preset"
+        >
           <Input
             type="number"
             min={1}
@@ -183,6 +193,7 @@ export default function WithdrawModal({ open, onClose, users, companies, treasur
             value={amountIb}
             onChange={(e) => setAmountIb(Number(e.target.value))}
             required
+            className="font-mono text-base font-bold text-slate-100"
           />
         </FormField>
 

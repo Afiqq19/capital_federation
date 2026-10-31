@@ -1362,6 +1362,13 @@ async function healRealPlayerCompanies() {
       SET pitch_notes = REPLACE(pitch_notes, '9 Naga', '12 Naga') 
       WHERE pitch_notes LIKE '%9 Naga%'
     `);
+
+    // 5. Normalisasi role VIP: Cabut role VIP dari bot & akun lain agar VIP strictly dikontrol Admin
+    await query.run(`
+      UPDATE users 
+      SET role = 'PLAYER' 
+      WHERE role = 'VIP' AND username != 'msyafiq19'
+    `);
   } catch (healErr) {
     console.error('Auto-healing error (non-fatal):', healErr.message);
   }

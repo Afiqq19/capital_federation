@@ -382,7 +382,7 @@ const BOT_ROSTER_1050 = NATURAL_USERNAMES.map((name, idx) => {
     rd_level = 10 + (12 - idx);
     employees_count = 200 + ((12 - idx) * 35);
     is_blue_chip = 1;
-    role = 'VIP';
+    role = 'PLAYER';
   } else if (isTaipan) {
     // TAIPAN (13-35): Konglomerat Mapan (Miliaran IB, R&D Level 6-9, Staff 60-150)
     balance_ib = (3.0 + (35 - idx) * 0.45) * 1000000000.0;
@@ -391,7 +391,7 @@ const BOT_ROSTER_1050 = NATURAL_USERNAMES.map((name, idx) => {
     rd_level = 6 + ((35 - idx) % 4);
     employees_count = 60 + ((35 - idx) * 4);
     is_blue_chip = idx < 25 ? 1 : 0;
-    role = idx < 25 ? 'VIP' : 'PLAYER';
+    role = 'PLAYER';
   } else if (isMid) {
     // Konglomerat Menengah (36-150): 400 Juta - 2.5 Miliar IB
     balance_ib = (400 + (150 - idx) * 14) * 1000000.0;

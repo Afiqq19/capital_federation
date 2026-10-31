@@ -34,7 +34,7 @@ export default function EditUserModal({ open, onClose, user, onConfirm }) {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (user) {
+    if (user && open) {
       setBalance(String(user.balance_ib ?? user.cash_balance_ib ?? 0));
       setCompanyBalance(String(user.company_balance_ib ?? 0));
       setCreditScore(user.credit_score ?? 700);
@@ -43,7 +43,7 @@ export default function EditUserModal({ open, onClose, user, onConfirm }) {
       setPtName(user.pt_name ?? '');
       setSector(user.sector || 'Teknologi');
     }
-  }, [user]);
+  }, [user?.id, open]);
 
   if (!user) return null;
 
@@ -89,21 +89,43 @@ export default function EditUserModal({ open, onClose, user, onConfirm }) {
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
-          <FormField label="Saldo Kas Pribadi (IB)" hint="Uang likuid cair di rekening pribadi">
+          <FormField
+            label={
+              <div className="flex items-center justify-between w-full">
+                <span>Saldo Kas Pribadi (IB)</span>
+                <span className="text-[11px] font-mono font-bold text-emerald-400 bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-800/60">
+                  IB {Number(balance || 0).toLocaleString('id-ID')}
+                </span>
+              </div>
+            }
+            hint="Uang likuid cair di rekening pribadi"
+          >
             <Input
               type="number"
               value={balance}
               onChange={(e) => setBalance(e.target.value)}
               required
+              className="font-mono text-base font-bold text-slate-100"
             />
           </FormField>
 
-          <FormField label="Kas PT Utama (IB)" hint="Saldo brankas kas operasional PT">
+          <FormField
+            label={
+              <div className="flex items-center justify-between w-full">
+                <span>Kas PT Utama (IB)</span>
+                <span className="text-[11px] font-mono font-bold text-sky-400 bg-sky-950/80 px-1.5 py-0.5 rounded border border-sky-800/60">
+                  IB {Number(companyBalance || 0).toLocaleString('id-ID')}
+                </span>
+              </div>
+            }
+            hint="Saldo brankas kas operasional PT"
+          >
             <Input
               type="number"
               value={companyBalance}
               onChange={(e) => setCompanyBalance(e.target.value)}
               required
+              className="font-mono text-base font-bold text-slate-100"
             />
           </FormField>
         </div>

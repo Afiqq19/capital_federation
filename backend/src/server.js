@@ -5695,7 +5695,7 @@ async function getUserRankMap() {
   const map = new Map();
   computed.forEach((r, idx) => {
     const rank = idx + 1;
-    const isVipUser = String(r.role || '').toUpperCase() === 'VIP' || Boolean(r.is_blue_chip);
+    const isVipUser = String(r.role || '').toUpperCase() === 'VIP';
     let badge = 'REGULER';
     if (rank <= 12) badge = '12 NAGA';
     else if (rank <= 35) badge = 'TAIPAN';
@@ -5704,7 +5704,7 @@ async function getUserRankMap() {
       rank,
       role: r.role,
       isBlueChip: Boolean(r.is_blue_chip),
-      isVip: isVipUser || rank <= 12,
+      isVip: isVipUser,
       badge,
       netWorth: r.netWorth,
       syncedCompCash: r.syncedCompCash,
@@ -5764,7 +5764,7 @@ app.get('/api/leaderboard', async (req, res) => {
     enriched.sort((a, b) => b.netWorth - a.netWorth);
 
     const leaderboard = enriched.slice(0, 100).map((u, index) => {
-      const isVipUser = String(u.role || '').toUpperCase() === 'VIP' || Boolean(u.is_blue_chip);
+      const isVipUser = String(u.role || '').toUpperCase() === 'VIP';
       let badge = 'REGULER';
       if (index < 12) badge = '12 NAGA';
       else if (index < 35) badge = 'TAIPAN';
@@ -5783,7 +5783,7 @@ app.get('/api/leaderboard', async (req, res) => {
         companyCash: u.syncedCompanyCash,
         stockValuation: Number(u.stock_valuation || 0),
         activeLoanDebt: Number(u.active_loan_debt || 0),
-        isVip: isVipUser || index < 12,
+        isVip: isVipUser,
         badge
       };
     });
@@ -5815,7 +5815,7 @@ app.get('/api/user/public-profile/:userId', async (req, res) => {
     const rankMap = await getUserRankMap();
     const rankInfo = rankMap.get(user.id) || { rank: 999 };
     const rank = rankInfo.rank;
-    const isVipUser = String(user.role || '').toUpperCase() === 'VIP' || Boolean(user.is_blue_chip);
+    const isVipUser = String(user.role || '').toUpperCase() === 'VIP';
     let badge = 'REGULER';
     if (user.is_banned) badge = 'DIBEKUKAN';
     else if (rank <= 12) badge = '12 NAGA';
@@ -5923,7 +5923,7 @@ app.get('/api/user/public-profile/:userId', async (req, res) => {
       rank,
       badge,
       isBanned: Boolean(user.is_banned),
-      isVip: isVipUser || rank <= 12,
+      isVip: isVipUser,
       is12Naga: rank <= 12,
       is9Naga: rank <= 12,
       isTaipan: rank > 12 && rank <= 35,
@@ -6399,7 +6399,7 @@ app.get('/api/admin/users', async (req, res) => {
 
       const rankInfo = rankMap.get(u.id);
       const userRank = u.is_banned ? 9999 : (rankInfo ? rankInfo.rank : 999);
-      const isVipUser = String(u.role || '').toUpperCase() === 'VIP' || Boolean(u.is_blue_chip) || (!u.is_banned && userRank <= 12);
+      const isVipUser = String(u.role || '').toUpperCase() === 'VIP';
       let badge = 'REGULER';
       if (u.is_banned) badge = 'DIBEKUKAN';
       else if (userRank <= 12) badge = '12 NAGA';
