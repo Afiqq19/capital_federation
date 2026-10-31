@@ -6135,7 +6135,7 @@ app.get('/api/admin/users', async (req, res) => {
     const [rankMap, rawUsers, allCompanies, allPortfolios, majorityShareholders, activeLoans] = await Promise.all([
       getUserRankMap(),
       query.all(`
-        SELECT id, username, name, email, role, pt_name, pt_symbol, sector, has_pt, is_ipo,
+        SELECT id, username, email, role, pt_name, pt_symbol, sector, has_pt, is_ipo,
                balance_ib, company_balance_ib, pt_level, rd_level, credit_score, credit_tier,
                is_blue_chip, is_banned, created_at
         FROM users
