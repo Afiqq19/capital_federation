@@ -383,6 +383,16 @@ class _AssetExchangeTabState extends State<AssetExchangeTab> with SingleTickerPr
                     children: [
                       Expanded(
                         child: _buildTierOption(
+                          title: '20% Masuk',
+                          sub: 'Dewan Komisaris',
+                          selected: percentage == 20,
+                          color: const Color(0xFF818CF8),
+                          onTap: () => setSheetState(() => percentage = 20),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _buildTierOption(
                           title: '51% Kendali',
                           sub: 'Mayoritas RUPS',
                           selected: percentage == 51,
@@ -390,7 +400,11 @@ class _AssetExchangeTabState extends State<AssetExchangeTab> with SingleTickerPr
                           onTap: () => setSheetState(() => percentage = 51),
                         ),
                       ),
-                      const SizedBox(width: 6),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
                       Expanded(
                         child: _buildTierOption(
                           title: '75% Kuorum',
@@ -400,11 +414,11 @@ class _AssetExchangeTabState extends State<AssetExchangeTab> with SingleTickerPr
                           onTap: () => setSheetState(() => percentage = 75),
                         ),
                       ),
-                      const SizedBox(width: 6),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: _buildTierOption(
                           title: '100% Penuh',
-                          sub: 'Go-Private / Delist',
+                          sub: 'Privatisasi Total',
                           selected: percentage == 100,
                           color: const Color(0xFF10B981),
                           onTap: () => setSheetState(() => percentage = 100),
@@ -413,16 +427,22 @@ class _AssetExchangeTabState extends State<AssetExchangeTab> with SingleTickerPr
                     ],
                   ),
                   Slider(
-                    min: 51,
+                    min: 20,
                     max: 100,
-                    divisions: 49,
-                    value: percentage.toDouble(),
-                    activeColor: const Color(0xFF38BDF8),
+                    divisions: 80,
+                    value: percentage.toDouble().clamp(20.0, 100.0),
+                    activeColor: percentage < 50
+                        ? const Color(0xFF818CF8)
+                        : (percentage < 75
+                            ? const Color(0xFF38BDF8)
+                            : (percentage < 100
+                                ? const Color(0xFFF59E0B)
+                                : const Color(0xFF10B981))),
                     inactiveColor: const Color(0xFF1E293B),
                     onChanged: (val) => setSheetState(() => percentage = val.round()),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                     decoration: BoxDecoration(
                       color: const Color(0xFF070B14),
                       borderRadius: BorderRadius.circular(8),
@@ -430,8 +450,12 @@ class _AssetExchangeTabState extends State<AssetExchangeTab> with SingleTickerPr
                     ),
                     child: Text(
                       percentage == 100
-                          ? '🏛️ Status 100%: Seluruh saham Pendiri dan Publik/Ritel diborong. Emiten beralih menjadi 100% PT Tertutup Swasta.'
-                          : '⚖️ Status $percentage%: Anda memegang kendali mayoritas perseroan, menempatkan direksi, dan menyerap kas dividen holding.',
+                          ? '🏛️ Status 100%: Seluruh saham Pendiri dan Publik diborong. Emiten beralih menjadi 100% PT Tertutup Swasta.'
+                          : percentage >= 75
+                              ? '🛡️ Status $percentage%: Anda memegang hak veto kuorum absolut RUPS dan kendali kebijakan strategis perseroan.'
+                              : percentage >= 50
+                                  ? '⚖️ Status $percentage%: Anda memegang kendali mayoritas perseroan (Anak Usaha Holding), menempatkan direksi, dan menyerap dividen.'
+                                  : '💼 Status $percentage%: Anda masuk sebagai Investor Strategis Dewan Komisaris. Pendiri tetap mengelola perseroan, dan Anda berhak atas dividen rutin.',
                       style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10, height: 1.3),
                     ),
                   ),

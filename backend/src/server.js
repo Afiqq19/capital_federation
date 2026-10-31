@@ -4756,18 +4756,31 @@ async function executeApprovedAcquisition({
   io.emit('treasury:updated');
 
   // 3. Update Status & Kepemilikan Perusahaan
-  await query.run(`
-    UPDATE companies 
-    SET status = 'HEALTHY', 
-        owner_id = ?, 
-        founder_name = ?,
-        is_acquired = 1, 
-        dividend_rate = 0.05,
-        fundamental_score = CASE WHEN fundamental_score < 78 THEN 82.0 ELSE fundamental_score END,
-        uma_flag = 0,
-        is_seized = 0
-    WHERE id = ?
-  `, [userId, buyerUser.username, companyId]);
+  if (pct >= 50.0) {
+    await query.run(`
+      UPDATE companies 
+      SET status = 'HEALTHY', 
+          owner_id = ?, 
+          founder_name = ?,
+          is_acquired = 1, 
+          dividend_rate = 0.05,
+          fundamental_score = CASE WHEN fundamental_score < 78 THEN 82.0 ELSE fundamental_score END,
+          uma_flag = 0,
+          is_seized = 0
+      WHERE id = ?
+    `, [userId, buyerUser.username, companyId]);
+  } else {
+    // Akuisisi Minoritas / Kemitraan Strategis (< 50%): Pendiri asli tetap pemilik utama, fundamental perseroan naik
+    await query.run(`
+      UPDATE companies 
+      SET status = 'HEALTHY', 
+          dividend_rate = 0.05,
+          fundamental_score = CASE WHEN fundamental_score < 75 THEN 80.0 ELSE fundamental_score END,
+          uma_flag = 0,
+          is_seized = 0
+      WHERE id = ?
+    `, [companyId]);
+  }
 
   // 4. Sinkronisasi Data Saham Pendiri & Perhitungan Sisa Persentase
   const prevFounderRow = await query.get(`
@@ -4800,8 +4813,8 @@ async function executeApprovedAcquisition({
     await query.run('UPDATE users SET founder_shares_sold = COALESCE(founder_shares_sold, 0) + ? WHERE id = ?', [pct, sellerUserId]);
     await query.run('UPDATE companies SET founder_shares_sold = COALESCE(founder_shares_sold, 0) + ? WHERE id = ?', [pct, companyId]);
 
-    // SUKSESI PT UTAMA: Jika pembeli mengakuisisi mayoritas (>= 50%) dan penjual kehilangan kendali:
-    if (pct >= 50.0 || remainingFounderPct < 50.0) {
+    // SUKSESI PT UTAMA: Hanya jika pembeli mengakuisisi mayoritas (>= 50%) dan penjual kehilangan kendali:
+    if (pct >= 50.0) {
       const sellerUserRow = await query.get('SELECT * FROM users WHERE id = ?', [sellerUserId]);
       const isSellingPrimary = (sellerUserRow && (sellerUserRow.pt_symbol === company.symbol || sellerUserRow.pt_name === company.name));
 
@@ -4871,25 +4884,50 @@ async function executeApprovedAcquisition({
 
   const totalShares = company.total_shares || 10000000;
   const newShareholders = [];
-  newShareholders.push({
-    id: uuidv4(),
-    company_id: companyId,
-    holder_name: `${buyerUser.username} (Pemegang Saham Pengendali Baru)`,
-    holder_type: 'FOUNDER',
-    shares_count: sharesTransferred,
-    percentage: pct,
-    user_id: userId
-  });
-
-  if (remainingFounderPct > 0) {
+  if (pct >= 50.0) {
     newShareholders.push({
       id: uuidv4(),
       company_id: companyId,
-      holder_name: `${sellerName} (Pendiri Lama)`,
-      holder_type: 'CO_FOUNDER',
-      shares_count: Math.round(totalShares * (remainingFounderPct / 100.0)),
-      percentage: remainingFounderPct,
-      user_id: sellerUserId !== 'consortium-trustee' ? sellerUserId : null
+      holder_name: `${buyerUser.username} (Pemegang Saham Pengendali Baru)`,
+      holder_type: 'FOUNDER',
+      shares_count: sharesTransferred,
+      percentage: pct,
+      user_id: userId
+    });
+
+    if (remainingFounderPct > 0) {
+      newShareholders.push({
+        id: uuidv4(),
+        company_id: companyId,
+        holder_name: `${sellerName} (Pendiri Lama)`,
+        holder_type: 'CO_FOUNDER',
+        shares_count: Math.round(totalShares * (remainingFounderPct / 100.0)),
+        percentage: remainingFounderPct,
+        user_id: sellerUserId !== 'consortium-trustee' ? sellerUserId : null
+      });
+    }
+  } else {
+    // Akuisisi Minoritas (< 50%): Pendiri asli tetap Pendiri & Pengendali
+    if (remainingFounderPct > 0) {
+      newShareholders.push({
+        id: uuidv4(),
+        company_id: companyId,
+        holder_name: `${sellerName} (Pendiri & Pemegang Saham Utama)`,
+        holder_type: 'FOUNDER',
+        shares_count: Math.round(totalShares * (remainingFounderPct / 100.0)),
+        percentage: remainingFounderPct,
+        user_id: sellerUserId !== 'consortium-trustee' ? sellerUserId : null
+      });
+    }
+
+    newShareholders.push({
+      id: uuidv4(),
+      company_id: companyId,
+      holder_name: `${buyerUser.username} (Investor Strategis Dewan Komisaris)`,
+      holder_type: 'INSTITUTION',
+      shares_count: sharesTransferred,
+      percentage: pct,
+      user_id: userId
     });
   }
 
@@ -4973,10 +5011,15 @@ async function executeApprovedAcquisition({
     simulationEngine.setStockTrend(company.symbol, 12.0);
   }
 
+  const isMajority = pct >= 50.0;
   const newsItem = {
     id: uuidv4(),
-    title: `🏢 AKUISISI DISETUJUI PENDIRI: ${buyerUser.username} Resmi Mengakuisisi ${pct}% Saham ${company.name} (${company.symbol})!`,
-    content: `Pendiri & Pemegang Saham Terbesar (${sellerName}) resmi menandatangani persetujuan RUPS Luar Biasa senilai IB ${rawAcquisitionPrice.toLocaleString('id-ID')}. Akta Notaris No. ${deedNumber} telah disahkan!`,
+    title: isMajority
+      ? `🏢 AKUISISI DISETUJUI PENDIRI: ${buyerUser.username} Resmi Mengakuisisi ${pct}% Saham Pengendali ${company.name} (${company.symbol})!`
+      : `💼 INVESTASI STRATEGIS: ${buyerUser.username} Resmi Masuk Sebagai Pemegang Saham ${pct}% ${company.name} (${company.symbol})!`,
+    content: isMajority
+      ? `Pendiri & Pemegang Saham Terbesar (${sellerName}) resmi menandatangani persetujuan RUPS Luar Biasa senilai IB ${rawAcquisitionPrice.toLocaleString('id-ID')}. Perusahaan kini menjadi anak usaha konglomerasi @${buyerUser.username}. Akta Notaris No. ${deedNumber} telah disahkan!`
+      : `Pendiri & Pemegang Saham Terbesar (${sellerName}) menyambut baik masuknya @${buyerUser.username} sebagai Investor Strategis Dewan Komisaris (${pct}% Saham) senilai IB ${rawAcquisitionPrice.toLocaleString('id-ID')}. Akta Notaris No. ${deedNumber} telah disahkan!`,
     affected_sector: company.sector,
     sentiment: 'BULLISH',
     published_at: new Date().toISOString()
@@ -5034,7 +5077,7 @@ app.post('/api/takeover/negotiate', async (req, res) => {
       return res.status(400).json({ error: 'Anda sudah menjadi Pemilik / Pemegang Saham Pengendali emiten ini!' });
     }
 
-    const pct = Math.max(51, Math.min(100, parseInt(percentageOffer, 10) || 51));
+    const pct = Math.max(20, Math.min(100, parseInt(percentageOffer, 10) || 20));
     const totalValuation = (company.total_shares || 10000000) * company.current_price;
 
     let discountFactor = 0.70; // Default RESCUE_30 (-30% Diskon Penyelamatan)
@@ -5106,7 +5149,9 @@ app.post('/api/takeover/negotiate', async (req, res) => {
     const acquiredLots = Math.round(((company.total_shares || 10000000) * (pct / 100.0)) / 100);
     const avgPrice = Math.max(50, Math.round(company.current_price * discountFactor));
     const proposalId = uuidv4();
-    const cleanPitch = (pitchNotes || '').trim() || `Proposal akuisisi ${pct}% saham pengendali & injeksi restrukturisasi perseroan ${company.name}.`;
+    const cleanPitch = (pitchNotes || '').trim() || (pct >= 50
+      ? `Proposal akuisisi ${pct}% saham pengendali & restrukturisasi konglomerasi ${company.name}.`
+      : `Proposal investasi strategis ${pct}% saham (Dewan Komisaris) & penguatan permodalan ${company.name}.`);
 
     // JIKA PENDIRI ADALAH PEMAIN ASLI (BUKAN BOT): Masuk antrean Persetujuan Pendiri (PENDING_FOUNDER)!
     if (!isBotFounder) {
@@ -5152,7 +5197,9 @@ app.post('/api/takeover/negotiate', async (req, res) => {
     }
 
     // JIKA PENDIRI ADALAH BOT PEMILIK PT: Pendiri mengevaluasi & menandatangani Persetujuan RUPS Luar Biasa!
-    const founderApprovalNote = `Selaku Pendiri & Pemegang Saham Terbesar (${founderSharePct}% Hak Suara) ${company.name}, saya (@${sellerName}) menyetujui proposal akuisisi & restrukturisasi dari @${user.username} sebesar ${pct}% saham pengendali.`;
+    const founderApprovalNote = pct >= 50.0
+      ? `Selaku Pendiri & Pemegang Saham Terbesar (${founderSharePct}% Hak Suara) ${company.name}, saya (@${sellerName}) menyetujui proposal akuisisi & restrukturisasi dari @${user.username} sebesar ${pct}% saham pengendali.`
+      : `Selaku Pendiri & Pemegang Saham Terbesar (${founderSharePct}% Hak Suara) ${company.name}, saya (@${sellerName}) menyambut baik kemitraan strategis dengan @${user.username} sebesar ${pct}% saham (Dewan Komisaris).`;
 
     await query.run(`
       INSERT INTO acquisition_proposals (
@@ -5189,7 +5236,9 @@ app.post('/api/takeover/negotiate', async (req, res) => {
     res.json({
       success: true,
       pendingFounderApproval: false,
-      message: `Disetujui Pendiri (@${sellerName})! Sukses mengakuisisi ${pct}% saham pengendali ${company.name}!`,
+      message: pct >= 50.0
+        ? `Disetujui Pendiri (@${sellerName})! Sukses mengakuisisi ${pct}% saham pengendali ${company.name}!`
+        : `Disetujui Pendiri (@${sellerName})! Sukses masuk sebagai Investor Strategis Dewan Komisaris (${pct}% saham) ${company.name}!`,
       founderApproval: {
         founder_username: sellerName,
         founder_share_pct: founderSharePct,
@@ -5214,7 +5263,7 @@ app.get('/api/takeover/proposals', async (req, res) => {
     if (!userId) return res.json({ incoming: [], outgoing: [] });
 
     // Jika pemain memiliki PT sendiri dan belum pernah menerima tawaran akuisisi dari Konglomerat Bot,
-    // buatkan 1 tawaran akuisisi masuk (Incoming Offer) dari Sultan 9 Naga agar pemain bisa merasakan menyetujui/menolak sebagai Pendiri!
+    // buatkan 1 tawaran akuisisi masuk (Incoming Offer) dari Sultan 12 Naga agar pemain bisa merasakan menyetujui/menolak sebagai Pendiri!
     const userOwnedComp = await query.get('SELECT * FROM companies WHERE owner_id = ? LIMIT 1', [userId]);
     if (userOwnedComp) {
       const existingIncoming = await query.get(
@@ -5251,7 +5300,7 @@ app.get('/api/takeover/proposals', async (req, res) => {
           premiumPrice,
           rawOfferIb,
           rawOfferIb + 50000,
-          `Konsorsium Holding 9 Naga (@haziq) menawarkan Premi +15% di atas harga pasar untuk mengakuisisi 51% saham pengendali ${userOwnedComp.name}. Membutuhkan persetujuan Anda selaku Pendiri & Pemegang Saham Terbesar.`
+          `Konsorsium Holding 12 Naga (@haziq) menawarkan Premi +15% di atas harga pasar untuk mengakuisisi 51% saham pengendali ${userOwnedComp.name}. Membutuhkan persetujuan Anda selaku Pendiri & Pemegang Saham Terbesar.`
         ]);
       }
     }

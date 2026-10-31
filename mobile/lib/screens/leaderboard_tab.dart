@@ -102,7 +102,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> with SingleTickerProvid
     }
     final currentUser = provider.user;
 
-    // Lookup map dari leaderboard untuk mendeteksi rank 9 Naga & VIP secara live di Chat
+    // Lookup map dari leaderboard untuk mendeteksi rank 12 Naga & VIP secara live di Chat
     final Map<String, Map<String, dynamic>> rankByUser = {};
     final Map<String, Map<String, dynamic>> rankByUsername = {};
     int? myRank;
@@ -439,7 +439,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> with SingleTickerProvid
                         ),
 
                   // ============================================
-                  // TAB 2: GLOBAL CHAT BURSA (SULTAN 9 NAGA & VIP)
+                  // TAB 2: GLOBAL CHAT BURSA (SULTAN 12 NAGA & VIP)
                   // ============================================
                   Column(
                     children: [
@@ -520,7 +520,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> with SingleTickerProvid
                                   final String timeStr =
                                       '${msg.createdAt.hour.toString().padLeft(2, '0')}:${msg.createdAt.minute.toString().padLeft(2, '0')}';
 
-                                  // Styling berdasarkan kasta: 9 NAGA > VIP SULTAN > BANK SENTRAL > TAIPAN > REGULER
+                                  // Styling berdasarkan kasta: 12 NAGA > VIP SULTAN > BANK SENTRAL > TAIPAN > REGULER
                                   Gradient? cardGradient;
                                   Color cardBg = const Color(0xFF0F172A);
                                   Color borderColor = const Color(0xFF1E293B);

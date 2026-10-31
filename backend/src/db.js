@@ -1355,6 +1355,13 @@ async function healRealPlayerCompanies() {
         );
       }
     }
+
+    // 4. Migrasi otomatis seluruh teks legacy '9 Naga' di proposal akuisisi menjadi '12 Naga'
+    await query.run(`
+      UPDATE acquisition_proposals 
+      SET pitch_notes = REPLACE(pitch_notes, '9 Naga', '12 Naga') 
+      WHERE pitch_notes LIKE '%9 Naga%'
+    `);
   } catch (healErr) {
     console.error('Auto-healing error (non-fatal):', healErr.message);
   }
