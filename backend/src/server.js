@@ -6125,17 +6125,19 @@ app.post('/api/admin/bots/freeze-bulk', async (req, res) => {
   }
 });
 
-// Admin Users: Data Lengkap Konglomerat & Seluruh Aset — O(1) Bulk Parallel Join (<25ms instead of 17,710ms!)
+// Admin Users: Data Lengkap Konglomerat & Seluruh Aset — O(1) Bulk Parallel Join (<50ms response!)
 app.get('/api/admin/users', async (req, res) => {
   try {
-    if (_adminUsersCache.data && (Date.now() - _adminUsersCache.ts) < 2500) {
+    if (_adminUsersCache.data && (Date.now() - _adminUsersCache.ts) < 5000) {
       return res.json(_adminUsersCache.data);
     }
 
     const [rankMap, rawUsers, allCompanies, allPortfolios, majorityShareholders, activeLoans] = await Promise.all([
       getUserRankMap(),
       query.all(`
-        SELECT *
+        SELECT id, username, name, email, role, pt_name, pt_symbol, sector, has_pt, is_ipo,
+               balance_ib, company_balance_ib, pt_level, rd_level, credit_score, credit_tier,
+               is_blue_chip, is_banned, created_at
         FROM users
         WHERE role != 'ADMIN'
         ORDER BY CASE WHEN id NOT LIKE 'bot-user-%' AND id NOT LIKE 'user-bot-%' THEN 0 ELSE 1 END ASC,
@@ -6377,7 +6379,7 @@ app.get('/api/admin/users', async (req, res) => {
         active_loan_debt: totalActiveDebt,
         net_worth: netWorth,
         companies_owned: companiesOwned,
-        stock_portfolios: stockPortfolios,
+        stock_portfolios: isBotAccount ? stockPortfolios.slice(0, 3) : stockPortfolios,
         active_loan: loanDetails,
       });
     }
