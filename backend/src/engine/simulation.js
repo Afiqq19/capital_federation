@@ -41,6 +41,75 @@ class MarketSimulationEngine {
     this.stockTrends = new Map();
     this.activeBotsCache = [];
     this.activeBotsCacheTs = 0;
+
+    // High-performance In-Memory price cache & batch flusher
+    this.liveCompanyMap = new Map(); // id -> company data
+    this.pendingPriceUpdates = new Map(); // id -> [newPrice, dailyHigh, dailyLow, id]
+    this.pendingHistoryInserts = [];
+    this.lastPriceFlushTs = Date.now();
+    this.cachedActiveEvents = null;
+    this.cachedRecentNews = null;
+    this.cachedIsAutoIntervention = false;
+    this.hasOpenOrders = true; // start true to check on first cycle
+    this.hasActiveIpos = true;
+  }
+
+  getLivePrice(companyId) {
+    if (!companyId) return null;
+    const comp = this.liveCompanyMap.get(companyId);
+    if (comp && comp.current_price) {
+      return comp.current_price;
+    }
+    const pending = this.pendingPriceUpdates.get(companyId);
+    if (pending && pending[0]) {
+      return pending[0];
+    }
+    return null;
+  }
+
+  getLiveCompany(companyId) {
+    if (!companyId) return null;
+    return this.liveCompanyMap.get(companyId) || null;
+  }
+
+  notifyNewOrder() {
+    this.hasOpenOrders = true;
+  }
+
+  notifyIpoChange() {
+    this.hasActiveIpos = true;
+  }
+
+  async flushPendingPrices() {
+    if (this.pendingPriceUpdates.size === 0 && this.pendingHistoryInserts.length === 0) {
+      return;
+    }
+    const updates = Array.from(this.pendingPriceUpdates.values());
+    const histories = [...this.pendingHistoryInserts];
+    this.pendingPriceUpdates.clear();
+    this.pendingHistoryInserts = [];
+    this.lastPriceFlushTs = Date.now();
+
+    try {
+      const shouldPruneHistory = this.tickCount % 150 === 0;
+      await query.transaction(async (tx) => {
+        for (const p of updates) {
+          await tx.run('UPDATE companies SET current_price = ?, daily_high = ?, daily_low = ? WHERE id = ?', p);
+        }
+        for (const h of histories) {
+          await tx.run(
+            `INSERT INTO price_history (id, company_id, price, open, close, high, low, volume, timestamp)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            h
+          );
+        }
+        if (shouldPruneHistory) {
+          await tx.run("DELETE FROM price_history WHERE timestamp < datetime('now', '-2 days')");
+        }
+      });
+    } catch (err) {
+      console.error('Error flushing pending stock prices to SQLite:', err.message);
+    }
   }
 
   setStockTrend(symbolOrId, trendBoost = 0) {
@@ -287,27 +356,43 @@ class MarketSimulationEngine {
   async tick() {
     this.tickCount++;
     try {
-      if (this.tickCount % 15 === 1) {
-        await query.run(`
-          UPDATE macro_events
-          SET active = 0
-          WHERE active = 1
-            AND started_at IS NOT NULL
-            AND (strftime('%s', 'now') - strftime('%s', started_at)) > COALESCE(NULLIF(duration_seconds, 0), 1800)
-        `).catch(() => {});
+      // 1. Cache macro_events, news, and central bank settings for 32 seconds (8 ticks)
+      if (this.tickCount % 8 === 1 || !this.cachedActiveEvents) {
+        if (this.tickCount % 16 === 1) {
+          await query.run(`
+            UPDATE macro_events
+            SET active = 0
+            WHERE active = 1
+              AND started_at IS NOT NULL
+              AND (strftime('%s', 'now') - strftime('%s', started_at)) > COALESCE(NULLIF(duration_seconds, 0), 1800)
+          `).catch(() => {});
+        }
+        this.cachedActiveEvents = await query.all('SELECT * FROM macro_events WHERE active = 1 ORDER BY started_at DESC LIMIT 3');
+        this.cachedRecentNews = await query.all('SELECT * FROM news ORDER BY published_at DESC LIMIT 3');
+        const interventionSetting = await query.get(
+          "SELECT value FROM central_bank_settings WHERE key = 'bot_auto_intervention'"
+        );
+        this.cachedIsAutoIntervention = interventionSetting?.value === 'true';
       }
-      const activeEvents = await query.all('SELECT * FROM macro_events WHERE active = 1 ORDER BY started_at DESC LIMIT 3');
-      const recentNews = await query.all('SELECT * FROM news ORDER BY published_at DESC LIMIT 3');
+      const activeEvents = this.cachedActiveEvents || [];
+      const recentNews = this.cachedRecentNews || [];
+      const isAutoIntervention = !!this.cachedIsAutoIntervention;
 
-      const interventionSetting = await query.get(
-        "SELECT value FROM central_bank_settings WHERE key = 'bot_auto_intervention'"
-      );
-      const isAutoIntervention = interventionSetting?.value === 'true';
+      // 2. Refresh companies from DB periodically (every 8 ticks / 32s) or if memory cache is empty
+      if (this.liveCompanyMap.size === 0 || this.tickCount % 8 === 1) {
+        const rows = await query.all("SELECT * FROM companies WHERE (listing_status = 'LISTED' OR (listing_status IS NULL AND is_bot = 1)) AND (listing_status != 'PRE_IPO' AND listing_status != 'UNLISTED')");
+        for (const c of rows) {
+          const existing = this.liveCompanyMap.get(c.id);
+          if (existing && existing.current_price) {
+            c.current_price = existing.current_price;
+            c.daily_high = Math.max(c.daily_high || existing.daily_high || c.current_price, existing.daily_high || c.current_price);
+            c.daily_low = Math.min(c.daily_low || existing.daily_low || c.current_price, existing.daily_low || c.current_price);
+          }
+          this.liveCompanyMap.set(c.id, c);
+        }
+      }
 
-      const companies = await query.all("SELECT * FROM companies WHERE (listing_status = 'LISTED' OR (listing_status IS NULL AND is_bot = 1)) AND (listing_status != 'PRE_IPO' AND listing_status != 'UNLISTED')");
       const updatedList = [];
-      const pendingPriceUpdates = [];
-      const pendingHistoryInserts = [];
       const now = new Date().toISOString();
 
       let totalCapCurrent = 0;
@@ -316,8 +401,7 @@ class MarketSimulationEngine {
       let flat = 0;
       let down = 0;
 
-      for (let i = 0; i < companies.length; i++) {
-        const comp = companies[i];
+      for (const comp of this.liveCompanyMap.values()) {
         const refPrice = comp.prev_close > 0 ? comp.prev_close : comp.base_price;
         const shares = comp.circulating_shares || 3000000;
 
@@ -397,8 +481,14 @@ class MarketSimulationEngine {
         const dailyHigh = Math.max(comp.daily_high || newPrice, newPrice);
         const dailyLow = Math.min(comp.daily_low || newPrice, newPrice);
 
-        // Queue price update for single atomic transaction commit
-        pendingPriceUpdates.push([newPrice, dailyHigh, dailyLow, comp.id]);
+        // Update in-memory state
+        comp.current_price = newPrice;
+        comp.daily_high = dailyHigh;
+        comp.daily_low = dailyLow;
+        comp.price_change_pct = priceChangePct;
+
+        // Stage price update for batched atomic commit
+        this.pendingPriceUpdates.set(comp.id, [newPrice, dailyHigh, dailyLow, comp.id]);
 
         // Breadth counters
         if (priceChangePct > 0.1) up++;
@@ -459,7 +549,7 @@ class MarketSimulationEngine {
           const high = Math.max(open, close) + Math.round(Math.random() * (open * 0.002));
           const low = Math.min(open, close) - Math.round(Math.random() * (open * 0.002));
           const vol = Math.floor(Math.random() * 3000) + 300;
-          pendingHistoryInserts.push([uuidv4(), comp.id, close, open, close, high, low, vol, now]);
+          this.pendingHistoryInserts.push([uuidv4(), comp.id, close, open, close, high, low, vol, now]);
         }
 
         updatedList.push({
@@ -481,24 +571,9 @@ class MarketSimulationEngine {
         });
       }
 
-      // Commit all price & history updates in ONE ultra-fast SQLite transaction (<5ms total!)
-      if (pendingPriceUpdates.length > 0 || pendingHistoryInserts.length > 0) {
-        const shouldPruneHistory = this.tickCount % 150 === 0;
-        await query.transaction(async (tx) => {
-          for (const p of pendingPriceUpdates) {
-            await tx.run('UPDATE companies SET current_price = ?, daily_high = ?, daily_low = ? WHERE id = ?', p);
-          }
-          for (const h of pendingHistoryInserts) {
-            await tx.run(
-              `INSERT INTO price_history (id, company_id, price, open, close, high, low, volume, timestamp)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-              h
-            );
-          }
-          if (shouldPruneHistory) {
-            await tx.run("DELETE FROM price_history WHERE timestamp < datetime('now', '-2 days')");
-          }
-        });
+      // Flush batched price & history updates every 4 ticks (~16 detik)
+      if (this.tickCount % 4 === 0) {
+        await this.flushPendingPrices();
       }
 
       // Update IPMC Index Calculations
@@ -661,8 +736,13 @@ class MarketSimulationEngine {
   // Engine Pencocokan Antrean Limit Order Beli (Bid) & Jual (Offer)
   async processMarketOrders() {
     try {
+      // Fast check: Lewati jika belum ada antrean baru dan bukan siklus sinkronisasi berkala (setiap 10 tick)
+      if (!this.hasOpenOrders && this.tickCount % 10 !== 0) {
+        return;
+      }
+
       const openOrders = await query.all(`
-        SELECT o.*, c.symbol, c.current_price, c.status as company_status, u.username, u.balance_ib, u.is_blue_chip
+        SELECT o.*, c.symbol, c.name as company_name, c.current_price, c.status as company_status, u.username, u.balance_ib, u.is_blue_chip
         FROM market_orders o
         JOIN companies c ON o.company_id = c.id
         JOIN users u ON o.user_id = u.id
@@ -670,7 +750,11 @@ class MarketSimulationEngine {
         ORDER BY o.created_at ASC
       `);
 
-      if (!openOrders || openOrders.length === 0) return;
+      if (!openOrders || openOrders.length === 0) {
+        this.hasOpenOrders = false;
+        return;
+      }
+      this.hasOpenOrders = true;
 
       for (const order of openOrders) {
         const orderLots = order.lots || order.target_lots || 0;
@@ -680,7 +764,9 @@ class MarketSimulationEngine {
         if (remainingLots <= 0) continue;
 
         const isBuy = orderTypeVal === 'BUY';
-        const curPrice = order.current_price;
+        // Menggunakan live price realtime dari memori simulationEngine jika ada
+        const liveP = this.getLivePrice(order.company_id);
+        const curPrice = (liveP !== null && liveP !== undefined) ? liveP : order.current_price;
 
         // BUY cocok jika harga pasar saat ini <= batas harga antre beli
         // SELL cocok jika harga pasar saat ini >= batas harga antre jual
@@ -806,16 +892,40 @@ class MarketSimulationEngine {
           timestamp: nowM.toISOString()
         });
 
-        this.io.emit('order:matched', {
+        // Enriched Match Payload untuk Notifikasi Visual Real-Time
+        const matchPayload = {
           orderId: order.id,
           userId: order.user_id,
+          username: order.username,
+          companyId: order.company_id,
           symbol: order.symbol,
+          companyName: order.company_name || order.symbol,
           type: orderTypeVal,
           filledLots: fillAmount,
           totalFilled: newFilledLots,
+          targetLots: orderLots,
           status: newStatus,
-          price: execPrice
-        });
+          price: execPrice,
+          isFullFill: isFullyFilled,
+          timestamp: nowM.toISOString(),
+          message: isFullyFilled
+            ? `🎉 Antrean ${orderTypeVal} ${order.symbol} SELESAI! ${orderLots} Lot cocok di harga IB ${execPrice.toLocaleString('id-ID')}`
+            : `⚡ Antrean ${orderTypeVal} ${order.symbol} Cocok Sebagian (${fillAmount} Lot @ IB ${execPrice.toLocaleString('id-ID')})`
+        };
+
+        // Emit global & kamar user
+        this.io.emit('order:matched', matchPayload);
+        this.io.to(order.user_id).emit('user:order_matched', matchPayload);
+
+        // Update saldo instan ke layar pemain
+        const freshUser = await query.get('SELECT balance_ib, company_balance_ib FROM users WHERE id = ?', [order.user_id]);
+        if (freshUser) {
+          this.io.to(order.user_id).emit('user:balance_updated', {
+            userId: order.user_id,
+            balance: freshUser.balance_ib,
+            companyBalance: freshUser.company_balance_ib
+          });
+        }
       }
     } catch (orderErr) {
       console.error('Error processing market limit orders:', orderErr);
@@ -825,9 +935,15 @@ class MarketSimulationEngine {
   // Simulasi Penyerapan Lot IPO Bertahap oleh Ritel Bursa & Bidding Mitra Strategis
   async simulateIpoAbsorption() {
     try {
+      if (!this.hasActiveIpos && this.tickCount % 20 !== 0) return;
       const activeIpos = await query.all(
         "SELECT * FROM ipo_offerings WHERE status IN ('BOOKBUILDING', 'OFFERING')"
       );
+      if (!activeIpos || activeIpos.length === 0) {
+        this.hasActiveIpos = false;
+        return;
+      }
+      this.hasActiveIpos = true;
       for (const ipo of activeIpos) {
         const targetTotalLots = Math.max(1, Math.floor(ipo.total_offering_shares / 100));
         const currentOrdered = ipo.ordered_lots || 0;

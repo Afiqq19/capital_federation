@@ -4,6 +4,7 @@ import 'api_service.dart';
 
 class SocketService {
   static socket_io.Socket? socket;
+  static Function(dynamic)? onOrderMatched;
 
   static void init({
     required Function(List<dynamic>) onMarketTicker,
@@ -184,6 +185,14 @@ class SocketService {
 
       socket!.on('debt_relief:executed', (data) {
         if (onDebtReliefUpdated != null) onDebtReliefUpdated(data);
+      });
+
+      socket!.on('order:matched', (data) {
+        if (onOrderMatched != null) onOrderMatched!(data);
+      });
+
+      socket!.on('user:order_matched', (data) {
+        if (onOrderMatched != null) onOrderMatched!(data);
       });
 
       socket!.onDisconnect((_) {

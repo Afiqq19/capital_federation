@@ -3934,7 +3934,8 @@ app.post('/api/trade/order', async (req, res) => {
     }
 
     const shares = lots * 100; // 1 Lot = 100 Lembar
-    const pricePerShare = company.current_price;
+    const livePrice = (simulationEngine && typeof simulationEngine.getLivePrice === 'function') ? simulationEngine.getLivePrice(companyId) : null;
+    const pricePerShare = (livePrice !== null && livePrice !== undefined) ? livePrice : company.current_price;
     const grossAmount = shares * pricePerShare;
 
     // Fee (0.15% normal, 0.05% for Blue Chip)

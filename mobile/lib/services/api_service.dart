@@ -1414,6 +1414,23 @@ class ApiService {
     }
   }
 
+  static Future<Map<String, dynamic>> getActiveOrderSummary({
+    required String companyId,
+    required String userId,
+  }) async {
+    try {
+      final response = await http
+          .get(Uri.parse('$baseUrl/api/trade-orders/active-summary/$companyId/$userId'))
+          .timeout(const Duration(seconds: 5));
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+    } catch (e) {
+      debugPrint('Error getting active order summary: $e');
+    }
+    return {'bids': {}, 'offers': {}, 'totalMyBidLots': 0, 'totalMyOfferLots': 0, 'orders': []};
+  }
+
   // ==========================================
   // 4 PILAR KEBIJAKAN EKONOMI STRATEGIS NEGARA
   // ==========================================

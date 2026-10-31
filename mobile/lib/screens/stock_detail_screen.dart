@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/company.dart';
 import '../providers/game_provider.dart';
 import '../services/api_service.dart';
+import '../services/socket_service.dart';
 import '../utils/formatters.dart';
 import '../widgets/trading_modal.dart';
 
@@ -26,10 +27,107 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
   int? _scrubIndex;
   double? _scrubPrice;
 
+  // Real-time Orderbook Queue tracking & highlights
+  Map<int, int> _myBidOrders = {};
+  Map<int, int> _myOfferOrders = {};
+  List<dynamic> _myActiveOrdersList = [];
+
   @override
   void initState() {
     super.initState();
     _fetchDetail();
+    _fetchMyOrderSummary();
+    _setupOrderSocketListener();
+  }
+
+  @override
+  void dispose() {
+    if (SocketService.onOrderMatched == _onOrderMatchedEvent) {
+      SocketService.onOrderMatched = null;
+    }
+    super.dispose();
+  }
+
+  void _setupOrderSocketListener() {
+    SocketService.onOrderMatched = _onOrderMatchedEvent;
+  }
+
+  void _onOrderMatchedEvent(dynamic data) {
+    if (!mounted || data == null) return;
+    final user = Provider.of<GameProvider>(context, listen: false).user;
+    if (user == null) return;
+    final String? orderUserId = data['userId']?.toString();
+    final String? companyId = data['companyId']?.toString();
+
+    if (orderUserId == user.id) {
+      final String msg = data['message']?.toString() ?? 'Antrean order saham berhasil cocok di bursa!';
+      final String type = data['type']?.toString() ?? 'ORDER';
+      final isBuy = type == 'BUY';
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: const Color(0xFF0F172A),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(
+              color: isBuy ? const Color(0xFF10B981) : const Color(0xFF38BDF8),
+              width: 1.5,
+            ),
+          ),
+          content: Row(
+            children: [
+              Icon(
+                isBuy ? Icons.check_circle_rounded : Icons.sell_rounded,
+                color: isBuy ? const Color(0xFF34D399) : const Color(0xFF38BDF8),
+                size: 22,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  msg,
+                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+      _fetchMyOrderSummary();
+    } else if (companyId == widget.company.id) {
+      _fetchMyOrderSummary();
+    }
+  }
+
+  Future<void> _fetchMyOrderSummary() async {
+    final user = Provider.of<GameProvider>(context, listen: false).user;
+    if (user == null) return;
+    try {
+      final summary = await ApiService.getActiveOrderSummary(
+        companyId: widget.company.id,
+        userId: user.id,
+      );
+      if (mounted && summary['success'] == true) {
+        final rawBids = summary['bids'] as Map<String, dynamic>? ?? {};
+        final rawOffers = summary['offers'] as Map<String, dynamic>? ?? {};
+        final Map<int, int> bMap = {};
+        final Map<int, int> oMap = {};
+        rawBids.forEach((k, v) {
+          final p = int.tryParse(k) ?? 0;
+          if (p > 0) bMap[p] = (v as num).toInt();
+        });
+        rawOffers.forEach((k, v) {
+          final p = int.tryParse(k) ?? 0;
+          if (p > 0) oMap[p] = (v as num).toInt();
+        });
+        setState(() {
+          _myBidOrders = bMap;
+          _myOfferOrders = oMap;
+          _myActiveOrdersList = summary['orders'] as List<dynamic>? ?? [];
+        });
+      }
+    } catch (_) {}
   }
 
   void _onTimeframeChanged(String tf) {
@@ -1483,8 +1581,12 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
     final double offerWidthRatio = (offerLots / safeMaxLots).clamp(0.04, 1.0);
     final bool isOfferEmpty = (offer == null || offer.lots == 0);
 
+    final int myBidLots = bid != null ? (_myBidOrders[bid.price.round()] ?? 0) : 0;
+    final int myOfferLots = offer != null ? (_myOfferOrders[offer.price.round()] ?? 0) : 0;
+
     return Container(
       decoration: BoxDecoration(
+        color: (myBidLots > 0 || myOfferLots > 0) ? const Color(0xFF1E293B).withValues(alpha: 0.45) : null,
         border: isLast ? null : const Border(bottom: BorderSide(color: Color(0xFF1E293B), width: 0.5)),
       ),
       child: Row(
@@ -1517,14 +1619,36 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                               ),
                             ),
                             Expanded(
-                              child: Text(
-                                CurrencyFormatter.formatNumberOnly(bid.lots),
-                                style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 11),
+                              child: Row(
+                                children: [
+                                  Text(
+                                    CurrencyFormatter.formatNumberOnly(bid.lots),
+                                    style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 11),
+                                  ),
+                                  if (myBidLots > 0)
+                                    Container(
+                                      margin: const EdgeInsets.only(left: 4),
+                                      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF38BDF8).withValues(alpha: 0.25),
+                                        borderRadius: BorderRadius.circular(3),
+                                        border: Border.all(color: const Color(0xFF38BDF8), width: 0.8),
+                                      ),
+                                      child: Text(
+                                        'Saya:$myBidLots',
+                                        style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 7.5, fontWeight: FontWeight.w900),
+                                      ),
+                                    ),
+                                ],
                               ),
                             ),
                             Text(
                               CurrencyFormatter.formatNumberOnly(bid.price.round()),
-                              style: const TextStyle(color: Color(0xFF34D399), fontSize: 11.5, fontWeight: FontWeight.w900),
+                              style: TextStyle(
+                                color: myBidLots > 0 ? const Color(0xFF38BDF8) : const Color(0xFF34D399),
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w900,
+                              ),
                             ),
                           ],
                         ),
@@ -1568,13 +1692,36 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                           children: [
                             Text(
                               CurrencyFormatter.formatNumberOnly(offer.price.round()),
-                              style: const TextStyle(color: Color(0xFFF87171), fontSize: 11.5, fontWeight: FontWeight.w900),
+                              style: TextStyle(
+                                color: myOfferLots > 0 ? const Color(0xFFFBBF24) : const Color(0xFFF87171),
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w900,
+                              ),
                             ),
                             Expanded(
-                              child: Text(
-                                CurrencyFormatter.formatNumberOnly(offer.lots),
-                                textAlign: TextAlign.right,
-                                style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 11),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  if (myOfferLots > 0)
+                                    Container(
+                                      margin: const EdgeInsets.only(right: 4),
+                                      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFF59E0B).withValues(alpha: 0.25),
+                                        borderRadius: BorderRadius.circular(3),
+                                        border: Border.all(color: const Color(0xFFF59E0B), width: 0.8),
+                                      ),
+                                      child: Text(
+                                        'Saya:$myOfferLots',
+                                        style: const TextStyle(color: Color(0xFFFBBF24), fontSize: 7.5, fontWeight: FontWeight.w900),
+                                      ),
+                                    ),
+                                  Text(
+                                    CurrencyFormatter.formatNumberOnly(offer.lots),
+                                    textAlign: TextAlign.right,
+                                    style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 11),
+                                  ),
+                                ],
                               ),
                             ),
                             SizedBox(
@@ -2322,6 +2469,119 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                           ),
                         ),
                         const SizedBox(height: 16),
+
+                        // Antrean Aktif Saya pada Emiten Ini (Jika Ada)
+                        if (_myActiveOrdersList.isNotEmpty) ...[
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF38BDF8).withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.4)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Row(
+                                      children: const [
+                                        Icon(Icons.person_pin_rounded, color: Color(0xFF38BDF8), size: 18),
+                                        SizedBox(width: 6),
+                                        Text(
+                                          'Antrean Aktif Saya',
+                                          style: TextStyle(color: Color(0xFF38BDF8), fontSize: 12, fontWeight: FontWeight.bold),
+                                        ),
+                                      ],
+                                    ),
+                                    Text(
+                                      '${_myActiveOrdersList.length} Order Aktif',
+                                      style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                ..._myActiveOrdersList.map((ord) {
+                                  final isBuy = (ord['order_type'] ?? ord['type'] ?? 'BUY') == 'BUY';
+                                  final int ordPrice = (ord['price'] ?? ord['price_per_share'] ?? 0).toInt();
+                                  final int remLots = ((ord['lots'] ?? ord['target_lots'] ?? 0) - (ord['filled_lots'] ?? 0)).toInt();
+                                  final String orderId = ord['id']?.toString() ?? '';
+
+                                  return Container(
+                                    margin: const EdgeInsets.only(bottom: 6),
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF0F172A),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                        color: isBuy ? const Color(0xFF10B981).withValues(alpha: 0.3) : const Color(0xFFEF4444).withValues(alpha: 0.3),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: isBuy ? const Color(0xFF10B981).withValues(alpha: 0.2) : const Color(0xFFEF4444).withValues(alpha: 0.2),
+                                                borderRadius: BorderRadius.circular(4),
+                                              ),
+                                              child: Text(
+                                                isBuy ? 'BID' : 'OFFER',
+                                                style: TextStyle(
+                                                  color: isBuy ? const Color(0xFF34D399) : const Color(0xFFF87171),
+                                                  fontSize: 9.5,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Text(
+                                              '$remLots Lot @ IB ${CurrencyFormatter.formatNumberOnly(ordPrice)}',
+                                              style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.bold),
+                                            ),
+                                          ],
+                                        ),
+                                        InkWell(
+                                          onTap: () async {
+                                            final user = Provider.of<GameProvider>(context, listen: false).user;
+                                            if (user == null || orderId.isEmpty) return;
+                                            final res = await ApiService.cancelLimitOrder(userId: user.id, orderId: orderId);
+                                            if (context.mounted) {
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                SnackBar(
+                                                  backgroundColor: const Color(0xFF0F172A),
+                                                  content: Text(res['message'] ?? res['error'] ?? 'Status order diperbarui'),
+                                                ),
+                                              );
+                                              _fetchMyOrderSummary();
+                                            }
+                                          },
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFEF4444).withValues(alpha: 0.2),
+                                              borderRadius: BorderRadius.circular(6),
+                                              border: Border.all(color: const Color(0xFFEF4444), width: 0.8),
+                                            ),
+                                            child: const Text(
+                                              'Batalkan',
+                                              style: TextStyle(color: Color(0xFFF87171), fontSize: 10, fontWeight: FontWeight.bold),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                }),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                        ],
 
                         // Depth Ratio Summary Card
                         Row(

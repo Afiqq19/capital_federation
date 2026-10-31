@@ -27,6 +27,11 @@ function createOrdersRouter(io, simulationEngine) {
       const comp = await query.get('SELECT * FROM companies WHERE id = ?', [companyId]);
       if (!comp) return res.status(404).json({ error: 'Emiten tidak ditemukan' });
 
+      // Sinkronkan harga SQLite jika ada pembaruan pending sebelum memasang order
+      if (simulationEngine && typeof simulationEngine.flushPendingPrices === 'function') {
+        await simulationEngine.flushPendingPrices();
+      }
+
       if (comp.is_seized === 1 || comp.status === 'SUSPENDED') {
         return res.status(400).json({ error: `⛔ Saham ${comp.symbol} sedang disuspen/disita. Tidak dapat memasang antrean order!` });
       }
@@ -86,6 +91,10 @@ function createOrdersRouter(io, simulationEngine) {
           notes: `Dana dikunci dalam antrean limit order bursa CFX menunggu ada penjual cocok.`
         });
 
+        if (simulationEngine && typeof simulationEngine.notifyNewOrder === 'function') {
+          simulationEngine.notifyNewOrder();
+        }
+
         if (io) {
           io.emit('order:placed', {
             orderId,
@@ -125,6 +134,10 @@ function createOrdersRouter(io, simulationEngine) {
            VALUES (?, ?, ?, 'SELL', 'SELL', ?, ?, ?, ?, 0, 'OPEN')`,
           [orderId, userId, companyId, numPrice, numPrice, numLots, numLots]
         );
+
+        if (simulationEngine && typeof simulationEngine.notifyNewOrder === 'function') {
+          simulationEngine.notifyNewOrder();
+        }
 
         if (io) {
           io.emit('order:placed', {
@@ -228,6 +241,10 @@ function createOrdersRouter(io, simulationEngine) {
 
       await query.run('UPDATE market_orders SET status = "CANCELLED", updated_at = CURRENT_TIMESTAMP WHERE id = ?', [orderId]);
 
+      if (simulationEngine && typeof simulationEngine.notifyNewOrder === 'function') {
+        simulationEngine.notifyNewOrder();
+      }
+
       if (io) {
         io.emit('order:cancelled', { orderId, userId, symbol: comp ? comp.symbol : '' });
       }
@@ -239,6 +256,53 @@ function createOrdersRouter(io, simulationEngine) {
     } catch (err) {
       console.error('Error cancelling order:', err);
       res.status(500).json({ error: 'Gagal membatalkan antrean order' });
+    }
+  });
+
+  // GET /api/trade-orders/active-summary/:companyId/:userId - Ringkasan antrean aktif user per harga (untuk penanda orderbook)
+  router.get('/active-summary/:companyId/:userId', async (req, res) => {
+    try {
+      const { companyId, userId } = req.params;
+      const orders = await query.all(
+        `SELECT id, type, order_type, price, price_per_share, lots, target_lots, filled_lots, (COALESCE(lots, target_lots, 0) - COALESCE(filled_lots, 0)) as remaining_lots, created_at
+         FROM market_orders
+         WHERE company_id = ? AND user_id = ? AND status IN ('OPEN', 'PARTIAL')`,
+        [companyId, userId]
+      );
+
+      const bids = {};
+      const offers = {};
+      let totalMyBidLots = 0;
+      let totalMyOfferLots = 0;
+
+      for (const o of (orders || [])) {
+        const orderType = o.order_type || o.type || 'BUY';
+        const p = Math.round(Number(o.price || o.price_per_share || 0));
+        const remLots = Math.max(0, Number(o.remaining_lots || 0));
+        if (remLots <= 0) continue;
+
+        if (orderType === 'BUY') {
+          bids[p] = (bids[p] || 0) + remLots;
+          totalMyBidLots += remLots;
+        } else {
+          offers[p] = (offers[p] || 0) + remLots;
+          totalMyOfferLots += remLots;
+        }
+      }
+
+      res.json({
+        success: true,
+        companyId,
+        userId,
+        bids,
+        offers,
+        totalMyBidLots,
+        totalMyOfferLots,
+        orders: orders || []
+      });
+    } catch (err) {
+      console.error('Error fetching active order summary:', err);
+      res.status(500).json({ error: 'Gagal mengambil ringkasan antrean user' });
     }
   });
 
