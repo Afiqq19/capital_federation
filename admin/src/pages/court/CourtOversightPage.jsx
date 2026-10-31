@@ -754,6 +754,7 @@ export default function CourtOversightPage() {
 
       {/* 4. Modal: Daftarkan Perkara Baru */}
       <Modal
+        width={780}
         open={isFileModalOpen}
         onClose={() => setIsFileModalOpen(false)}
         title="Pendaftaran Berkas Perkara Baru ke PNAF"
@@ -761,50 +762,237 @@ export default function CourtOversightPage() {
         icon={Scale}
         tone="var(--gold)"
         footer={
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" onClick={() => setIsFileModalOpen(false)} disabled={submittingNewCase}>
-              Batal
-            </Button>
-            <Button
-              variant="primary"
-              onClick={handleFileNewCase}
-              disabled={submittingNewCase || !newTitle || !newDefendant}
-              icon={PlusCircle}
-            >
-              {submittingNewCase ? 'Mendaftarkan...' : 'Daftarkan ke Panitera'}
-            </Button>
+          <div className="flex items-center justify-between w-full">
+            <div className="text-[11px] text-slate-400 hidden sm:block">
+              <span className="text-amber-400 font-semibold">Biaya Panitera:</span> Lembaga Negara / BIF Bebas Biaya • Pemain: IB 250.000
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" onClick={() => setIsFileModalOpen(false)} disabled={submittingNewCase}>
+                Batal
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleFileNewCase}
+                disabled={submittingNewCase || !newTitle || !newDefendant}
+                icon={PlusCircle}
+              >
+                {submittingNewCase ? 'Mendaftarkan...' : 'Daftarkan ke Panitera'}
+              </Button>
+            </div>
           </div>
         }
       >
-        <form onSubmit={handleFileNewCase} className="space-y-4">
-          <FormField label="Judul Gugatan Perkara" hint="Deskripsi singkat perkara sengketa">
-            <Input
-              value={newTitle}
-              onChange={(e) => setNewTitle(e.target.value)}
-              placeholder="Contoh: Gugatan Kepailitan atas Gagal Bayar Kredit BIF"
-              required
-            />
-          </FormField>
+        <form onSubmit={handleFileNewCase} className="space-y-3.5">
+          {/* Section 1: Pokok Gugatan & Jenis Perkara */}
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+            <div className="md:col-span-7">
+              <FormField label="Judul Gugatan Perkara" hint="Deskripsi singkat pokok perkara sengketa">
+                <Input
+                  value={newTitle}
+                  onChange={(e) => setNewTitle(e.target.value)}
+                  placeholder="Contoh: Gugatan Kepailitan atas Gagal Bayar Kredit BIF"
+                  required
+                />
+              </FormField>
+            </div>
+            <div className="md:col-span-5">
+              <FormField label="Jenis / Kategori Perkara">
+                <Select value={newCaseType} onChange={(e) => setNewCaseType(e.target.value)}>
+                  <option value="BANKRUPTCY">⚖️ Kepailitan & PKPU (Sita Debitur)</option>
+                  <option value="DISPUTE">📜 Sengketa Akta & Saham</option>
+                  <option value="REGULATORY">🚨 Pelanggaran Regulasi Bursa</option>
+                </Select>
+              </FormField>
+            </div>
+          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <FormField label="Jenis Perkara">
-              <Select value={newCaseType} onChange={(e) => setNewCaseType(e.target.value)}>
-                <option value="BANKRUPTCY">Kepailitan & PKPU (Sita Aset Debitur)</option>
-                <option value="DISPUTE">Sengketa Jual Beli Saham & Akta</option>
-                <option value="REGULATORY">Pelanggaran Regulasi Bursa & Goreng Saham</option>
-              </Select>
-            </FormField>
+          {/* Section 2: Para Pihak yang Bersengketa (Penggugat vs Tergugat) */}
+          <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Kolom Kiri: Pihak Penggugat */}
+              <div>
+                <FormField label="Pihak Penggugat (Pengaju Gugatan)">
+                  <Input
+                    value={newPlaintiff}
+                    onChange={(e) => setNewPlaintiff(e.target.value)}
+                    placeholder="Contoh: Bank Sentral Indigo Federasi (BIF)"
+                    required
+                  />
+                </FormField>
+                <div className="grid grid-cols-2 gap-1.5 mt-2">
+                  {[
+                    { label: '🏛️ Bank Sentral BIF', val: 'Bank Sentral Indigo Federasi (BIF)' },
+                    { label: '🛡️ Otoritas Bursa OPFF', val: 'Otoritas Pengawas Finansial Federasi (OPFF)' },
+                    { label: '🏦 Kas Negara Federasi', val: 'Kas Negara / Treasury Federasi' },
+                    { label: '👑 PT. Syafiq Capital', val: 'PT. Syafiq Capital Tbk. (@msyafiq19)' },
+                  ].map((preset) => (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      onClick={() => setNewPlaintiff(preset.val)}
+                      className={`px-2 py-1 rounded-lg text-[10px] font-semibold border text-left truncate transition-colors ${
+                        newPlaintiff === preset.val
+                          ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-sm'
+                          : 'bg-slate-900/90 text-slate-400 border-slate-800 hover:border-slate-700 hover:text-slate-200'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
-            <FormField
-              label={
-                <div className="flex items-center justify-between">
-                  <span>Nilai Tuntutan / Ganti Rugi (IB)</span>
-                  <span className="font-mono text-xs font-bold text-amber-400">
-                    IB {Number(newClaimAmount || 0).toLocaleString('id-ID')}
+              {/* Kolom Kanan: Pihak Tergugat */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="label mb-0">Pihak Tergugat (Sasaran Sita)</label>
+                  <span className="text-[10px] text-amber-400 font-bold bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
+                    360+ Emiten
                   </span>
                 </div>
-              }
-            >
+                <div className="relative">
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Input
+                        value={newDefendant}
+                        onChange={(e) => {
+                          setNewDefendant(e.target.value);
+                          setDefSearchQuery(e.target.value);
+                          setShowDefDropdown(true);
+                        }}
+                        onFocus={() => setShowDefDropdown(true)}
+                        placeholder="Ketik kode (ARPD, BALN) atau nama PT..."
+                        required
+                      />
+                      {newDefendant && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNewDefendant('');
+                            setSelectedDefComp(null);
+                            setSelectedDefUser(null);
+                          }}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                        >
+                          <X size={14} />
+                        </button>
+                      )}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowDefDropdown(!showDefDropdown)}
+                      icon={Search}
+                    >
+                      Cari PT
+                    </Button>
+                  </div>
+
+                  {/* Autocomplete Dropdown List */}
+                  {showDefDropdown && (
+                    <div className="absolute z-50 left-0 right-0 mt-1 max-h-56 overflow-y-auto bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-2 space-y-1 backdrop-blur-md">
+                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 py-1 flex items-center justify-between">
+                        <span>Hasil Pencarian Emiten & Pemain</span>
+                        <button
+                          type="button"
+                          onClick={() => setShowDefDropdown(false)}
+                          className="text-slate-400 hover:text-white"
+                        >
+                          Tutup [X]
+                        </button>
+                      </div>
+
+                      {filteredCompaniesForDef.length === 0 && filteredUsersForDef.length === 0 && (
+                        <div className="p-3 text-center text-xs text-slate-500">
+                          Tidak ada emiten atau pemain yang cocok dengan "{defSearchQuery}"
+                        </div>
+                      )}
+
+                      {filteredCompaniesForDef.map((comp) => (
+                        <div
+                          key={comp.id}
+                          onClick={() => handleSelectCompany(comp)}
+                          className="flex items-center justify-between p-2 hover:bg-slate-800/80 rounded-lg cursor-pointer transition-colors border border-transparent hover:border-slate-700"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-xs font-bold text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
+                              {comp.symbol}
+                            </span>
+                            <div>
+                              <div className="text-xs font-semibold text-slate-200">{comp.name}</div>
+                              <div className="text-[10px] text-slate-400">
+                                @{comp.owner_username || 'Publik'} • {comp.sector}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-mono text-xs font-bold text-emerald-400">
+                              IB {Number(comp.current_price || 0).toLocaleString('id-ID')}
+                            </div>
+                            {comp.is_seized === 1 ? (
+                              <span className="text-[9px] text-rose-400 font-bold bg-rose-500/10 px-1 rounded border border-rose-500/20">
+                                DISITA
+                              </span>
+                            ) : (
+                              <span className="text-[9px] text-slate-500">Aktif</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+
+                      {filteredUsersForDef.length > 0 && (
+                        <>
+                          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 pt-2 pb-1 border-t border-slate-800">
+                            Konglomerat Pemain
+                          </div>
+                          {filteredUsersForDef.map((u) => (
+                            <div
+                              key={u.id}
+                              onClick={() => handleSelectUser(u)}
+                              className="flex items-center justify-between p-2 hover:bg-slate-800/80 rounded-lg cursor-pointer transition-colors"
+                            >
+                              <div>
+                                <span className="font-bold text-xs text-sky-400">@{u.username}</span>
+                                {u.pt_name && <span className="text-xs text-slate-300 ml-1.5 font-medium">({u.pt_name})</span>}
+                              </div>
+                              <div className="text-right text-[10px] text-slate-400 font-mono">
+                                Kas: IB {Number(u.balance_ib || 0).toLocaleString('id-ID')}
+                              </div>
+                            </div>
+                          ))}
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Target Card jika sudah terpilih */}
+                {selectedDefComp && (
+                  <div className="mt-2 p-2 rounded-lg bg-rose-500/10 border border-rose-500/30 flex items-start gap-2">
+                    <ShieldAlert className="text-rose-400 mt-0.5 shrink-0" size={14} />
+                    <div className="text-[11px] leading-tight flex-1">
+                      <span className="font-bold text-amber-300">{selectedDefComp.name} ({selectedDefComp.symbol})</span>
+                      <span className="text-slate-400"> • @{selectedDefComp.owner_username || 'Bot'}</span>
+                      <p className="text-[10px] text-rose-300 mt-0.5">
+                        ⚡ Vonis Bersalah: Kas dipotong ganti rugi & perseroan langsung DISITA ke Lelang BCF!
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Section 3: Tuntutan Ganti Rugi & Objek Sitaan */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="label mb-0">Nilai Tuntutan Ganti Rugi (IB)</label>
+                <span className="font-mono text-xs font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 whitespace-nowrap">
+                  IB {Number(newClaimAmount || 0).toLocaleString('id-ID')}
+                </span>
+              </div>
               <Input
                 type="number"
                 value={newClaimAmount}
@@ -813,211 +1001,43 @@ export default function CourtOversightPage() {
                 step="1000000"
                 required
               />
-              <div className="flex flex-wrap gap-1.5 mt-1.5">
+              <div className="grid grid-cols-5 gap-1.5 mt-1.5">
                 {[50000000, 100000000, 500000000, 1000000000, 5000000000].map((amt) => (
                   <button
                     key={amt}
                     type="button"
                     onClick={() => setNewClaimAmount(amt)}
-                    className="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-900 text-slate-300 border border-slate-800 hover:border-amber-500/40 hover:text-amber-300 transition-colors"
+                    className={`py-1 rounded text-[10px] font-semibold border text-center transition-colors ${
+                      Number(newClaimAmount) === amt
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                        : 'bg-slate-900 text-slate-400 border-slate-800 hover:border-slate-700 hover:text-slate-200'
+                    }`}
                   >
-                    IB {amt >= 1000000000 ? `${amt / 1000000000} M` : `${amt / 1000000} Jt`}
+                    {amt >= 1000000000 ? `${amt / 1000000000} M` : `${amt / 1000000} Jt`}
                   </button>
                 ))}
               </div>
-            </FormField>
+            </div>
+
+            <div>
+              <FormField label="Objek Sitaan / Jaminan yang Dituntut" hint="Aset yang otomatis dieksekusi saat putusan dikabulkan">
+                <Input
+                  value={newTargetAsset}
+                  onChange={(e) => setNewTargetAsset(e.target.value)}
+                  placeholder="Contoh: Saham PT. Makmur 50.000 Lot & Rekening Kas Debitur"
+                  required
+                />
+              </FormField>
+            </div>
           </div>
 
-          <FormField label="Pihak Penggugat (Pengaju Gugatan / Lembaga)">
-            <Input
-              value={newPlaintiff}
-              onChange={(e) => setNewPlaintiff(e.target.value)}
-              placeholder="Contoh: Bank Sentral Indigo Federasi (BIF)"
-              required
-            />
-            <div className="flex flex-wrap gap-1.5 mt-1.5">
-              {[
-                { label: '🏛️ Bank Sentral BIF', val: 'Bank Sentral Indigo Federasi (BIF)' },
-                { label: '🛡️ Otoritas Bursa OPFF', val: 'Otoritas Pengawas Finansial Federasi (OPFF)' },
-                { label: '🏦 Kas Negara Federasi', val: 'Kas Negara / Treasury Federasi' },
-                { label: '👑 PT. Syafiq Capital Tbk.', val: 'PT. Syafiq Capital Tbk. (@msyafiq19)' },
-              ].map((preset) => (
-                <button
-                  key={preset.label}
-                  type="button"
-                  onClick={() => setNewPlaintiff(preset.val)}
-                  className={`px-2 py-0.5 rounded text-[10px] font-medium border transition-colors ${
-                    newPlaintiff === preset.val
-                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                      : 'bg-slate-900 text-slate-400 border-slate-800 hover:border-slate-700'
-                  }`}
-                >
-                  {preset.label}
-                </button>
-              ))}
-            </div>
-          </FormField>
-
-          <FormField
-            label={
-              <div className="flex items-center justify-between">
-                <span>Pihak Tergugat (Cari Perusahaan / Konglomerat Sasaran)</span>
-                <span className="text-[10px] text-slate-400 font-normal">Cari dari 360+ Emiten & Konglomerat</span>
-              </div>
-            }
-            hint="Ketik nama atau kode saham untuk mencari emiten sasaran sita eksekusi & ganti rugi"
-          >
-            <div className="relative">
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <Input
-                    value={newDefendant}
-                    onChange={(e) => {
-                      setNewDefendant(e.target.value);
-                      setDefSearchQuery(e.target.value);
-                      setShowDefDropdown(true);
-                    }}
-                    onFocus={() => setShowDefDropdown(true)}
-                    placeholder="Ketik kode saham (misal: BALN, ARPD, SYFU) atau nama PT / pemain..."
-                    required
-                  />
-                  {newDefendant && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setNewDefendant('');
-                        setSelectedDefComp(null);
-                        setSelectedDefUser(null);
-                      }}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
-                    >
-                      <X size={14} />
-                    </button>
-                  )}
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowDefDropdown(!showDefDropdown)}
-                  icon={Search}
-                >
-                  Cari PT
-                </Button>
-              </div>
-
-              {/* Autocomplete Dropdown List */}
-              {showDefDropdown && (
-                <div className="absolute z-50 left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-2 space-y-1 backdrop-blur-md">
-                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 py-1 flex items-center justify-between">
-                    <span>Hasil Pencarian Emiten & Konglomerat</span>
-                    <button
-                      type="button"
-                      onClick={() => setShowDefDropdown(false)}
-                      className="text-slate-400 hover:text-white"
-                    >
-                      Tutup [X]
-                    </button>
-                  </div>
-
-                  {filteredCompaniesForDef.length === 0 && filteredUsersForDef.length === 0 && (
-                    <div className="p-3 text-center text-xs text-slate-500">
-                      Tidak ada emiten atau pemain yang cocok dengan "{defSearchQuery}"
-                    </div>
-                  )}
-
-                  {filteredCompaniesForDef.map((comp) => (
-                    <div
-                      key={comp.id}
-                      onClick={() => handleSelectCompany(comp)}
-                      className="flex items-center justify-between p-2 hover:bg-slate-800/80 rounded-lg cursor-pointer transition-colors border border-transparent hover:border-slate-700"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs font-bold text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
-                          {comp.symbol}
-                        </span>
-                        <div>
-                          <div className="text-xs font-semibold text-slate-200">{comp.name}</div>
-                          <div className="text-[10px] text-slate-400">
-                            Pemilik: <span className="text-sky-400">@{comp.owner_username || 'Bot/Publik'}</span> • Sektor: {comp.sector}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="font-mono text-xs font-bold text-emerald-400">
-                          IB {Number(comp.current_price || 0).toLocaleString('id-ID')}
-                        </div>
-                        {comp.is_seized === 1 ? (
-                          <span className="text-[9px] text-rose-400 font-bold bg-rose-500/10 px-1 rounded border border-rose-500/20">
-                            SEDANG DISITA
-                          </span>
-                        ) : (
-                          <span className="text-[9px] text-slate-500">Aktif</span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-
-                  {filteredUsersForDef.length > 0 && (
-                    <>
-                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 pt-2 pb-1 border-t border-slate-800">
-                        Konglomerat / Akun Pemain
-                      </div>
-                      {filteredUsersForDef.map((u) => (
-                        <div
-                          key={u.id}
-                          onClick={() => handleSelectUser(u)}
-                          className="flex items-center justify-between p-2 hover:bg-slate-800/80 rounded-lg cursor-pointer transition-colors"
-                        >
-                          <div>
-                            <span className="font-bold text-xs text-sky-400">@{u.username}</span>
-                            {u.pt_name && <span className="text-xs text-slate-300 ml-1.5 font-medium">({u.pt_name})</span>}
-                          </div>
-                          <div className="text-right text-[10px] text-slate-400 font-mono">
-                            Kas: IB {Number(u.balance_ib || 0).toLocaleString('id-ID')}
-                          </div>
-                        </div>
-                      ))}
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Selected Target Company / Defendant Badge */}
-            {selectedDefComp && (
-              <div className="mt-2 p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-start gap-2.5">
-                <ShieldAlert className="text-rose-400 mt-0.5 shrink-0" size={16} />
-                <div className="text-xs flex-1">
-                  <div className="font-semibold text-rose-200">
-                    Target Sita Eksekusi: <span className="font-bold text-amber-300">{selectedDefComp.name} ({selectedDefComp.symbol})</span>
-                  </div>
-                  <div className="text-[11px] text-slate-300 mt-0.5">
-                    Konglomerat Tergugat: <span className="text-sky-300 font-medium">@{selectedDefComp.owner_username || 'Bot'}</span> • Harga: <span className="font-mono text-emerald-400">IB {Number(selectedDefComp.current_price || 0).toLocaleString('id-ID')}</span>
-                  </div>
-                  <div className="text-[10px] text-rose-300 mt-1 font-medium bg-rose-500/20 px-2 py-0.5 rounded inline-block">
-                    ⚡ Sanksi Vonis: Jika Terbukti Bersalah / Pailit, kas dipotong ganti rugi dan perseroan LANGSUNG DISITA otomatis masuk antrean Lelang BCF!
-                  </div>
-                </div>
-              </div>
-            )}
-          </FormField>
-
-          <FormField label="Objek Sitaan / Barang Jaminan yang Dituntut">
-            <Input
-              value={newTargetAsset}
-              onChange={(e) => setNewTargetAsset(e.target.value)}
-              placeholder="Contoh: Saham PT. Makmur 50.000 Lot & Rekening Kas Debitur"
-              required
-            />
-          </FormField>
-
-          <div className="grid grid-cols-2 gap-3">
+          {/* Section 4: Penjadwalan Sidang Majelis Hakim (3 Kolom) */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <FormField label="Tanggal Sidang Pertama">
               <Input
                 value={newHearingDate}
                 onChange={(e) => setNewHearingDate(e.target.value)}
-                placeholder="Contoh: Hari Ini atau 31 Okt 2026"
+                placeholder="Hari Ini atau 31 Okt 2026"
                 required
               />
             </FormField>
@@ -1030,16 +1050,16 @@ export default function CourtOversightPage() {
                 <option value="15:00 WIB">15:00 WIB (Sore - Sesi 4)</option>
               </Select>
             </FormField>
-          </div>
 
-          <FormField label="Ruang Sidang Majelis Hakim">
-            <Select value={newCourtRoom} onChange={(e) => setNewCourtRoom(e.target.value)}>
-              <option value="Ruang Sidang Utama Kartika PNAF">Ruang Sidang Utama Kartika PNAF</option>
-              <option value="Ruang Sidang Cakra Arbitrase Niaga">Ruang Sidang Cakra Arbitrase Niaga</option>
-              <option value="Ruang Mediasi Damai & PKPU">Ruang Mediasi Damai & PKPU</option>
-              <option value="Majelis Khusus Sita Eksekusi">Majelis Khusus Sita Eksekusi</option>
-            </Select>
-          </FormField>
+            <FormField label="Ruang Sidang Majelis Hakim">
+              <Select value={newCourtRoom} onChange={(e) => setNewCourtRoom(e.target.value)}>
+                <option value="Ruang Sidang Utama Kartika PNAF">Ruang Utama Kartika PNAF</option>
+                <option value="Ruang Sidang Cakra Arbitrase Niaga">Ruang Cakra Arbitrase Niaga</option>
+                <option value="Ruang Mediasi Damai & PKPU">Ruang Mediasi Damai & PKPU</option>
+                <option value="Majelis Khusus Sita Eksekusi">Majelis Khusus Sita Eksekusi</option>
+              </Select>
+            </FormField>
+          </div>
         </form>
       </Modal>
 
