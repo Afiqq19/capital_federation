@@ -8,6 +8,7 @@ import '../models/portfolio.dart';
 import '../models/news.dart';
 import '../services/api_service.dart';
 import '../services/socket_service.dart';
+import '../services/notification_service.dart';
 import '../utils/local_cache.dart';
 import '../utils/wib_time.dart';
 
@@ -653,6 +654,7 @@ class GameProvider extends ChangeNotifier {
         await loadInitialData();
         if (_user != null) {
           SocketService.joinUser(_user!.id);
+          NotificationService.syncUserToken(_user!.id);
         }
         return null;
       } else {
@@ -675,6 +677,7 @@ class GameProvider extends ChangeNotifier {
       await loadInitialData();
       if (_user != null) {
         SocketService.joinUser(_user!.id);
+        NotificationService.syncUserToken(_user!.id);
       }
     }
   }

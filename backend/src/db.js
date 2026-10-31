@@ -453,6 +453,7 @@ async function initDb() {
   await safeAddColumn('companies', 'cfo_level INTEGER DEFAULT 0');
   await safeAddColumn('companies', 'cmo_level INTEGER DEFAULT 0');
   await safeAddColumn('companies', 'founder_shares_sold REAL DEFAULT 0.0');
+  await safeAddColumn('users', 'fcm_token TEXT');
   await safeAddColumn('companies', 'suspended_at TEXT');
   // Pengawasan bursa: UMA (peringatan) & Suspensi (berhenti sampai tanggal tertentu)
   await safeAddColumn('companies', 'uma_flag INTEGER DEFAULT 0');

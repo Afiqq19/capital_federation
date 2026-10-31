@@ -1602,6 +1602,23 @@ class ApiService {
       return {'error': 'Gangguan koneksi ke server bursa: $e'};
     }
   }
+
+  // Registrasi Device Token FCM untuk Push Notification PNAF & Bursa
+  static Future<Map<String, dynamic>> registerFcmToken({required String token, String? userId}) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/user/fcm-token'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'fcmToken': token,
+          if (userId != null) 'userId': userId,
+        }),
+      ).timeout(const Duration(seconds: 5));
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'error': 'Gagal mendaftarkan FCM device token: $e'};
+    }
+  }
 }
 
 

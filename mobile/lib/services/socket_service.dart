@@ -1,10 +1,24 @@
 import 'package:flutter/foundation.dart';
 import 'package:socket_io_client/socket_io_client.dart' as socket_io;
 import 'api_service.dart';
+import 'notification_service.dart';
 
 class SocketService {
   static socket_io.Socket? socket;
   static Function(dynamic)? onOrderMatched;
+
+  static bool _isTargetAlert(String title) {
+    final upper = title.toUpperCase();
+    return upper.contains('PNAF') ||
+        upper.contains('SIDANG') ||
+        upper.contains('PANGGILAN') ||
+        upper.contains('GUGATAN') ||
+        upper.contains('VONIS') ||
+        upper.contains('PUTUSAN') ||
+        upper.contains('SITA') ||
+        upper.contains('AKUISISI') ||
+        upper.contains('PENGAMBILALIHAN');
+  }
 
   static void init({
     required Function(List<dynamic>) onMarketTicker,
@@ -65,10 +79,76 @@ class SocketService {
 
       socket!.on('market:news_broadcast', (data) {
         onNewsBroadcast(data);
+        if (data != null && data['title'] != null) {
+          final title = data['title'].toString();
+          final content = data['content']?.toString() ?? '';
+          if (_isTargetAlert(title)) {
+            NotificationService.showNotification(
+              id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+              title: title,
+              body: content,
+              channelId: 'pnaf_court_channel',
+            );
+          }
+        }
       });
 
       socket!.on('market:breaking_news', (data) {
         onNewsBroadcast(data);
+        if (data != null && data['title'] != null) {
+          final title = data['title'].toString();
+          final content = data['content']?.toString() ?? '';
+          if (_isTargetAlert(title)) {
+            NotificationService.showNotification(
+              id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+              title: title,
+              body: content,
+              channelId: 'pnaf_court_channel',
+            );
+          }
+        }
+      });
+
+      socket!.on('court:new_case', (data) {
+        if (data != null) {
+          final cNum = data['case_number'] ?? data['caseNumber'] ?? '';
+          final title = data['title'] ?? 'Gugatan Baru';
+          final pl = data['plaintiff_name'] ?? data['plaintiffName'] ?? 'Penggugat';
+          final def = data['defendant_name'] ?? data['defendantName'] ?? 'Tergugat';
+          NotificationService.showNotification(
+            id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+            title: '⚖️ GUGATAN PNAF TERDAFTAR: $cNum',
+            body: '$pl telah resmi menggugat $def dalam perkara "$title".',
+            channelId: 'pnaf_court_channel',
+          );
+        }
+      });
+
+      socket!.on('court:verdict', (data) {
+        if (data != null) {
+          final cNum = data['case_number'] ?? data['caseNumber'] ?? '';
+          final notes = data['verdict_notes'] ?? data['verdictNotes'] ?? 'Amar putusan hakim telah diketuk palu.';
+          NotificationService.showNotification(
+            id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+            title: '🔨 AMAR PUTUSAN HAKIM PNAF: $cNum',
+            body: notes.toString(),
+            channelId: 'pnaf_court_channel',
+          );
+        }
+      });
+
+      socket!.on('takeover:proposal_received', (data) {
+        if (data != null) {
+          final comp = data['companyName'] ?? data['companySymbol'] ?? 'Perseroan';
+          final buyer = data['buyerUsername'] ?? 'Investor';
+          final pct = data['percentage'] ?? 51;
+          NotificationService.showNotification(
+            id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+            title: '🏢 TAWARAN AKUISISI MASUK!',
+            body: '@$buyer mengajukan tawaran pengambilalihan $pct% saham $comp (Hak Veto Pendiri).',
+            channelId: 'pnaf_court_channel',
+          );
+        }
       });
 
       socket!.on('chat:message', (data) {
@@ -113,6 +193,15 @@ class SocketService {
 
       socket!.on('company:seized_status', (data) {
         if (onMarketRefreshRequested != null) onMarketRefreshRequested(data);
+        if (data != null && data['isSeized'] == true) {
+          final reason = data['reason'] ?? 'Pelanggaran / Wanprestasi';
+          NotificationService.showNotification(
+            id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+            title: '🚨 PERINGATAN: SAHAM & EMITEN DISITA!',
+            body: 'Aset dan perseroan telah resmi disita negara/PNAF. Alasan: $reason',
+            channelId: 'pnaf_court_channel',
+          );
+        }
       });
 
       socket!.on('company:deleted', (data) {

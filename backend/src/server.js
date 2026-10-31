@@ -328,6 +328,21 @@ app.post('/api/user/email/verify', async (req, res) => {
   }
 });
 
+// Registrasi Device Token FCM Pengguna (Notifikasi PNAF & Bursa)
+app.post('/api/user/fcm-token', async (req, res) => {
+  try {
+    const { fcmToken, userId } = req.body;
+    if (!fcmToken) return res.status(400).json({ error: 'Device token FCM wajib diisi' });
+
+    if (userId) {
+      await query.run('UPDATE users SET fcm_token = ? WHERE id = ?', [fcmToken, userId]);
+    }
+    res.json({ success: true, message: 'FCM device token berhasil disinkronkan' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Reset Pasar & Populasi Menjadi BARU & BERSIH (Fresh Reset Sesuai Permintaan Otoritas)
 app.post('/api/admin/system/fresh-reset', async (req, res) => {
   try {

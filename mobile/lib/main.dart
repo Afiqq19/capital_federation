@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'providers/game_provider.dart';
 import 'screens/main_navigation_screen.dart';
 import 'screens/onboarding_screen.dart';
+import 'services/notification_service.dart';
 
 import 'package:flutter/services.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -14,6 +15,11 @@ void main() async {
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
   ]);
+  try {
+    await NotificationService.initialize();
+  } catch (e) {
+    debugPrint('NotificationService init error: $e');
+  }
   ErrorWidget.builder = (FlutterErrorDetails details) {
     FlutterError.dumpErrorToConsole(details);
     return Container(

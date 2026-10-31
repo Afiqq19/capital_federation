@@ -1,0 +1,38 @@
+{
+  "project_info": {
+    "project_number": "831901063105",
+    "project_id": "projek-msyafiq19",
+    "storage_bucket": "projek-msyafiq19.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:831901063105:android:1bfd2b1e640f6dde430140",
+        "android_client_info": {
+          "package_name": "com.capitalfederation.mobile"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "831901063105-plqjhh7l4r6otb34stc3uijs9revse97.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.capitalfederation.mobile",
+            "certificate_hash": "ebb006b090bceace128859231af1f57c0a8afb63"
+          }
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAEmmp_uB9pXEkHtyjZkQf-6gbjkPYpi6Q"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
