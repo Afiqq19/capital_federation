@@ -393,47 +393,159 @@ async function executeCourtVerdict(
     }
   }
 
-  if (!alreadyDelivered && awardedAmount > 0 && plaintiffId) {
-    const plUser = await query.get('SELECT id, balance_ib, username FROM users WHERE id = ?', [plaintiffId]);
-    if (plUser) {
-      const newPlBalance = (Number(plUser.balance_ib) || 0) + awardedAmount;
-      await query.run('UPDATE users SET balance_ib = ? WHERE id = ?', [newPlBalance, plUser.id]);
-      await recordCashFlow({
-        userId: plUser.id,
-        accountType: 'PERSONAL',
-        category: 'COURT_VERDICT',
-        title: `Pencairan Putusan PNAF (${c.case_number})`,
-        amountIb: awardedAmount,
-        direction: 'INCOME',
-        balanceAfter: newPlBalance,
-        notes: finalNotes,
-      });
-      if (io) {
-        io.emit('user:balance_updated', { userId: plUser.id, newBalance: newPlBalance });
+  if (!alreadyDelivered && awardedAmount > 0) {
+    if (plaintiffId) {
+      const plUser = await query.get('SELECT id, balance_ib, username FROM users WHERE id = ?', [plaintiffId]);
+      if (plUser) {
+        const newPlBalance = (Number(plUser.balance_ib) || 0) + awardedAmount;
+        await query.run('UPDATE users SET balance_ib = ? WHERE id = ?', [newPlBalance, plUser.id]);
+        await recordCashFlow({
+          userId: plUser.id,
+          accountType: 'PERSONAL',
+          category: 'COURT_VERDICT',
+          title: `Pencairan Putusan PNAF (${c.case_number})`,
+          amountIb: awardedAmount,
+          direction: 'INCOME',
+          balanceAfter: newPlBalance,
+          notes: finalNotes,
+        });
+        if (io) {
+          io.emit('user:balance_updated', { userId: plUser.id, newBalance: newPlBalance });
+        }
       }
+    } else {
+      // Jika Penggugat adalah Bank Sentral / Kas Negara / Otoritas Publik: Setor ganti rugi ke Kas Negara!
+      await query.run(
+        `INSERT INTO state_treasury_ledger (id, source_type, title, amount_ib, direction, reference_id, notes)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          uuidv4(),
+          'COURT_FINE',
+          `Penerimaan Eksekusi Ganti Rugi Putusan PNAF (${c.case_number})`,
+          awardedAmount,
+          'INCOME',
+          caseId,
+          `Eksekusi putusan terhadap ${c.defendant_name}`
+        ]
+      );
+      if (io) io.emit('treasury:updated');
     }
 
     if (c.defendant_user_id && c.defendant_user_id !== plaintiffId && !['admin-001', 'bank-central-bcf'].includes(c.defendant_user_id)) {
-      const defUser = await query.get('SELECT id, balance_ib FROM users WHERE id = ?', [c.defendant_user_id]);
+      const defUser = await query.get('SELECT id, balance_ib, company_balance_ib FROM users WHERE id = ?', [c.defendant_user_id]);
       if (defUser) {
-        const deduct = Math.min(Number(defUser.balance_ib) || 0, awardedAmount);
-        const newDefBalance = Math.max(0, (Number(defUser.balance_ib) || 0) - deduct);
-        await query.run('UPDATE users SET balance_ib = ? WHERE id = ?', [newDefBalance, defUser.id]);
-        if (deduct > 0) {
+        let remainingToDeduct = awardedAmount;
+        const personalBal = Number(defUser.balance_ib) || 0;
+        const personalDeduct = Math.min(personalBal, remainingToDeduct);
+        const newDefPersonal = Math.max(0, personalBal - personalDeduct);
+        remainingToDeduct -= personalDeduct;
+
+        let compBal = Number(defUser.company_balance_ib) || 0;
+        let compDeduct = 0;
+        if (remainingToDeduct > 0) {
+          compDeduct = remainingToDeduct;
+          compBal = compBal - compDeduct; // Boleh minus untuk memicu defisit operasional / pailit
+        }
+
+        await query.run(
+          'UPDATE users SET balance_ib = ?, company_balance_ib = ? WHERE id = ?',
+          [newDefPersonal, compBal, defUser.id]
+        );
+
+        // Jika Tergugat memiliki baris di companies, sinkronkan juga kas PT-nya
+        await query.run(
+          'UPDATE companies SET company_balance_ib = ? WHERE owner_id = ?',
+          [compBal, defUser.id]
+        );
+
+        if (personalDeduct > 0) {
           await recordCashFlow({
             userId: defUser.id,
             accountType: 'PERSONAL',
             category: 'COURT_VERDICT',
             title: `Eksekusi Ganti Rugi Putusan PNAF (${c.case_number})`,
-            amountIb: deduct,
+            amountIb: personalDeduct,
             direction: 'EXPENSE',
-            balanceAfter: newDefBalance,
+            balanceAfter: newDefPersonal,
             notes: finalNotes,
           });
         }
-        if (io) {
-          io.emit('user:balance_updated', { userId: defUser.id, newBalance: newDefBalance });
+        if (compDeduct > 0) {
+          await recordCashFlow({
+            userId: defUser.id,
+            accountType: 'COMPANY',
+            category: 'COURT_VERDICT',
+            title: `Penyitaan Kas Perseroan Putusan PNAF (${c.case_number})`,
+            amountIb: compDeduct,
+            direction: 'EXPENSE',
+            balanceAfter: compBal,
+            notes: `Sanksi putusan pengadilan niaga atas perkara ${c.case_number}`,
+          });
         }
+
+        if (io) {
+          io.emit('user:balance_updated', { userId: defUser.id, newBalance: newDefPersonal });
+        }
+      }
+    }
+  }
+
+  // SITA EKSEKUSI ASET & SAHAM PERUSAHAAN TERGUGAT JIKA TERBUKTI BERSALAH
+  if (finalStatus === 'VERDICT_APPROVED' || finalStatus === 'VERDICT_PAILIT') {
+    let targetComp = null;
+    if (c.defendant_company_id) {
+      targetComp = await query.get('SELECT * FROM companies WHERE id = ?', [c.defendant_company_id]);
+    }
+    if (!targetComp && c.defendant_user_id) {
+      targetComp = await query.get(
+        'SELECT * FROM companies WHERE owner_id = ? ORDER BY current_price DESC LIMIT 1',
+        [c.defendant_user_id]
+      );
+    }
+    if (!targetComp && c.defendant_name) {
+      const cleanName = c.defendant_name.replace(/PT\.|\(.*\)|@/gi, '').trim();
+      targetComp = await query.get(
+        'SELECT * FROM companies WHERE LOWER(symbol) = LOWER(?) OR LOWER(name) LIKE LOWER(?) LIMIT 1',
+        [cleanName, `%${cleanName}%`]
+      );
+    }
+
+    if (targetComp && targetComp.is_seized !== 1) {
+      const now = new Date();
+      const seizedAt = now.toISOString();
+      const seizureDeadline = new Date(now.getTime() + 4 * 24 * 60 * 60 * 1000).toISOString();
+      const reason = `Sita Eksekusi Putusan Hakim PNAF No. ${c.case_number} (${c.title}) - Terbukti Wanprestasi / Bersalah`;
+
+      await query.run(
+        `UPDATE companies 
+         SET is_seized = 1, 
+             seized_by = 'Pengadilan Niaga & Arbitrase Federation (PNAF)', 
+             seized_at = ?, 
+             seizure_deadline = ?, 
+             is_auction_ready = 1, 
+             seize_reason = ?,
+             status = CASE WHEN ? = 'VERDICT_PAILIT' THEN 'BANKRUPT' ELSE 'CRITICAL' END
+         WHERE id = ?`,
+        [seizedAt, seizureDeadline, reason, finalStatus, targetComp.id]
+      );
+
+      const seizureNews = {
+        id: uuidv4(),
+        title: `🚨 SITA EKSEKUSI PNAF: Saham & Aset ${targetComp.name} (${targetComp.symbol}) Resmi Disita Negara!`,
+        content: `Kepaniteraan Eksekusi PNAF resmi menyita perseroan ${targetComp.name} milik Tergugat (${c.defendant_name}) setelah terbukti bersalah dalam Perkara No. ${c.case_number}. Saham perseroan kini masuk antrean Lelang BCF dan kas dibekukan.`,
+        affected_sector: targetComp.sector,
+        sentiment: 'BEARISH',
+        published_at: new Date().toISOString()
+      };
+      await query.run(
+        'INSERT INTO news (id, title, content, affected_sector, sentiment, published_at) VALUES (?, ?, ?, ?, ?, ?)',
+        [seizureNews.id, seizureNews.title, seizureNews.content, seizureNews.affected_sector, seizureNews.sentiment, seizureNews.published_at]
+      );
+      if (io) {
+        io.emit('market:news_broadcast', seizureNews);
+        io.emit('company:seized_status', { companyId: targetComp.id, isSeized: true, reason, seizureDeadline });
+        io.emit('company:status_changed', { companyId: targetComp.id, status: targetComp.status });
+        io.emit('treasury:updated');
       }
     }
   }

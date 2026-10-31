@@ -10,6 +10,7 @@ import { FormField, Input, Textarea, Select } from '../../components/ui/Form';
 import { adminApi } from '../../api/admin';
 import { socket } from '../../lib/socket';
 import { ib } from '../../lib/format';
+import { useAdmin } from '../../context/AdminContext';
 import ScheduleHearingModal from './ScheduleHearingModal';
 import CourtSummonsModal from './CourtSummonsModal';
 import LiveCourtRoomModal from './LiveCourtRoomModal';
@@ -26,9 +27,15 @@ import {
   Bot,
   Zap,
   Power,
+  Building2,
+  Search,
+  X,
+  Check,
+  ShieldAlert,
 } from 'lucide-react';
 
 export default function CourtOversightPage() {
+  const { companies = [], users = [] } = useAdmin?.() || {};
   const [cases, setCases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -59,12 +66,50 @@ export default function CourtOversightPage() {
   const [newCaseType, setNewCaseType] = useState('BANKRUPTCY');
   const [newPlaintiff, setNewPlaintiff] = useState('Bank Sentral Indigo Federasi (BIF)');
   const [newDefendant, setNewDefendant] = useState('');
+  const [selectedDefComp, setSelectedDefComp] = useState(null);
+  const [selectedDefUser, setSelectedDefUser] = useState(null);
+  const [defSearchQuery, setDefSearchQuery] = useState('');
+  const [showDefDropdown, setShowDefDropdown] = useState(false);
   const [newClaimAmount, setNewClaimAmount] = useState(500000000);
   const [newHearingDate, setNewHearingDate] = useState('Hari Ini');
   const [newHearingTime, setNewHearingTime] = useState('10:00 WIB');
   const [newCourtRoom, setNewCourtRoom] = useState('Ruang Sidang Utama Kartika PNAF');
   const [newTargetAsset, setNewTargetAsset] = useState('Saham Portofolio, Dividen, dan Rekening Konglomerat');
   const [submittingNewCase, setSubmittingNewCase] = useState(false);
+
+  const handleSelectCompany = (comp) => {
+    setSelectedDefComp(comp);
+    setSelectedDefUser(null);
+    const ownerLabel = comp.owner_username ? ` - @${comp.owner_username}` : '';
+    const defName = `${comp.name} (${comp.symbol})${ownerLabel}`;
+    setNewDefendant(defName);
+    setNewTargetAsset(`Saham Portofolio & Kas Perseroan ${comp.name} (${comp.symbol})`);
+    if (!newTitle || newTitle.startsWith('Gugatan') || newTitle.startsWith('Sengketa') || newTitle.startsWith('Laporan') || newTitle.startsWith('Permohonan')) {
+      if (newCaseType === 'BANKRUPTCY') {
+        setNewTitle(`Gugatan Kepailitan & Eksekusi Sita Jaminan atas ${comp.name} (${comp.symbol})`);
+      } else if (newCaseType === 'DISPUTE') {
+        setNewTitle(`Sengketa Kepemilikan Saham & Wanprestasi Akta atas ${comp.symbol}`);
+      } else {
+        setNewTitle(`Laporan Dugaan Manipulasi Pasar Bursa & Goreng Saham ${comp.symbol}`);
+      }
+    }
+    setShowDefDropdown(false);
+    setDefSearchQuery('');
+  };
+
+  const handleSelectUser = (u) => {
+    setSelectedDefUser(u);
+    setSelectedDefComp(null);
+    const ptLabel = u.pt_name ? ` (${u.pt_name})` : '';
+    const defName = `@${u.username}${ptLabel}`;
+    setNewDefendant(defName);
+    setNewTargetAsset(`Saham Portofolio, Dividen, dan Kas Pribadi @${u.username}`);
+    if (!newTitle || newTitle.startsWith('Gugatan') || newTitle.startsWith('Sengketa') || newTitle.startsWith('Laporan') || newTitle.startsWith('Permohonan')) {
+      setNewTitle(`Gugatan Wanprestasi & Gagal Bayar Kewajiban atas @${u.username}`);
+    }
+    setShowDefDropdown(false);
+    setDefSearchQuery('');
+  };
 
   // Interactive Modals State
   const [selectedCaseForSchedule, setSelectedCaseForSchedule] = useState(null);
@@ -189,6 +234,8 @@ export default function CourtOversightPage() {
         caseType: newCaseType,
         plaintiffName: newPlaintiff,
         defendantName: newDefendant,
+        defendantCompanyId: selectedDefComp?.id || null,
+        defendantUserId: selectedDefComp?.owner_id || selectedDefUser?.id || null,
         claimAmountIb: Number(newClaimAmount),
         courtHearingDate: newHearingDate,
         hearingTime: newHearingTime,
@@ -198,6 +245,8 @@ export default function CourtOversightPage() {
       setIsFileModalOpen(false);
       setNewTitle('');
       setNewDefendant('');
+      setSelectedDefComp(null);
+      setSelectedDefUser(null);
       await fetchCasesAndStatus(true);
     } catch (err) {
       alert('Gagal mendaftarkan perkara: ' + err.message);
@@ -246,6 +295,30 @@ export default function CourtOversightPage() {
 
     return matchesSearch && matchesType && matchesStatus;
   });
+
+  const filteredCompaniesForDef = (companies || [])
+    .filter((c) => {
+      if (!defSearchQuery) return true;
+      const q = defSearchQuery.toLowerCase();
+      return (
+        (c.name && c.name.toLowerCase().includes(q)) ||
+        (c.symbol && c.symbol.toLowerCase().includes(q)) ||
+        (c.owner_username && c.owner_username.toLowerCase().includes(q)) ||
+        (c.sector && c.sector.toLowerCase().includes(q))
+      );
+    })
+    .slice(0, 15);
+
+  const filteredUsersForDef = (users || [])
+    .filter((u) => {
+      if (!defSearchQuery) return true;
+      const q = defSearchQuery.toLowerCase();
+      return (
+        (u.username && u.username.toLowerCase().includes(q)) ||
+        (u.pt_name && u.pt_name.toLowerCase().includes(q))
+      );
+    })
+    .slice(0, 8);
 
   return (
     <div className="space-y-6 page-enter">
@@ -713,16 +786,25 @@ export default function CourtOversightPage() {
             />
           </FormField>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <FormField label="Jenis Perkara">
               <Select value={newCaseType} onChange={(e) => setNewCaseType(e.target.value)}>
-                <option value="BANKRUPTCY">Kepailitan & PKPU</option>
-                <option value="DISPUTE">Sengketa Jual Beli Saham</option>
-                <option value="REGULATORY">Pelanggaran Regulasi Bursa</option>
+                <option value="BANKRUPTCY">Kepailitan & PKPU (Sita Aset Debitur)</option>
+                <option value="DISPUTE">Sengketa Jual Beli Saham & Akta</option>
+                <option value="REGULATORY">Pelanggaran Regulasi Bursa & Goreng Saham</option>
               </Select>
             </FormField>
 
-            <FormField label="Nilai Tuntutan / Ganti Rugi (IB)">
+            <FormField
+              label={
+                <div className="flex items-center justify-between">
+                  <span>Nilai Tuntutan / Ganti Rugi (IB)</span>
+                  <span className="font-mono text-xs font-bold text-amber-400">
+                    IB {Number(newClaimAmount || 0).toLocaleString('id-ID')}
+                  </span>
+                </div>
+              }
+            >
               <Input
                 type="number"
                 value={newClaimAmount}
@@ -731,28 +813,195 @@ export default function CourtOversightPage() {
                 step="1000000"
                 required
               />
+              <div className="flex flex-wrap gap-1.5 mt-1.5">
+                {[50000000, 100000000, 500000000, 1000000000, 5000000000].map((amt) => (
+                  <button
+                    key={amt}
+                    type="button"
+                    onClick={() => setNewClaimAmount(amt)}
+                    className="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-900 text-slate-300 border border-slate-800 hover:border-amber-500/40 hover:text-amber-300 transition-colors"
+                  >
+                    IB {amt >= 1000000000 ? `${amt / 1000000000} M` : `${amt / 1000000} Jt`}
+                  </button>
+                ))}
+              </div>
             </FormField>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <FormField label="Pihak Penggugat">
-              <Input
-                value={newPlaintiff}
-                onChange={(e) => setNewPlaintiff(e.target.value)}
-                placeholder="Contoh: Bank Sentral Indigo Federasi (BIF)"
-                required
-              />
-            </FormField>
+          <FormField label="Pihak Penggugat (Pengaju Gugatan / Lembaga)">
+            <Input
+              value={newPlaintiff}
+              onChange={(e) => setNewPlaintiff(e.target.value)}
+              placeholder="Contoh: Bank Sentral Indigo Federasi (BIF)"
+              required
+            />
+            <div className="flex flex-wrap gap-1.5 mt-1.5">
+              {[
+                { label: '🏛️ Bank Sentral BIF', val: 'Bank Sentral Indigo Federasi (BIF)' },
+                { label: '🛡️ Otoritas Bursa OPFF', val: 'Otoritas Pengawas Finansial Federasi (OPFF)' },
+                { label: '🏦 Kas Negara Federasi', val: 'Kas Negara / Treasury Federasi' },
+                { label: '👑 PT. Syafiq Capital Tbk.', val: 'PT. Syafiq Capital Tbk. (@msyafiq19)' },
+              ].map((preset) => (
+                <button
+                  key={preset.label}
+                  type="button"
+                  onClick={() => setNewPlaintiff(preset.val)}
+                  className={`px-2 py-0.5 rounded text-[10px] font-medium border transition-colors ${
+                    newPlaintiff === preset.val
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                      : 'bg-slate-900 text-slate-400 border-slate-800 hover:border-slate-700'
+                  }`}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          </FormField>
 
-            <FormField label="Pihak Tergugat">
-              <Input
-                value={newDefendant}
-                onChange={(e) => setNewDefendant(e.target.value)}
-                placeholder="Contoh: PT. Makmur Jaya Abadi"
-                required
-              />
-            </FormField>
-          </div>
+          <FormField
+            label={
+              <div className="flex items-center justify-between">
+                <span>Pihak Tergugat (Cari Perusahaan / Konglomerat Sasaran)</span>
+                <span className="text-[10px] text-slate-400 font-normal">Cari dari 360+ Emiten & Konglomerat</span>
+              </div>
+            }
+            hint="Ketik nama atau kode saham untuk mencari emiten sasaran sita eksekusi & ganti rugi"
+          >
+            <div className="relative">
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Input
+                    value={newDefendant}
+                    onChange={(e) => {
+                      setNewDefendant(e.target.value);
+                      setDefSearchQuery(e.target.value);
+                      setShowDefDropdown(true);
+                    }}
+                    onFocus={() => setShowDefDropdown(true)}
+                    placeholder="Ketik kode saham (misal: BALN, ARPD, SYFU) atau nama PT / pemain..."
+                    required
+                  />
+                  {newDefendant && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewDefendant('');
+                        setSelectedDefComp(null);
+                        setSelectedDefUser(null);
+                      }}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowDefDropdown(!showDefDropdown)}
+                  icon={Search}
+                >
+                  Cari PT
+                </Button>
+              </div>
+
+              {/* Autocomplete Dropdown List */}
+              {showDefDropdown && (
+                <div className="absolute z-50 left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-2 space-y-1 backdrop-blur-md">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 py-1 flex items-center justify-between">
+                    <span>Hasil Pencarian Emiten & Konglomerat</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowDefDropdown(false)}
+                      className="text-slate-400 hover:text-white"
+                    >
+                      Tutup [X]
+                    </button>
+                  </div>
+
+                  {filteredCompaniesForDef.length === 0 && filteredUsersForDef.length === 0 && (
+                    <div className="p-3 text-center text-xs text-slate-500">
+                      Tidak ada emiten atau pemain yang cocok dengan "{defSearchQuery}"
+                    </div>
+                  )}
+
+                  {filteredCompaniesForDef.map((comp) => (
+                    <div
+                      key={comp.id}
+                      onClick={() => handleSelectCompany(comp)}
+                      className="flex items-center justify-between p-2 hover:bg-slate-800/80 rounded-lg cursor-pointer transition-colors border border-transparent hover:border-slate-700"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs font-bold text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
+                          {comp.symbol}
+                        </span>
+                        <div>
+                          <div className="text-xs font-semibold text-slate-200">{comp.name}</div>
+                          <div className="text-[10px] text-slate-400">
+                            Pemilik: <span className="text-sky-400">@{comp.owner_username || 'Bot/Publik'}</span> • Sektor: {comp.sector}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-mono text-xs font-bold text-emerald-400">
+                          IB {Number(comp.current_price || 0).toLocaleString('id-ID')}
+                        </div>
+                        {comp.is_seized === 1 ? (
+                          <span className="text-[9px] text-rose-400 font-bold bg-rose-500/10 px-1 rounded border border-rose-500/20">
+                            SEDANG DISITA
+                          </span>
+                        ) : (
+                          <span className="text-[9px] text-slate-500">Aktif</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+
+                  {filteredUsersForDef.length > 0 && (
+                    <>
+                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 pt-2 pb-1 border-t border-slate-800">
+                        Konglomerat / Akun Pemain
+                      </div>
+                      {filteredUsersForDef.map((u) => (
+                        <div
+                          key={u.id}
+                          onClick={() => handleSelectUser(u)}
+                          className="flex items-center justify-between p-2 hover:bg-slate-800/80 rounded-lg cursor-pointer transition-colors"
+                        >
+                          <div>
+                            <span className="font-bold text-xs text-sky-400">@{u.username}</span>
+                            {u.pt_name && <span className="text-xs text-slate-300 ml-1.5 font-medium">({u.pt_name})</span>}
+                          </div>
+                          <div className="text-right text-[10px] text-slate-400 font-mono">
+                            Kas: IB {Number(u.balance_ib || 0).toLocaleString('id-ID')}
+                          </div>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Selected Target Company / Defendant Badge */}
+            {selectedDefComp && (
+              <div className="mt-2 p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-start gap-2.5">
+                <ShieldAlert className="text-rose-400 mt-0.5 shrink-0" size={16} />
+                <div className="text-xs flex-1">
+                  <div className="font-semibold text-rose-200">
+                    Target Sita Eksekusi: <span className="font-bold text-amber-300">{selectedDefComp.name} ({selectedDefComp.symbol})</span>
+                  </div>
+                  <div className="text-[11px] text-slate-300 mt-0.5">
+                    Konglomerat Tergugat: <span className="text-sky-300 font-medium">@{selectedDefComp.owner_username || 'Bot'}</span> • Harga: <span className="font-mono text-emerald-400">IB {Number(selectedDefComp.current_price || 0).toLocaleString('id-ID')}</span>
+                  </div>
+                  <div className="text-[10px] text-rose-300 mt-1 font-medium bg-rose-500/20 px-2 py-0.5 rounded inline-block">
+                    ⚡ Sanksi Vonis: Jika Terbukti Bersalah / Pailit, kas dipotong ganti rugi dan perseroan LANGSUNG DISITA otomatis masuk antrean Lelang BCF!
+                  </div>
+                </div>
+              </div>
+            )}
+          </FormField>
 
           <FormField label="Objek Sitaan / Barang Jaminan yang Dituntut">
             <Input
