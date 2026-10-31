@@ -1,3 +1,4 @@
+import '../utils/wib_time.dart';
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../utils/formatters.dart';
@@ -50,7 +51,7 @@ class _CashFlowLedgerModalState extends State<CashFlowLedgerModal> {
     final m = months[dt.month - 1];
     final h = dt.hour.toString().padLeft(2, '0');
     final min = dt.minute.toString().padLeft(2, '0');
-    return '${dt.day} $m ${dt.year}, $h:$min';
+    return '${dt.day} $m ${dt.year}, $h:$min WIB';
   }
 
   @override
@@ -551,7 +552,7 @@ class _CashFlowLedgerModalState extends State<CashFlowLedgerModal> {
     DateTime? createdAt;
     if (createdAtStr != null) {
       try {
-        createdAt = DateTime.parse(createdAtStr).toLocal();
+        createdAt = parseServerTime(createdAtStr);
       } catch (_) {}
     }
 

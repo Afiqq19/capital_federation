@@ -1,3 +1,4 @@
+import '../utils/wib_time.dart';
 class PricePoint {
   final double open;
   final double close;
@@ -30,7 +31,7 @@ class PricePoint {
       low: l,
       price: p > 0 ? p : c,
       volume: json['volume'] ?? 0,
-      timestamp: DateTime.tryParse(json['timestamp'] ?? '') ?? DateTime.now(),
+      timestamp: parseServerTime(json['timestamp']),
     );
   }
 }

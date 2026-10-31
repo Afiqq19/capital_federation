@@ -1,3 +1,4 @@
+import '../utils/wib_time.dart';
 class NewsModel {
   final String id;
   final String title;
@@ -22,7 +23,7 @@ class NewsModel {
       content: json['content'] ?? '',
       affectedSector: json['affected_sector'] ?? json['affectedSector'] ?? 'ALL',
       sentiment: json['sentiment'] ?? 'NEUTRAL',
-      publishedAt: DateTime.tryParse(json['published_at'] ?? json['publishedAt'] ?? '') ?? DateTime.now(),
+      publishedAt: parseServerTime(json['published_at'] ?? json['publishedAt']),
     );
   }
 }
@@ -72,7 +73,7 @@ class ChatMessageModel {
       badge: badgeStr,
       rank: json['rank'] is int ? json['rank'] as int : int.tryParse('${json['rank'] ?? ''}'),
       isVip: json['isVip'] == true || json['is_vip'] == true || badgeStr.toUpperCase().contains('VIP'),
-      createdAt: DateTime.tryParse(json['created_at'] ?? json['createdAt'] ?? '') ?? DateTime.now(),
+      createdAt: parseServerTime(json['created_at'] ?? json['createdAt']),
     );
   }
 }

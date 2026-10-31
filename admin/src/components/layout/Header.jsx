@@ -13,6 +13,7 @@ export default function Header({ currentPage, adminUser, onLogout, onToggleMobil
       const now = new Date();
       setTimeStr(
         now.toLocaleTimeString('id-ID', {
+          timeZone: 'Asia/Jakarta',
           hour: '2-digit',
           minute: '2-digit',
           second: '2-digit',

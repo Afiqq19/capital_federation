@@ -1,3 +1,4 @@
+import '../utils/wib_time.dart';
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../utils/formatters.dart';
@@ -638,7 +639,7 @@ class _CashFlowLedgerScreenState extends State<CashFlowLedgerScreen> {
     final category = item['category']?.toString() ?? 'OTHER';
     final notes = item['notes']?.toString();
     final createdAtStr = item['created_at']?.toString();
-    final createdAt = createdAtStr != null ? DateTime.tryParse(createdAtStr) : null;
+    final createdAt = tryParseServerTime(createdAtStr);
 
     // Kategori Styling & Icon
     IconData catIcon = Icons.swap_horiz_rounded;
@@ -808,7 +809,7 @@ class _CashFlowLedgerScreenState extends State<CashFlowLedgerScreen> {
     final refId = item['id']?.toString() ?? item['reference_id']?.toString() ?? 'MUT-CFX';
     final notes = item['notes']?.toString() ?? '-';
     final createdAtStr = item['created_at']?.toString();
-    final createdAt = createdAtStr != null ? DateTime.tryParse(createdAtStr) : null;
+    final createdAt = tryParseServerTime(createdAtStr);
 
     showDialog(
       context: context,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../utils/formatters.dart';
+import '../../../utils/wib_time.dart';
 import '../models/deal_model.dart';
 import '../services/deals_service.dart';
 import 'partial_buy_sheet.dart';
@@ -77,7 +78,7 @@ class DealCard extends StatelessWidget {
                 ),
               ),
               Text(
-                deal.createdAt.length >= 10 ? deal.createdAt.substring(0, 10) : '',
+                (tryParseServerTime(deal.createdAt)?.toString().substring(0, 10) ?? ''),
                 style: const TextStyle(color: Color(0xFF64748B), fontSize: 10),
               ),
             ],

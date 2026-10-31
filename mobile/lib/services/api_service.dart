@@ -1,4 +1,5 @@
 import 'dart:convert';
+import '../utils/local_cache.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/company.dart';
@@ -84,9 +85,9 @@ class ApiService {
     return null;
   }
 
-  static const String currentAppVersion = '1.6.4';
-  static const int currentBuildNumber = 18;
-  static const String currentApkDisplayVersion = 'v1.6.4-CFX Production (Build 18)';
+  static const String currentAppVersion = '1.6.5';
+  static const int currentBuildNumber = 19;
+  static const String currentApkDisplayVersion = 'v1.6.5-CFX Production (Build 19)';
 
   // Fetch Live Server Version & Update Detection Info
   static Future<Map<String, dynamic>?> getServerVersion() async {
@@ -330,6 +331,9 @@ class ApiService {
       final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 20));
       if (response.statusCode == 200) {
         final List<dynamic> list = jsonDecode(response.body);
+        if (sector == null && status == null && (search == null || search.isEmpty)) {
+          LocalCache.write('companies', response.body);
+        }
         return list.map((e) => CompanyModel.fromJson(e)).toList();
       }
     } catch (e) {
@@ -343,6 +347,7 @@ class ApiService {
     try {
       final response = await http.get(Uri.parse('$baseUrl/api/market/overview')).timeout(const Duration(seconds: 20));
       if (response.statusCode == 200) {
+        LocalCache.write('overview', response.body);
         return jsonDecode(response.body) as Map<String, dynamic>;
       }
     } catch (e) {
@@ -719,6 +724,7 @@ class ApiService {
     try {
       final response = await http.get(Uri.parse('$baseUrl/api/leaderboard')).timeout(const Duration(seconds: 20));
       if (response.statusCode == 200) {
+        LocalCache.write('leaderboard', response.body);
         return List<Map<String, dynamic>>.from(jsonDecode(response.body));
       }
     } catch (_) {}
@@ -731,6 +737,7 @@ class ApiService {
       final response = await http.get(Uri.parse('$baseUrl/api/chat')).timeout(const Duration(seconds: 20));
       if (response.statusCode == 200) {
         final List<dynamic> list = jsonDecode(response.body);
+        LocalCache.write('chat', response.body);
         return list.map((e) => ChatMessageModel.fromJson(e)).toList();
       }
     } catch (_) {}
@@ -808,6 +815,7 @@ class ApiService {
       final response = await http.get(Uri.parse('$baseUrl/api/news')).timeout(const Duration(seconds: 20));
       if (response.statusCode == 200) {
         final list = jsonDecode(response.body) as List;
+        LocalCache.write('news', response.body);
         return list.map((item) => NewsModel.fromJson(item)).toList();
       }
     } catch (_) {}

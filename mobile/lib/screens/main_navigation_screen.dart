@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../providers/game_provider.dart';
 import '../services/api_service.dart';
 import '../utils/download_helper.dart';
 import 'home_tab.dart';
@@ -85,6 +87,31 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       backgroundColor: const Color(0xFF070B14),
       body: Column(
         children: [
+          Selector<GameProvider, String?>(
+            selector: (_, p) => p.syncFailed ? (p.lastSyncLabel ?? '-') : null,
+            builder: (_, label, __) => label == null
+                ? const SizedBox.shrink()
+                : Container(
+                    width: double.infinity,
+                    color: const Color(0xFF3B2A06),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                    child: SafeArea(
+                      bottom: false,
+                      child: Row(
+                        children: [
+                          const Icon(Icons.cloud_off_rounded, color: Color(0xFFFBBF24), size: 13),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              'Sinyal lemah • menampilkan data tersimpan • terakhir diperbarui $label',
+                              style: const TextStyle(color: Color(0xFFFDE68A), fontSize: 10.5, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+          ),
           Expanded(
             child: IndexedStack(
               index: _currentIndex,

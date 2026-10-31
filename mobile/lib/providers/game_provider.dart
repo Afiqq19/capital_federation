@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
@@ -6,6 +7,8 @@ import '../models/portfolio.dart';
 import '../models/news.dart';
 import '../services/api_service.dart';
 import '../services/socket_service.dart';
+import '../utils/local_cache.dart';
+import '../utils/wib_time.dart';
 
 class GameProvider extends ChangeNotifier {
   UserModel? _user;
@@ -20,6 +23,8 @@ class GameProvider extends ChangeNotifier {
   List<Map<String, dynamic>> _runningTrades = [];
   List<Map<String, dynamic>> _ipoOfferings = [];
   bool _isLoading = false;
+  bool _syncFailed = false;
+  DateTime? _lastSync;
   String _selectedSector = 'ALL';
   List<Map<String, dynamic>> _userLoans = [];
   Map<String, dynamic>? _activeLoan;
@@ -54,6 +59,13 @@ class GameProvider extends ChangeNotifier {
   List<Map<String, dynamic>> get runningTrades => _runningTrades;
   List<Map<String, dynamic>> get ipoOfferings => _ipoOfferings;
   bool get isLoading => _isLoading;
+  /// True bila pembaruan dari server gagal sehingga yang tampil adalah data tersimpan di HP.
+  bool get syncFailed => _syncFailed;
+  String? get lastSyncLabel {
+    final t = _lastSync;
+    if (t == null) return null;
+    return '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')} WIB';
+  }
   String get selectedSector => _selectedSector;
   Map<String, dynamic>? get conglomerateData => _conglomerate.isNotEmpty ? {'primaryCompany': _conglomerate.first} : null;
   Future<void> fetchUserData() => refreshPortfolio();
@@ -70,31 +82,85 @@ class GameProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Pulihkan data terakhir dari penyimpanan HP agar layar langsung terisi.
+  Future<bool> _restoreFromCache({required bool withUser}) async {
+    try {
+      if (withUser) {
+        final raw = await LocalCache.read('user');
+        if (raw != null) {
+          _user = UserModel.fromJson(Map<String, dynamic>.from(jsonDecode(raw)));
+        }
+      }
+      final c = await LocalCache.read('companies');
+      if (c != null) {
+        _companies = (jsonDecode(c) as List).map((e) => CompanyModel.fromJson(e)).toList();
+      }
+      final lb = await LocalCache.read('leaderboard');
+      if (lb != null) {
+        _leaderboard = List<Map<String, dynamic>>.from(jsonDecode(lb));
+      }
+      final n = await LocalCache.read('news');
+      if (n != null) {
+        final list = (jsonDecode(n) as List).map((e) => NewsModel.fromJson(e)).toList();
+        if (list.isNotEmpty) {
+          _newsList
+            ..clear()
+            ..addAll(list);
+        }
+      }
+      final ch = await LocalCache.read('chat');
+      if (ch != null) {
+        _chatMessages = (jsonDecode(ch) as List).map((e) => ChatMessageModel.fromJson(e)).toList();
+      }
+      final mo = await LocalCache.read('overview');
+      if (mo != null) {
+        _marketOverview = Map<String, dynamic>.from(jsonDecode(mo));
+      }
+      final at = await LocalCache.stamp('companies');
+      if (at != null) _lastSync = tryParseServerTime(at);
+    } catch (e) {
+      debugPrint('Cache restore warning: $e');
+    }
+    return withUser ? _user != null : true;
+  }
+
   Future<void> initGame() async {
     _isLoading = true;
     notifyListeners();
 
     try {
-      // Auto discover host (ADB reverse, LAN Wi-Fi, or localhost)
-      await ApiService.autoDiscoverHost();
-
       final prefs = await SharedPreferences.getInstance();
       final savedUsername = prefs.getString('saved_username');
       final savedPassword = prefs.getString('saved_password') ?? 'password123';
 
-      // Auto login user if previously registered/logged in
+      // 1. Tampilkan data tersimpan SEKETIKA (tanpa menunggu jaringan)
+      final restored = await _restoreFromCache(withUser: savedUsername != null);
+      if (savedUsername == null || restored) {
+        _isLoading = false;
+        notifyListeners();
+      }
+
+      // 2. Di latar belakang: cari server, login ulang, ambil data terbaru
+      await ApiService.autoDiscoverHost();
+
       if (savedUsername != null) {
         final res = await ApiService.login(username: savedUsername, password: savedPassword);
         if (res['user'] != null) {
           _user = UserModel.fromJson(res['user']);
+          LocalCache.write('user', jsonEncode(res['user']));
+        } else if (res['error'] != null && !res['error'].toString().startsWith('Koneksi')) {
+          // Server menolak sesi (mis. akun diblokir / sandi berubah): keluarkan
+          _user = null;
+          _portfolio = null;
+          await LocalCache.remove('user');
         }
       }
 
-      await loadInitialData();
       _initSocket();
       if (_user != null) {
         SocketService.joinUser(_user!.id);
       }
+      await loadInitialData();
     } catch (e) {
       debugPrint('Initialization warning: $e');
     } finally {
@@ -264,7 +330,11 @@ class GameProvider extends ChangeNotifier {
     ]);
 
     final fetchedCompanies = results[0] as List<CompanyModel>;
-    if (fetchedCompanies.isNotEmpty) _companies = fetchedCompanies;
+    _syncFailed = fetchedCompanies.isEmpty;
+    if (fetchedCompanies.isNotEmpty) {
+      _companies = fetchedCompanies;
+      _lastSync = nowWib();
+    }
     if (results[1] != null) {
       _marketOverview = results[1] as Map<String, dynamic>;
     }
@@ -303,7 +373,7 @@ class GameProvider extends ChangeNotifier {
     notifyListeners();
 
     // Jaringan lambat: jika pasar/peringkat masih kosong, coba ulang otomatis di latar belakang
-    if ((_companies.isEmpty || _leaderboard.isEmpty) && retry < 3) {
+    if ((_syncFailed || _leaderboard.isEmpty) && retry < 3) {
       Future.delayed(const Duration(seconds: 3), () => loadInitialData(retry: retry + 1));
     }
   }
@@ -386,6 +456,7 @@ class GameProvider extends ChangeNotifier {
 
       if (res['user'] != null) {
         _user = UserModel.fromJson(res['user']);
+        LocalCache.write('user', jsonEncode(res['user']));
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('saved_username', username);
         await prefs.setString('saved_password', password);
@@ -405,6 +476,7 @@ class GameProvider extends ChangeNotifier {
       final res = await ApiService.login(username: username, password: password);
       if (res['user'] != null) {
         _user = UserModel.fromJson(res['user']);
+        LocalCache.write('user', jsonEncode(res['user']));
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('saved_username', username);
         await prefs.setString('saved_password', password);
@@ -426,6 +498,7 @@ class GameProvider extends ChangeNotifier {
     final res = await ApiService.login(username: 'sultan_budi', password: 'player123');
     if (res['user'] != null) {
       _user = UserModel.fromJson(res['user']);
+      LocalCache.write('user', jsonEncode(res['user']));
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('saved_username', 'sultan_budi');
       await prefs.setString('saved_password', 'player123');
@@ -441,6 +514,7 @@ class GameProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('saved_username');
     await prefs.remove('saved_password');
+    await LocalCache.remove('user');
     _user = null;
     _portfolio = null;
     notifyListeners();

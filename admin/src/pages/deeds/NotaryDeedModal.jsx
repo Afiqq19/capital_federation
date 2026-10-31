@@ -1,7 +1,7 @@
 import Modal from '../../components/ui/Modal';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
-import { ib, dateTime } from '../../lib/format';
+import { ib, dateTime, parseDate } from '../../lib/format';
 import {
   FileText,
   ShieldCheck,
@@ -22,14 +22,16 @@ export default function NotaryDeedModal({ open, onClose, deed }) {
     window.print();
   };
 
-  const createdDate = deed.created_at ? new Date(deed.created_at) : new Date();
+  const createdDate = (parseDate(deed.created_at) || new Date());
   const formattedDate = createdDate.toLocaleDateString('id-ID', {
+    timeZone: 'Asia/Jakarta',
     weekday: 'long',
     year: 'numeric',
     month: 'long',
     day: 'numeric',
   });
   const formattedTime = createdDate.toLocaleTimeString('id-ID', {
+    timeZone: 'Asia/Jakarta',
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
@@ -37,6 +39,7 @@ export default function NotaryDeedModal({ open, onClose, deed }) {
 
   // Waktu tanda tangan pihak (simulasi selisih 1-2 menit setelah dibuat)
   const signedTime = new Date(createdDate.getTime() + 120000).toLocaleTimeString('id-ID', {
+    timeZone: 'Asia/Jakarta',
     hour: '2-digit',
     minute: '2-digit',
   }) + ' WIB';

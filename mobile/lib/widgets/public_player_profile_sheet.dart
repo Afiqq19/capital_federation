@@ -1,3 +1,4 @@
+import '../utils/wib_time.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../services/api_service.dart';
@@ -75,7 +76,7 @@ class _PublicPlayerProfileSheetState extends State<PublicPlayerProfileSheet> {
   String _formatDate(String? isoString) {
     if (isoString == null || isoString.isEmpty) return '15 Oktober 2026';
     try {
-      final dt = DateTime.parse(isoString).toLocal();
+      final dt = parseServerTime(isoString);
       return DateFormat('d MMMM yyyy', 'id_ID').format(dt);
     } catch (_) {
       return '15 Oktober 2026';

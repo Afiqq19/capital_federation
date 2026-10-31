@@ -34,12 +34,12 @@ export const parseDate = (value) => {
 
 export const dateTime = (value) => {
   const d = parseDate(value);
-  return d ? d.toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-';
+  return d ? d.toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-';
 };
 
 export const timeOnly = (value) => {
   const d = parseDate(value);
-  return d ? d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '-';
+  return d ? d.toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '-';
 };
 
 /** Sisa waktu menuju tanggal tertentu: "2h 4j", "35m", "Berakhir". */
