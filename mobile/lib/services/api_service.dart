@@ -76,7 +76,7 @@ class ApiService {
   // Fetch Central Bank & Monetary Settings
   static Future<Map<String, dynamic>?> getSettings() async {
     try {
-      final res = await http.get(Uri.parse('$baseUrl/api/admin/settings')).timeout(const Duration(seconds: 4));
+      final res = await http.get(Uri.parse('$baseUrl/api/admin/settings')).timeout(const Duration(seconds: 20));
       if (res.statusCode == 200) {
         return jsonDecode(res.body);
       }
@@ -84,16 +84,16 @@ class ApiService {
     return null;
   }
 
-  static const String currentAppVersion = '1.6.3';
-  static const int currentBuildNumber = 17;
-  static const String currentApkDisplayVersion = 'v1.6.3-CFX Production (Build 17)';
+  static const String currentAppVersion = '1.6.4';
+  static const int currentBuildNumber = 18;
+  static const String currentApkDisplayVersion = 'v1.6.4-CFX Production (Build 18)';
 
   // Fetch Live Server Version & Update Detection Info
   static Future<Map<String, dynamic>?> getServerVersion() async {
     try {
       final res = await http
           .get(Uri.parse('$baseUrl/api/version'))
-          .timeout(const Duration(seconds: 4));
+          .timeout(const Duration(seconds: 20));
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         if (data is Map<String, dynamic>) {
@@ -121,7 +121,7 @@ class ApiService {
           if (ptName != null) 'ptName': ptName,
           if (sector != null) 'sector': sector,
         }),
-      ).timeout(const Duration(seconds: 4));
+      ).timeout(const Duration(seconds: 20));
       return jsonDecode(response.body);
     } catch (e) {
       await autoDiscoverHost();
@@ -135,7 +135,7 @@ class ApiService {
             if (ptName != null) 'ptName': ptName,
             if (sector != null) 'sector': sector,
           }),
-        ).timeout(const Duration(seconds: 4));
+        ).timeout(const Duration(seconds: 20));
         return jsonDecode(retryRes.body);
       } catch (_) {
         return {'error': 'Koneksi ke server ($baseUrl) gagal. Pastikan HP & laptop di Wi-Fi yang sama.'};
@@ -156,7 +156,7 @@ class ApiService {
           'username': username,
           'password': password,
         }),
-      ).timeout(const Duration(seconds: 4));
+      ).timeout(const Duration(seconds: 20));
       return jsonDecode(response.body);
     } catch (e) {
       await autoDiscoverHost();
@@ -168,7 +168,7 @@ class ApiService {
             'username': username,
             'password': password,
           }),
-        ).timeout(const Duration(seconds: 4));
+        ).timeout(const Duration(seconds: 20));
         return jsonDecode(retryRes.body);
       } catch (_) {
         return {'error': 'Koneksi ke server ($baseUrl) gagal. Pastikan HP & laptop di Wi-Fi yang sama.'};
@@ -327,7 +327,7 @@ class ApiService {
       if (status != null && status != 'ALL') url += '&status=$status';
       if (search != null && search.isNotEmpty) url += '&search=$search';
 
-      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 4));
+      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 20));
       if (response.statusCode == 200) {
         final List<dynamic> list = jsonDecode(response.body);
         return list.map((e) => CompanyModel.fromJson(e)).toList();
@@ -341,7 +341,7 @@ class ApiService {
   // Get IPMC / IHSG Market Overview & Intraday Stats
   static Future<Map<String, dynamic>?> getMarketOverview() async {
     try {
-      final response = await http.get(Uri.parse('$baseUrl/api/market/overview')).timeout(const Duration(seconds: 4));
+      final response = await http.get(Uri.parse('$baseUrl/api/market/overview')).timeout(const Duration(seconds: 20));
       if (response.statusCode == 200) {
         return jsonDecode(response.body) as Map<String, dynamic>;
       }
@@ -379,7 +379,7 @@ class ApiService {
     try {
       final response = await http
           .get(Uri.parse('$baseUrl/api/user/conglomerate/$userId'))
-          .timeout(const Duration(seconds: 4));
+          .timeout(const Duration(seconds: 20));
       if (response.statusCode == 200) {
         final List<dynamic> list = jsonDecode(response.body);
         return list.map((e) => Map<String, dynamic>.from(e)).toList();
@@ -396,7 +396,7 @@ class ApiService {
       final uri = Uri.parse('$baseUrl/api/seizure/$companyId/redemption-info${userId != null ? '?userId=$userId' : ''}');
       final response = await http
           .get(uri)
-          .timeout(const Duration(seconds: 4));
+          .timeout(const Duration(seconds: 20));
       if (response.statusCode == 200) {
         return Map<String, dynamic>.from(jsonDecode(response.body));
       }
@@ -502,7 +502,7 @@ class ApiService {
   // Get Company Detail with Price History & Orderbook
   static Future<CompanyModel?> getCompanyDetail(String id, {String range = '1D'}) async {
     try {
-      final response = await http.get(Uri.parse('$baseUrl/api/companies/$id?range=$range')).timeout(const Duration(seconds: 4));
+      final response = await http.get(Uri.parse('$baseUrl/api/companies/$id?range=$range')).timeout(const Duration(seconds: 20));
       if (response.statusCode == 200) {
         return CompanyModel.fromJson(jsonDecode(response.body));
       }
@@ -530,7 +530,7 @@ class ApiService {
             'type': type,
             'lots': lots,
           }),
-        ).timeout(const Duration(seconds: 4));
+        ).timeout(const Duration(seconds: 20));
 
         return jsonDecode(response.body);
       } catch (e) {
@@ -545,7 +545,7 @@ class ApiService {
   // Get Portfolio
   static Future<PortfolioSummaryModel?> getPortfolio(String userId) async {
     try {
-      final response = await http.get(Uri.parse('$baseUrl/api/portfolio/$userId')).timeout(const Duration(seconds: 4));
+      final response = await http.get(Uri.parse('$baseUrl/api/portfolio/$userId')).timeout(const Duration(seconds: 20));
       if (response.statusCode == 200) {
         return PortfolioSummaryModel.fromJson(jsonDecode(response.body));
       }
@@ -641,7 +641,7 @@ class ApiService {
   // Get Takeover Targets (Kritis)
   static Future<List<CompanyModel>> getTakeoverTargets() async {
     try {
-      final response = await http.get(Uri.parse('$baseUrl/api/takeover/targets')).timeout(const Duration(seconds: 4));
+      final response = await http.get(Uri.parse('$baseUrl/api/takeover/targets')).timeout(const Duration(seconds: 20));
       if (response.statusCode == 200) {
         final List<dynamic> list = jsonDecode(response.body);
         return list.map((e) => CompanyModel.fromJson(e)).toList();
@@ -717,7 +717,7 @@ class ApiService {
   // Leaderboard Top 100
   static Future<List<Map<String, dynamic>>> getLeaderboard() async {
     try {
-      final response = await http.get(Uri.parse('$baseUrl/api/leaderboard')).timeout(const Duration(seconds: 4));
+      final response = await http.get(Uri.parse('$baseUrl/api/leaderboard')).timeout(const Duration(seconds: 20));
       if (response.statusCode == 200) {
         return List<Map<String, dynamic>>.from(jsonDecode(response.body));
       }
@@ -728,7 +728,7 @@ class ApiService {
   // Chat Messages
   static Future<List<ChatMessageModel>> getChatMessages() async {
     try {
-      final response = await http.get(Uri.parse('$baseUrl/api/chat')).timeout(const Duration(seconds: 4));
+      final response = await http.get(Uri.parse('$baseUrl/api/chat')).timeout(const Duration(seconds: 20));
       if (response.statusCode == 200) {
         final List<dynamic> list = jsonDecode(response.body);
         return list.map((e) => ChatMessageModel.fromJson(e)).toList();
@@ -750,7 +750,7 @@ class ApiService {
           'userId': userId,
           'text': text,
         }),
-      ).timeout(const Duration(seconds: 4));
+      ).timeout(const Duration(seconds: 20));
     } catch (_) {}
   }
 
@@ -794,7 +794,7 @@ class ApiService {
   // Real-time Running Trades tape from server
   static Future<List<Map<String, dynamic>>> getRunningTrades() async {
     try {
-      final response = await http.get(Uri.parse('$baseUrl/api/market/running-trade')).timeout(const Duration(seconds: 4));
+      final response = await http.get(Uri.parse('$baseUrl/api/market/running-trade')).timeout(const Duration(seconds: 20));
       if (response.statusCode == 200) {
         return List<Map<String, dynamic>>.from(jsonDecode(response.body));
       }
@@ -805,7 +805,7 @@ class ApiService {
   // Fetch corporate actions and market news
   static Future<List<NewsModel>> getNews() async {
     try {
-      final response = await http.get(Uri.parse('$baseUrl/api/news')).timeout(const Duration(seconds: 4));
+      final response = await http.get(Uri.parse('$baseUrl/api/news')).timeout(const Duration(seconds: 20));
       if (response.statusCode == 200) {
         final list = jsonDecode(response.body) as List;
         return list.map((item) => NewsModel.fromJson(item)).toList();
@@ -818,7 +818,7 @@ class ApiService {
   static Future<List<Map<String, dynamic>>> getIpoOfferings({String? userId}) async {
     try {
       final uri = Uri.parse('$baseUrl/api/ipo/offerings${userId != null ? '?userId=$userId' : ''}');
-      final response = await http.get(uri).timeout(const Duration(seconds: 4));
+      final response = await http.get(uri).timeout(const Duration(seconds: 20));
       if (response.statusCode == 200) {
         return List<Map<String, dynamic>>.from(jsonDecode(response.body));
       }
@@ -1041,7 +1041,7 @@ class ApiService {
     try {
       final response = await http
           .get(Uri.parse('$baseUrl/api/users/list-candidates'))
-          .timeout(const Duration(seconds: 4));
+          .timeout(const Duration(seconds: 20));
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
       }
@@ -1082,7 +1082,7 @@ class ApiService {
   // Indikator Makroekonomi Republik Federasi & IPMC
   static Future<Map<String, dynamic>?> getFederationMacro() async {
     try {
-      final response = await http.get(Uri.parse('$baseUrl/api/federation/macro')).timeout(const Duration(seconds: 4));
+      final response = await http.get(Uri.parse('$baseUrl/api/federation/macro')).timeout(const Duration(seconds: 20));
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
       }
@@ -1093,7 +1093,7 @@ class ApiService {
   // Daftar Perkara Sidang Pengadilan Niaga Federasi (PNAF)
   static Future<List<Map<String, dynamic>>> getCourtCases() async {
     try {
-      final response = await http.get(Uri.parse('$baseUrl/api/court/cases')).timeout(const Duration(seconds: 4));
+      final response = await http.get(Uri.parse('$baseUrl/api/court/cases')).timeout(const Duration(seconds: 20));
       if (response.statusCode == 200) {
         return List<Map<String, dynamic>>.from(jsonDecode(response.body));
       }
@@ -1140,7 +1140,7 @@ class ApiService {
   // Daftar Proposal Bidding Pre-IPO Masuk
   static Future<List<Map<String, dynamic>>> getIpoBids(String ipoId) async {
     try {
-      final response = await http.get(Uri.parse('$baseUrl/api/ipo/bids/$ipoId')).timeout(const Duration(seconds: 4));
+      final response = await http.get(Uri.parse('$baseUrl/api/ipo/bids/$ipoId')).timeout(const Duration(seconds: 20));
       if (response.statusCode == 200) {
         return List<Map<String, dynamic>>.from(jsonDecode(response.body));
       }

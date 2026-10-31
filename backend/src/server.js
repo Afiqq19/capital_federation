@@ -6217,14 +6217,14 @@ const localBuiltApkPath = path.join(__dirname, '../../mobile/build/app/outputs/f
 
 async function getApkSettingsMap() {
   const defaults = {
-    apk_version: '1.6.3',
-    apk_build_number: '17',
+    apk_version: '1.6.4',
+    apk_build_number: '18',
     apk_min_android: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
     apk_file_size_mb: '25.1 MB',
-    apk_release_notes: 'Ekosistem Bursa & Konglomerasi v1.6.3: Integrasi Download APK Cepat Langsung, Animasi Splash Modern Elegan, Desain Antarmuka Login & Pendaftaran Investor Glassmorphism Mewah, serta Akses Keluar Sesi Akun Instan.',
+    apk_release_notes: 'Perbaikan v1.6.4: data pasar & peringkat tidak lagi kosong di jaringan lambat (batas tunggu lebih longgar + coba ulang otomatis), unduh APK langsung, splash & login modern, logout instan.',
     apk_external_url: '',
     apk_download_count: '315',
-    apk_sha256: '21d9c7b9321435274e0ce58fc0889d72a4ffff2a002cd7c092e986cd86aebe36',
+    apk_sha256: '1258f4b23804ac0ddcc1d2586922927b12b091a5baeea3a6da0b7735144f39af',
     apk_updated_at: new Date().toISOString(),
   };
   try {
@@ -6234,12 +6234,12 @@ async function getApkSettingsMap() {
         defaults[r.key] = String(r.value);
       }
     }
-    if (parseInt(defaults.apk_build_number || '0', 10) < 17) {
-      defaults.apk_version = '1.6.3';
-      defaults.apk_build_number = '17';
+    if (parseInt(defaults.apk_build_number || '0', 10) < 18) {
+      defaults.apk_version = '1.6.4';
+      defaults.apk_build_number = '18';
       defaults.apk_file_size_mb = '25.1 MB';
-      defaults.apk_sha256 = '21d9c7b9321435274e0ce58fc0889d72a4ffff2a002cd7c092e986cd86aebe36';
-      defaults.apk_release_notes = 'Ekosistem Bursa & Konglomerasi v1.6.3: Integrasi Download APK Cepat Langsung, Animasi Splash Modern Elegan, Desain Antarmuka Login & Pendaftaran Investor Glassmorphism Mewah, serta Akses Keluar Sesi Akun Instan.';
+      defaults.apk_sha256 = '1258f4b23804ac0ddcc1d2586922927b12b091a5baeea3a6da0b7735144f39af';
+      defaults.apk_release_notes = 'Perbaikan v1.6.4: data pasar & peringkat tidak lagi kosong di jaringan lambat (batas tunggu lebih longgar + coba ulang otomatis), unduh APK langsung, splash & login modern, logout instan.';
     }
   } catch (_) {}
   return defaults;

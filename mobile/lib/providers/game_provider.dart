@@ -251,7 +251,7 @@ class GameProvider extends ChangeNotifier {
     );
   }
 
-  Future<void> loadInitialData() async {
+  Future<void> loadInitialData({int retry = 0}) async {
     final results = await Future.wait([
       ApiService.getCompanies(),
       ApiService.getMarketOverview(),
@@ -263,12 +263,15 @@ class GameProvider extends ChangeNotifier {
       ApiService.getSettings(),
     ]);
 
-    _companies = results[0] as List<CompanyModel>;
+    final fetchedCompanies = results[0] as List<CompanyModel>;
+    if (fetchedCompanies.isNotEmpty) _companies = fetchedCompanies;
     if (results[1] != null) {
       _marketOverview = results[1] as Map<String, dynamic>;
     }
-    _chatMessages = results[2] as List<ChatMessageModel>;
-    _leaderboard = results[3] as List<Map<String, dynamic>>;
+    final fetchedChat = results[2] as List<ChatMessageModel>;
+    if (fetchedChat.isNotEmpty) _chatMessages = fetchedChat;
+    final fetchedBoard = results[3] as List<Map<String, dynamic>>;
+    if (fetchedBoard.isNotEmpty) _leaderboard = fetchedBoard;
     _runningTrades = results[4] as List<Map<String, dynamic>>;
     _ipoOfferings = results[5] as List<Map<String, dynamic>>;
     final fetchedNews = results[6] as List<NewsModel>;
@@ -298,6 +301,11 @@ class GameProvider extends ChangeNotifier {
       await fetchConglomerate();
     }
     notifyListeners();
+
+    // Jaringan lambat: jika pasar/peringkat masih kosong, coba ulang otomatis di latar belakang
+    if ((_companies.isEmpty || _leaderboard.isEmpty) && retry < 3) {
+      Future.delayed(const Duration(seconds: 3), () => loadInitialData(retry: retry + 1));
+    }
   }
 
   Future<void> fetchNews() async {

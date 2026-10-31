@@ -327,7 +327,7 @@ class _RootScreenState extends State<RootScreen> with SingleTickerProviderStateM
 
                       // Footer Version
                       const Text(
-                        'v1.6.3 (Build 17) • Otoritas Finansial IPMC',
+                        'v1.6.4 (Build 18) • Otoritas Finansial IPMC',
                         style: TextStyle(
                           color: Color(0xFF475569),
                           fontSize: 10,
