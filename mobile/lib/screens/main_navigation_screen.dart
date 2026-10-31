@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../services/api_service.dart';
+import '../utils/download_helper.dart';
 import 'home_tab.dart';
 import 'market_tab.dart';
 import 'asset_exchange_tab.dart';
@@ -48,76 +48,13 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       final releaseNotes = info['releaseNotes']?.toString() ?? 'Pembaruan sistem & perbaikan performa.';
 
       if (serverBuild > ApiService.currentBuildNumber && mounted) {
-        showDialog(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            backgroundColor: const Color(0xFF0F172A),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-              side: const BorderSide(color: Color(0xFFF59E0B), width: 1.5),
-            ),
-            title: const Row(
-              children: [
-                Icon(Icons.system_update_rounded, color: Color(0xFFF59E0B), size: 24),
-                SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Pembaruan Tersedia!',
-                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w900),
-                  ),
-                ),
-              ],
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Versi v$serverVer (Build $serverBuild) telah dirilis secara resmi oleh Otoritas Capital Federation.',
-                  style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 12, height: 1.4),
-                ),
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF070B14),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFF1E293B)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Catatan Rilis Pembaruan:', style: TextStyle(color: Color(0xFFF59E0B), fontSize: 11, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 3),
-                      Text(releaseNotes, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, height: 1.35)),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('NANTI SAJA', style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.bold, fontSize: 11)),
-              ),
-              ElevatedButton.icon(
-                onPressed: () async {
-                  Navigator.pop(ctx);
-                  final uri = Uri.parse('https://capitalfederation.xie.my.id/api/download/apk');
-                  if (await canLaunchUrl(uri)) {
-                    await launchUrl(uri, mode: LaunchMode.externalApplication);
-                  }
-                },
-                icon: const Icon(Icons.download_rounded, size: 16),
-                label: const Text('UPDATE SEKARANG', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFF59E0B),
-                  foregroundColor: const Color(0xFF1E1502),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-              ),
-            ],
-          ),
+        DownloadHelper.showModernUpdateDialog(
+          context,
+          currentVer: ApiService.currentAppVersion,
+          currentBuild: ApiService.currentBuildNumber,
+          newVer: serverVer,
+          newBuild: serverBuild,
+          releaseNotes: releaseNotes,
         );
       }
     } catch (_) {}

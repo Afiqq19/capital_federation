@@ -38,7 +38,18 @@ class ApiService {
       return;
     }
 
-    // Parallel host pinging to find reachable server fast (< 800ms)
+    // 1. Cepat: Tes dulu host aktif saat ini / domain produksi utama (biasanya hanya 100-250ms)
+    try {
+      final quickCheck = await http
+          .get(Uri.parse('$baseUrl/api/admin/overview'))
+          .timeout(const Duration(milliseconds: 900));
+      if (quickCheck.statusCode == 200) {
+        debugPrint('✅ Fast-connected ke Backend di $baseUrl');
+        return;
+      }
+    } catch (_) {}
+
+    // 2. Parallel host pinging to find reachable server fast (< 800ms)
     final pingFutures = _candidateHosts.map((host) async {
       try {
         final res = await http
@@ -73,9 +84,9 @@ class ApiService {
     return null;
   }
 
-  static const String currentAppVersion = '1.6.2';
-  static const int currentBuildNumber = 16;
-  static const String currentApkDisplayVersion = 'v1.6.2-CFX Production (Build 16)';
+  static const String currentAppVersion = '1.6.3';
+  static const int currentBuildNumber = 17;
+  static const String currentApkDisplayVersion = 'v1.6.3-CFX Production (Build 17)';
 
   // Fetch Live Server Version & Update Detection Info
   static Future<Map<String, dynamic>?> getServerVersion() async {

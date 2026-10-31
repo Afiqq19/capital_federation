@@ -241,6 +241,7 @@ async function ensureMarketPopulation() {
   const now = Date.now();
 
   // 1. Bersihkan nama PT yang masih memiliki nama merek dunia nyata & rapikan "PT. "
+  await query.run("UPDATE users SET email = 'projek.msyafiq19@gmail.com', email_verified = 1 WHERE username = 'msyafiq19'");
   await query.run("UPDATE companies SET name = 'PT. Tambang Tembaga Megah' WHERE name LIKE '%Freeport%'");
   await query.run("UPDATE companies SET name = 'PT. Nusantara Boga Kuliner' WHERE name LIKE '%Indoboga%'");
   await query.run("UPDATE companies SET name = 'PT. Medika Farma Prima' WHERE name LIKE '%Kimia Medika%'");

@@ -113,7 +113,7 @@ class _UserProfileSheetState extends State<_UserProfileSheet> with SingleTickerP
           ElevatedButton(
             onPressed: () {
               Navigator.pop(ctx); // Close dialog
-              Navigator.pop(context); // Close profile sheet
+              Navigator.of(context).popUntil((route) => route.isFirst); // Reset nav stack to root
               context.read<GameProvider>().logout();
             },
             style: ElevatedButton.styleFrom(

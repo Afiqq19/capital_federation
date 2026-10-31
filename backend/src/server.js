@@ -6217,14 +6217,14 @@ const localBuiltApkPath = path.join(__dirname, '../../mobile/build/app/outputs/f
 
 async function getApkSettingsMap() {
   const defaults = {
-    apk_version: '1.6.2',
-    apk_build_number: '16',
+    apk_version: '1.6.3',
+    apk_build_number: '17',
     apk_min_android: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
-    apk_file_size_mb: '25.0 MB',
-    apk_release_notes: 'Simulasi Warta Pasar Dinamis 24/7 (Aksi Korporasi & Laba Kuartalan Emiten Tbk.), Ekosistem Chat Global Bursa Aktif dari 1.000++ Konglomerat & Investor Ritel, serta Peningkatan Stabilitas Komunitas.',
+    apk_file_size_mb: '25.1 MB',
+    apk_release_notes: 'Ekosistem Bursa & Konglomerasi v1.6.3: Integrasi Download APK Cepat Langsung, Animasi Splash Modern Elegan, Desain Antarmuka Login & Pendaftaran Investor Glassmorphism Mewah, serta Akses Keluar Sesi Akun Instan.',
     apk_external_url: '',
-    apk_download_count: '296',
-    apk_sha256: '5998839556ddf9a3e0b1c89bdc67fe2cc071dba550e8607aecf08457920efa85',
+    apk_download_count: '315',
+    apk_sha256: '21d9c7b9321435274e0ce58fc0889d72a4ffff2a002cd7c092e986cd86aebe36',
     apk_updated_at: new Date().toISOString(),
   };
   try {
@@ -6234,11 +6234,12 @@ async function getApkSettingsMap() {
         defaults[r.key] = String(r.value);
       }
     }
-    if (parseInt(defaults.apk_build_number || '0', 10) < 16) {
-      defaults.apk_version = '1.6.2';
-      defaults.apk_build_number = '16';
-      defaults.apk_file_size_mb = '25.0 MB';
-      defaults.apk_release_notes = 'Simulasi Warta Pasar Dinamis 24/7 (Aksi Korporasi & Laba Kuartalan Emiten Tbk.), Ekosistem Chat Global Bursa Aktif dari 1.000++ Konglomerat & Investor Ritel, serta Peningkatan Stabilitas Komunitas.';
+    if (parseInt(defaults.apk_build_number || '0', 10) < 17) {
+      defaults.apk_version = '1.6.3';
+      defaults.apk_build_number = '17';
+      defaults.apk_file_size_mb = '25.1 MB';
+      defaults.apk_sha256 = '21d9c7b9321435274e0ce58fc0889d72a4ffff2a002cd7c092e986cd86aebe36';
+      defaults.apk_release_notes = 'Ekosistem Bursa & Konglomerasi v1.6.3: Integrasi Download APK Cepat Langsung, Animasi Splash Modern Elegan, Desain Antarmuka Login & Pendaftaran Investor Glassmorphism Mewah, serta Akses Keluar Sesi Akun Instan.';
     }
   } catch (_) {}
   return defaults;

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../models/user.dart';
 import '../providers/game_provider.dart';
 import '../services/api_service.dart';
+import '../utils/download_helper.dart';
 import '../utils/formatters.dart';
 import 'game_constitution_screen.dart';
 
@@ -620,6 +620,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
             ),
             onPressed: () {
               Navigator.pop(ctx);
+              Navigator.of(context).popUntil((route) => route.isFirst);
               context.read<GameProvider>().logout();
             },
             child: const Text('KELUAR', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -1285,12 +1286,9 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
               width: double.infinity,
               height: 44,
               child: ElevatedButton.icon(
-                onPressed: () async {
+                onPressed: () {
                   HapticFeedback.mediumImpact();
-                  final uri = Uri.parse('https://capitalfederation.xie.my.id/api/download/apk');
-                  if (await canLaunchUrl(uri)) {
-                    await launchUrl(uri, mode: LaunchMode.externalApplication);
-                  }
+                  DownloadHelper.openDownload(context: context, preferDirectApk: true);
                 },
                 icon: const Icon(Icons.download_rounded, size: 18),
                 label: Text(
@@ -1311,12 +1309,9 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
               width: double.infinity,
               height: 38,
               child: OutlinedButton.icon(
-                onPressed: () async {
+                onPressed: () {
                   HapticFeedback.lightImpact();
-                  final uri = Uri.parse('https://capitalfederation.xie.my.id');
-                  if (await canLaunchUrl(uri)) {
-                    await launchUrl(uri, mode: LaunchMode.externalApplication);
-                  }
+                  DownloadHelper.openDownload(context: context, preferDirectApk: false);
                 },
                 icon: const Icon(Icons.language_rounded, size: 16),
                 label: const Text(

@@ -93,15 +93,51 @@ class RootScreen extends StatefulWidget {
   State<RootScreen> createState() => _RootScreenState();
 }
 
-class _RootScreenState extends State<RootScreen> {
+class _RootScreenState extends State<RootScreen> with SingleTickerProviderStateMixin {
   bool _showRetry = false;
+  late AnimationController _pulseController;
+  late Animation<double> _pulseAnimation;
+  int _statusIndex = 0;
+
+  final List<String> _loadingStatuses = const [
+    'Menyinkronkan Sesi Bursa & Brankas Portofolio...',
+    'Menghubungkan Jalur Data Perdagangan Realtime...',
+    'Memverifikasi Otoritas Akun & Pasar Modal...',
+    'Mengunduh Data Emiten Tbk. & Orderbook...',
+  ];
 
   @override
   void initState() {
     super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    )..repeat(reverse: true);
+
+    _pulseAnimation = Tween<double>(begin: 0.94, end: 1.06).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+
+    // Rotasi teks status setiap 1.5 detik
+    Future.delayed(const Duration(milliseconds: 1500), _cycleStatus);
+
     Future.delayed(const Duration(seconds: 4), () {
       if (mounted) setState(() => _showRetry = true);
     });
+  }
+
+  void _cycleStatus() {
+    if (!mounted) return;
+    setState(() {
+      _statusIndex = (_statusIndex + 1) % _loadingStatuses.length;
+    });
+    Future.delayed(const Duration(milliseconds: 1800), _cycleStatus);
+  }
+
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    super.dispose();
   }
 
   @override
@@ -110,37 +146,202 @@ class _RootScreenState extends State<RootScreen> {
 
     if (provider.isLoading) {
       return Scaffold(
-        backgroundColor: const Color(0xFF070B14),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const CircularProgressIndicator(color: Color(0xFF10B981)),
-                const SizedBox(height: 18),
-                const Text(
-                  'Menghubungkan ke Bank Sentral Federasi...',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13, fontWeight: FontWeight.w600),
+        backgroundColor: const Color(0xFF060913),
+        body: Stack(
+          children: [
+            // Ambient Radial Gradient Backlight
+            Positioned(
+              top: -60,
+              left: -60,
+              child: Container(
+                width: 260,
+                height: 260,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFFF59E0B).withValues(alpha: 0.08),
                 ),
-                if (_showRetry) ...[
-                  const SizedBox(height: 24),
-                  OutlinedButton.icon(
-                    onPressed: () {
-                      provider.initGame();
-                    },
-                    icon: const Icon(Icons.refresh_rounded, color: Color(0xFF38BDF8), size: 18),
-                    label: const Text('Coba Hubungkan Ulang', style: TextStyle(color: Color(0xFF38BDF8), fontSize: 12)),
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: Color(0xFF38BDF8)),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
-                  ),
-                ],
-              ],
+              ),
             ),
-          ),
+            Positioned(
+              bottom: -80,
+              right: -80,
+              child: Container(
+                width: 300,
+                height: 300,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFF10B981).withValues(alpha: 0.08),
+                ),
+              ),
+            ),
+
+            // Main Splash Content
+            SafeArea(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 32.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Spacer(),
+
+                      // Glowing Pulsing Logo
+                      ScaleTransition(
+                        scale: _pulseAnimation,
+                        child: Container(
+                          width: 86,
+                          height: 86,
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFFF59E0B), Color(0xFFD97706), Color(0xFF10B981)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFFF59E0B).withValues(alpha: 0.35),
+                                blurRadius: 28,
+                                spreadRadius: 4,
+                              ),
+                              BoxShadow(
+                                color: const Color(0xFF10B981).withValues(alpha: 0.25),
+                                blurRadius: 40,
+                                spreadRadius: 6,
+                              ),
+                            ],
+                          ),
+                          child: const Center(
+                            child: Icon(
+                              Icons.account_balance_rounded,
+                              color: Color(0xFF0F172A),
+                              size: 46,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Grand Title
+                      const Text(
+                        'CAPITAL FEDERATION',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 2.2,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+
+                      // Badge Subtitle
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0F172A),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.4)),
+                        ),
+                        child: const Text(
+                          'PASAR MODAL & TYCOON SIMULASI',
+                          style: TextStyle(
+                            color: Color(0xFFFBBF24),
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1.0,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 36),
+
+                      // Elegant Smooth Progress Bar
+                      Container(
+                        width: 180,
+                        height: 4,
+                        clipBehavior: Clip.antiAlias,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1E293B),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const LinearProgressIndicator(
+                          backgroundColor: Color(0xFF1E293B),
+                          color: Color(0xFF10B981),
+                          minHeight: 4,
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+
+                      // Dynamic Status Text with Smooth Transition
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 350),
+                        child: Text(
+                          _loadingStatuses[_statusIndex],
+                          key: ValueKey<int>(_statusIndex),
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Color(0xFF94A3B8),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            height: 1.4,
+                          ),
+                        ),
+                      ),
+
+                      if (_showRetry) ...[
+                        const SizedBox(height: 28),
+                        Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF0F172A).withValues(alpha: 0.9),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: const Color(0xFF334155)),
+                          ),
+                          child: Column(
+                            children: [
+                              const Text(
+                                'Koneksi jaringan membutuhkan waktu sedikit lebih lama...',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 11),
+                              ),
+                              const SizedBox(height: 10),
+                              ElevatedButton.icon(
+                                onPressed: () {
+                                  provider.initGame();
+                                },
+                                icon: const Icon(Icons.refresh_rounded, size: 16),
+                                label: const Text('Hubungkan Ulang Sekarang', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF10B981),
+                                  foregroundColor: const Color(0xFF022C22),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+
+                      const Spacer(),
+
+                      // Footer Version
+                      const Text(
+                        'v1.6.3 (Build 17) • Otoritas Finansial IPMC',
+                        style: TextStyle(
+                          color: Color(0xFF475569),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       );
     }
