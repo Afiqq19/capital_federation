@@ -475,6 +475,8 @@ async function initDb() {
   await safeAddColumn('users', "email_verified INTEGER DEFAULT 0");
   await safeAddColumn('users', "google_id TEXT");
   await safeAddColumn('users', "avatar_url TEXT");
+  await safeAddColumn('users', "has_founded_first_pt INTEGER DEFAULT 0");
+  await safeAddColumn('users', "has_executed_first_ipo INTEGER DEFAULT 0");
   await query.exec(`
     CREATE TABLE IF NOT EXISTS user_inbox (
       id TEXT PRIMARY KEY,

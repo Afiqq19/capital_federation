@@ -762,14 +762,33 @@ app.post('/api/company/found', async (req, res) => {
 
     const cleanDesc = (description || '').trim() || `Perseroan Terbatas resmi sektor ${sector} yang didirikan oleh ${user.username}.`;
     const formattedDate = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
-    let establishmentCost = 30000000.0; // Biaya akta notaris & modal disetor
-    let initialPtCash = 15000000.0; // Modal awal Kas PT
-    try {
-      const costRow = await query.get("SELECT value FROM central_bank_settings WHERE key = 'pt_establishment_cost_ib'");
-      if (costRow && !isNaN(parseFloat(costRow.value))) establishmentCost = parseFloat(costRow.value);
-      const cashRow = await query.get("SELECT value FROM central_bank_settings WHERE key = 'initial_pt_cash_ib'");
-      if (cashRow && !isNaN(parseFloat(cashRow.value))) initialPtCash = parseFloat(cashRow.value);
-    } catch (_) {}
+    
+    // Cek apakah pemain adalah AKUN BARU yang mendirikan PT PERTAMA KALI
+    const hasFoundedBefore = Boolean(user.has_founded_first_pt);
+    const isFirstTime = !hasFoundedBefore && !user.has_pt && !isSubsidiary && !req.body.is_subsidiary;
+
+    let establishmentCost = 10000000.0; // Standar normal pemula (IB 10 Juta)
+    let initialPtCash = 10000000.0;     // Modal awal kas PT pemula
+
+    if (isFirstTime) {
+      // KHUSUS AKUN BARU: Menggunakan harga normal standar bersubsidi pemula
+      try {
+        const firstCostRow = await query.get("SELECT value FROM central_bank_settings WHERE key = 'first_pt_establishment_cost_ib'");
+        if (firstCostRow && !isNaN(parseFloat(firstCostRow.value))) establishmentCost = parseFloat(firstCostRow.value);
+        const firstCashRow = await query.get("SELECT value FROM central_bank_settings WHERE key = 'first_pt_initial_cash_ib'");
+        if (firstCashRow && !isNaN(parseFloat(firstCashRow.value))) initialPtCash = parseFloat(firstCashRow.value);
+      } catch (_) {}
+    } else {
+      // PT KE-2 (ANAK PERUSAHAAN) ATAU PT UTAMA PERNAH DIJUAL: Wajib mengikuti harga settingan kita (e.g. IB 10 Miliar)!
+      establishmentCost = 10000000000.0;
+      initialPtCash = 1000000000.0;
+      try {
+        const costRow = await query.get("SELECT value FROM central_bank_settings WHERE key = 'pt_establishment_cost_ib'");
+        if (costRow && !isNaN(parseFloat(costRow.value))) establishmentCost = parseFloat(costRow.value);
+        const cashRow = await query.get("SELECT value FROM central_bank_settings WHERE key = 'initial_pt_cash_ib'");
+        if (cashRow && !isNaN(parseFloat(cashRow.value))) initialPtCash = parseFloat(cashRow.value);
+      } catch (_) {}
+    }
 
     // KASUS A: Pengguna sudah punya PT dan ingin mendirikan Anak Perusahaan (Subsidiary PT)
     if (user.has_pt === 1 && (isSubsidiary || req.body.is_subsidiary)) {
@@ -778,14 +797,14 @@ app.post('/api/company/found', async (req, res) => {
         payFromCompany = true;
       } else if (user.balance_ib < establishmentCost) {
         return res.status(400).json({
-          error: `Saldo tidak mencukupi untuk mendirikan anak perusahaan. Butuh modal IB ${establishmentCost.toLocaleString('id-ID')}`
+          error: `Saldo tidak mencukupi untuk mendirikan anak perusahaan (PT Ke-2). Butuh modal ekspansi IB ${establishmentCost.toLocaleString('id-ID')}`
         });
       }
 
       if (payFromCompany) {
-        await query.run('UPDATE users SET company_balance_ib = company_balance_ib - ? WHERE id = ?', [establishmentCost, userId]);
+        await query.run('UPDATE users SET company_balance_ib = company_balance_ib - ?, has_founded_first_pt = 1 WHERE id = ?', [establishmentCost, userId]);
       } else {
-        await query.run('UPDATE users SET balance_ib = balance_ib - ? WHERE id = ?', [establishmentCost, userId]);
+        await query.run('UPDATE users SET balance_ib = balance_ib - ?, has_founded_first_pt = 1 WHERE id = ?', [establishmentCost, userId]);
       }
 
       const compId = uuidv4();
@@ -805,30 +824,32 @@ app.post('/api/company/found', async (req, res) => {
 
       return res.json({
         success: true,
-        message: `Selamat! Anak Perusahaan ${officialName} (${cleanSymbol}) resmi didirikan dengan Kas Awal IB 15.000.000!`,
+        message: `Selamat! Anak Perusahaan ${officialName} (${cleanSymbol}) resmi didirikan dengan Kas Awal IB ${initialPtCash.toLocaleString('id-ID')}!`,
         companyId: compId,
         newPersonalBalance: updatedUser.balance_ib,
         newCompanyBalance: updatedUser.company_balance_ib,
       });
     }
 
-    // KASUS B: Pendirian PT Utama Pertama
+    // KASUS B: Pendirian PT Utama Pertama atau PT Baru Setelah PT Lama Dijual
     if (user.has_pt === 1) {
       return res.status(400).json({ error: 'Anda sudah memiliki entitas PT Utama aktif! Gunakan fitur Dirikan Anak Perusahaan untuk ekspansi bisnis.' });
     }
 
     if (user.balance_ib < establishmentCost) {
+      const typeLabel = isFirstTime ? 'PT Pertama (Subsidi Pemula)' : 'PT Baru Pasca Penjualan PT (Tarif Penuh)';
       return res.status(400).json({
-        error: `Saldo tabungan pribadi tidak cukup. Biaya pendirian PT & modal awal: IB ${establishmentCost.toLocaleString('id-ID')}`
+        error: `Saldo tabungan pribadi tidak cukup untuk mendirikan ${typeLabel}. Biaya pendirian & modal disetor: IB ${establishmentCost.toLocaleString('id-ID')}`
       });
     }
 
-    // Potong tabungan pribadi, beri modal kerja awal ke Kas PT sebesar IB 15.000.000
+    // Potong tabungan pribadi, beri modal kerja awal ke Kas PT
     await query.run(
       `UPDATE users
        SET balance_ib = balance_ib - ?,
            company_balance_ib = ?,
            has_pt = 1,
+           has_founded_first_pt = 1,
            pt_name = ?,
            sector = ?,
            pt_symbol = ?,
@@ -857,11 +878,12 @@ app.post('/api/company/found', async (req, res) => {
     const updatedUser = await query.get('SELECT balance_ib, company_balance_ib FROM users WHERE id = ?', [userId]);
     io.emit('user:balance_updated', { userId, newBalance: updatedUser.balance_ib, companyBalance: updatedUser.company_balance_ib });
 
+    const statusBadge = isFirstTime ? ' (Tarif Subsidi Akun Baru)' : ' (Tarif Regulasi Penuh)';
     res.json({
       success: true,
-      message: `Selamat! ${officialName} (${cleanSymbol}) resmi disahkan oleh Notaris & IPMC dengan kas awal IB 15.000.000!`,
+      message: `Selamat! ${officialName} (${cleanSymbol}) resmi disahkan oleh Notaris & IPMC${statusBadge} dengan kas awal IB ${initialPtCash.toLocaleString('id-ID')}!`,
       newPersonalBalance: updatedUser.balance_ib,
-      newCompanyBalance: 15000000.0,
+      newCompanyBalance: initialPtCash,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1844,21 +1866,32 @@ app.post('/api/company/ipo', async (req, res) => {
     if (!user) return res.status(404).json({ error: 'User tidak ditemukan' });
 
     const isPrimary = !companyId || companyId === 'primary';
+    const isFirstIpo = isPrimary && !user.has_executed_first_ipo;
+
     const ipoSettingsRows = await query.all(
       "SELECT key, value FROM central_bank_settings WHERE key IN ('min_ipo_capital', 'ipo_min_asset', 'ipo_min_level')"
     );
     const ipoCfg = Object.fromEntries((ipoSettingsRows || []).map((r) => [r.key, r.value]));
-    const minIpoAsset = parseFloat(ipoCfg.min_ipo_capital || ipoCfg.ipo_min_asset || 250000000.0) || 250000000.0;
-    const minIpoLevel = parseInt(ipoCfg.ipo_min_level || '4', 10) || 4;
-    const ipoFee = 100000000.0; // Biaya Pendaftaran IPO IB 100 Juta
+    let minIpoAsset = parseFloat(ipoCfg.min_ipo_capital || ipoCfg.ipo_min_asset || 250000000.0) || 250000000.0;
+    let minIpoLevel = parseInt(ipoCfg.ipo_min_level || '4', 10) || 4;
+    let ipoFee = 100000000.0; // Biaya Pendaftaran IPO IB 100 Juta
+
+    if (isFirstIpo) {
+      // SUBSIDI KHUSUS AKUN BARU / IPO PERTAMA:
+      // Syarat modal kas PT pemula cukup standar IB 15.000.000, level PT 1, dan bebas biaya registrasi bursa
+      minIpoAsset = 15000000.0;
+      minIpoLevel = 1;
+      ipoFee = 0.0;
+    }
 
     if (isPrimary) {
       if (!user.has_pt) return res.status(400).json({ error: 'Anda belum memiliki PT' });
       if (user.is_ipo === 1) return res.status(400).json({ error: 'Perusahaan Anda sudah berstatus IPO di bursa' });
 
       if (user.company_balance_ib < (minIpoAsset + ipoFee) || user.pt_level < minIpoLevel) {
+        const ipoTypeNotice = isFirstIpo ? ' (Subsidi Akun Baru Pemula)' : ' (Tarif Regulasi Penuh)';
         return res.status(400).json({
-          error: `Syarat Pendaftaran IPO Bursa Efek Capital Federation: Kas PT minimal IB ${minIpoAsset.toLocaleString('id-ID')} dan Biaya Registrasi Bursa IB ${ipoFee.toLocaleString('id-ID')} (Level PT minimal ${minIpoLevel}). Saldo Kas PT saat ini: IB ${(user.company_balance_ib || 0).toLocaleString('id-ID')}`
+          error: `Syarat Pendaftaran IPO Bursa Efek Capital Federation${ipoTypeNotice}: Kas PT minimal IB ${minIpoAsset.toLocaleString('id-ID')}${ipoFee > 0 ? ` dan Biaya Registrasi Bursa IB ${ipoFee.toLocaleString('id-ID')}` : ' (Bebas Biaya Registrasi Bursa)'} (Level PT minimal ${minIpoLevel}). Saldo Kas PT saat ini: IB ${(user.company_balance_ib || 0).toLocaleString('id-ID')}`
         });
       }
 
@@ -1881,14 +1914,16 @@ app.post('/api/company/ipo', async (req, res) => {
         });
       }
 
-      // Potong Biaya Registrasi IPO IB 100 Juta dari Kas PT & Setor ke Kas Negara
-      await query.run('UPDATE users SET company_balance_ib = company_balance_ib - ? WHERE id = ?', [ipoFee, userId]);
-      const ledgerIpoFeeId = uuidv4();
-      await query.run(
-        `INSERT INTO state_treasury_ledger (id, source_type, title, amount_ib, direction, reference_id, notes)
-         VALUES (?, 'IPO_REGISTRATION_FEE', ?, ?, 'INCOME', ?, ?)`,
-        [ledgerIpoFeeId, `Biaya Registrasi Prospektus & Listing IPO (${cleanSymbol})`, ipoFee, cleanSymbol, `Penerimaan PNBP Pendaftaran IPO PT ${user.pt_name} Tbk. di Bursa Efek Capital Federation`]
-      );
+      // Potong Biaya Registrasi IPO (hanya jika ada biaya / bukan subsidi akun baru) & Setor ke Kas Negara
+      if (ipoFee > 0) {
+        await query.run('UPDATE users SET company_balance_ib = company_balance_ib - ? WHERE id = ?', [ipoFee, userId]);
+        const ledgerIpoFeeId = uuidv4();
+        await query.run(
+          `INSERT INTO state_treasury_ledger (id, source_type, title, amount_ib, direction, reference_id, notes)
+           VALUES (?, 'IPO_REGISTRATION_FEE', ?, ?, 'INCOME', ?, ?)`,
+          [ledgerIpoFeeId, `Biaya Registrasi Prospektus & Listing IPO (${cleanSymbol})`, ipoFee, cleanSymbol, `Penerimaan PNBP Pendaftaran IPO PT ${user.pt_name} Tbk. di Bursa Efek Capital Federation`]
+        );
+      }
 
       const cleanDesc = (description || user.pt_description || '').trim() || `Emiten sektor ${user.sector} dengan tata kelola profesional di bursa.`;
       const cleanSector = sector || user.sector || 'Teknologi';
@@ -1971,6 +2006,7 @@ app.post('/api/company/ipo', async (req, res) => {
       await query.run(
         `UPDATE users
          SET is_ipo = 1,
+             has_executed_first_ipo = 1,
              pt_name = ?,
              sector = ?,
              company_balance_ib = company_balance_ib + ?,
@@ -2148,7 +2184,7 @@ app.post('/api/company/ipo', async (req, res) => {
       );
 
       // Tambahkan dividen perdana ke kas pribadi pemilik
-      await query.run('UPDATE users SET balance_ib = balance_ib + ? WHERE id = ?', [ipoInjectionPersonal, userId]);
+      await query.run('UPDATE users SET balance_ib = balance_ib + ?, has_executed_first_ipo = 1 WHERE id = ?', [ipoInjectionPersonal, userId]);
 
       // Registrasi Pemegang Saham Anak Perusahaan
       await query.run('DELETE FROM company_shareholders WHERE company_id = ?', [comp.id]);

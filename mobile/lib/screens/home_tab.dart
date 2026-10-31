@@ -2287,46 +2287,78 @@ class _HomeTabState extends State<HomeTab> {
                   const SizedBox(height: 14),
 
                   // Card Rincian Modal Disetor
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF070B14),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.4)),
-                    ),
-                    child: Column(
-                      children: [
-                        const Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text('Total Modal & Biaya Akta Notaris:', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11)),
-                            Text('IB 30.000.000', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                          ],
+                  Builder(
+                    builder: (context) {
+                      final isFirstTime = !isSubsidiary && !user.hasPt;
+                      final totalCostStr = isFirstTime ? 'IB 10.000.000' : 'IB 10.000.000.000';
+                      final cashInitStr = isFirstTime ? '+IB 10.000.000' : '+IB 1.000.000.000';
+                      final feeStr = isFirstTime ? 'GRATIS (Disubsidi Negara)' : 'IB 9.000.000.000';
+                      final tierNotice = isFirstTime 
+                          ? '🌟 Subsidi Pendirian PT Pertama Khusus Akun Baru' 
+                          : '🏢 Tarif Penuh Regulasi IPMC (PT Lanjutan / Ekspansi)';
+
+                      return Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF070B14),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.4)),
                         ),
-                        const Divider(color: Color(0xFF1E293B), height: 14),
-                        const Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        child: Column(
                           children: [
-                            Expanded(
-                              child: Text('🏢 Kas Awal Modal Kerja PT:', style: TextStyle(color: Color(0xFF34D399), fontSize: 11, fontWeight: FontWeight.bold)),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(isFirstTime ? 'Biaya Pendirian (Disubsidi):' : 'Total Modal & Biaya Akta Notaris:', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11)),
+                                Text(totalCostStr, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                              ],
                             ),
-                            SizedBox(width: 8),
-                            Text('+IB 15.000.000', style: TextStyle(color: Color(0xFF34D399), fontSize: 11.5, fontWeight: FontWeight.bold)),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        const Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: Text('📜 Biaya Notaris & Registrasi Federasi:', style: TextStyle(color: Color(0xFF64748B), fontSize: 10.5), overflow: TextOverflow.ellipsis),
+                            const Divider(color: Color(0xFF1E293B), height: 14),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Expanded(
+                                  child: Text('🏢 Kas Awal Modal Kerja PT:', style: TextStyle(color: Color(0xFF34D399), fontSize: 11, fontWeight: FontWeight.bold)),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(cashInitStr, style: const TextStyle(color: Color(0xFF34D399), fontSize: 11.5, fontWeight: FontWeight.bold)),
+                              ],
                             ),
-                            SizedBox(width: 8),
-                            Text('IB 15.000.000', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 6),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Expanded(
+                                  child: Text('📜 Biaya Notaris & Registrasi:', style: TextStyle(color: Color(0xFF64748B), fontSize: 10.5), overflow: TextOverflow.ellipsis),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(feeStr, style: TextStyle(color: isFirstTime ? const Color(0xFF38BDF8) : const Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: (isFirstTime ? const Color(0xFF10B981) : const Color(0xFF38BDF8)).withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(isFirstTime ? Icons.stars_rounded : Icons.info_outline_rounded, size: 13, color: isFirstTime ? const Color(0xFF34D399) : const Color(0xFF38BDF8)),
+                                  const SizedBox(width: 5),
+                                  Expanded(
+                                    child: Text(
+                                      tierNotice,
+                                      style: TextStyle(color: isFirstTime ? const Color(0xFF34D399) : const Color(0xFF38BDF8), fontSize: 9.5, fontWeight: FontWeight.w600),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ],
                         ),
-                      ],
-                    ),
+                      );
+                    },
                   ),
                   const SizedBox(height: 14),
 

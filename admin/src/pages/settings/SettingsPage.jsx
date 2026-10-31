@@ -314,7 +314,7 @@ export default function SettingsPage() {
       </div>
 
       {/* 3. Modern Category Tabs Navigation */}
-      <div className="flex items-center gap-2 border-b border-slate-800 pb-3 overflow-x-auto no-scrollbar">
+      <div className="flex items-center gap-2 border-b border-slate-800/80 pb-3 overflow-x-auto no-scrollbar">
         {TABS.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -322,16 +322,19 @@ export default function SettingsPage() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all shrink-0 border ${
                 isActive
-                  ? 'bg-slate-100 text-slate-950 shadow-md shadow-white/10 scale-[1.02]'
-                  : 'bg-slate-900/60 text-slate-400 hover:text-slate-200 hover:bg-slate-850 border border-slate-800'
+                  ? 'bg-gradient-to-r from-emerald-500/20 via-teal-500/15 to-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-lg shadow-emerald-500/15 backdrop-blur-md scale-[1.02]'
+                  : 'bg-slate-900/60 text-slate-400 hover:text-slate-200 hover:bg-slate-800/80 border-slate-800/90'
               }`}
             >
-              <Icon size={15} className={isActive ? 'text-indigo-600' : ''} />
+              <Icon size={15} className={isActive ? 'text-emerald-400' : ''} />
               <span>{tab.label}</span>
-              {tab.id === 'fiscal' && <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />}
-              {tab.id === 'corporate' && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />}
+              {isActive ? (
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399]" />
+              ) : (
+                tab.id === 'fiscal' && <span className="w-1.5 h-1.5 rounded-full bg-amber-400/70" />
+              )}
             </button>
           );
         })}
@@ -636,6 +639,34 @@ export default function SettingsPage() {
                       className="font-mono font-bold text-slate-100"
                     />
                   </FormField>
+                </div>
+
+                {/* Banner Penjelasan Skema Subsidi Akun Baru vs Tarif Penuh */}
+                <div className="p-4 rounded-xl bg-gradient-to-r from-emerald-950/40 via-slate-900/60 to-cyan-950/40 border border-emerald-500/30 text-xs text-slate-300 leading-relaxed space-y-2.5">
+                  <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs sm:text-sm">
+                    <Sparkles size={16} className="shrink-0 text-emerald-400" />
+                    <span>Mekanisme Regulasi Biaya PT: Khusus Akun Baru vs PT Ke-2 / Pasca Penjualan</span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs pt-1">
+                    <div className="p-3 rounded-lg bg-emerald-950/50 border border-emerald-500/30 space-y-1">
+                      <div className="font-semibold text-emerald-300 flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                        Khusus Akun Baru (PT Pertama Pemula):
+                      </div>
+                      <p className="text-slate-300 text-[11px] leading-relaxed">
+                        Mendapatkan <strong>Subsidi Penuh Kas Negara</strong>: Biaya pendirian tetap tarif standar murah pemula <strong>IB 10.000.000</strong> (dengan Kas Awal <strong>IB 10.000.000</strong>) serta kemudahan IPO Perdana (Kas PT minimal cukup IB 15.000.000 & Bebas Biaya Listing IB 0).
+                      </p>
+                    </div>
+                    <div className="p-3 rounded-lg bg-amber-950/50 border border-amber-500/30 space-y-1">
+                      <div className="font-semibold text-amber-300 flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                        PT Ke-2 (Anak Usaha) / Pasca PT Utama Dijual:
+                      </div>
+                      <p className="text-slate-300 text-[11px] leading-relaxed">
+                        Wajib mengikuti <strong>Tarif Penuh Regulasi Settingan Anda Di Atas</strong> (Biaya: <strong>IB {Number(form.pt_establishment_cost_ib || 10000000000).toLocaleString('id-ID')}</strong>, Kas Awal: <strong>IB {Number(form.initial_pt_cash_ib || 1000000000).toLocaleString('id-ID')}</strong>). Syarat IPO berikutnya juga berlaku regulasi penuh bursa!
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
             </Card>
@@ -942,6 +973,17 @@ export default function SettingsPage() {
                     <option value="false">⛔ Nonaktif (Murni Order Pemain)</option>
                   </Select>
                 </FormField>
+
+                {/* Banner Subsidi IPO Akun Baru */}
+                <div className="p-3.5 rounded-xl bg-violet-950/40 border border-violet-500/30 text-xs text-violet-200/90 leading-relaxed flex items-start gap-3">
+                  <Sparkles size={18} className="shrink-0 text-violet-400 mt-0.5" />
+                  <div>
+                    <strong className="text-violet-300 font-bold block mb-1">
+                      🌟 Insentif Subsidi IPO Perdana Pemula:
+                    </strong>
+                    Khusus akun baru yang melakukan IPO Pertama Kali, sistem bursa memberikan kemudahan: Kas PT cukup <strong>IB 15.000.000</strong>, Level PT 1, dan <strong>Bebas Biaya Listing (IB 0)</strong>. Syarat ketat regulasi di atas (Level {form.ipo_min_level || 4} & Kas Min IB {Number(form.min_ipo_capital || 0).toLocaleString('id-ID')} + Fee IB 100 Jt) berlaku untuk IPO berikutnya / emiten konglomerasi.
+                  </div>
+                </div>
               </div>
             </Card>
           </div>
