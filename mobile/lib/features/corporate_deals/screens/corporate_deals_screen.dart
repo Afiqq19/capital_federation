@@ -8,6 +8,7 @@ import '../widgets/deal_card.dart';
 import '../widgets/deed_card.dart';
 import '../widgets/p2p_negotiation_sheet.dart';
 import '../../court_commercial/screens/court_live_room_screen.dart';
+import '../../../widgets/user_inbox_modal.dart';
 
 class CorporateDealsScreen extends StatefulWidget {
   final int initialIndex;
@@ -330,16 +331,29 @@ class _CorporateDealsScreenState extends State<CorporateDealsScreen> with Single
         onRefresh: _loadAllData,
         child: ListView(
           padding: const EdgeInsets.all(24),
-          children: const [
-            SizedBox(height: 60),
+          children: [
+            const SizedBox(height: 50),
             Center(
               child: Column(
                 children: [
-                  Icon(Icons.inbox_rounded, color: Color(0xFF475569), size: 48),
-                  SizedBox(height: 12),
-                  Text('Tidak Ada Tawaran P2P Masuk', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
-                  SizedBox(height: 4),
-                  Text('Jika konglomerat lain menawarkan saham langsung kepada Anda, tawaran tersebut akan muncul di sini untuk ditandatangani.', textAlign: TextAlign.center, style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11)),
+                  const Icon(Icons.inbox_rounded, color: Color(0xFF475569), size: 48),
+                  const SizedBox(height: 12),
+                  const Text('Tidak Ada Tawaran P2P Aktif', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 4),
+                  const Text('Jika konglomerat lain menawarkan saham langsung kepada Anda, tawaran tersebut akan muncul di sini untuk ditandatangani.', textAlign: TextAlign.center, style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11)),
+                  const SizedBox(height: 20),
+                  ElevatedButton.icon(
+                    onPressed: () => UserInboxModal.show(context, initialCategory: 'P2P_DEAL'),
+                    icon: const Icon(Icons.history_edu_rounded, size: 16),
+                    label: const Text('Buka Riwayat Penolakan & Pesan P2P', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1E293B),
+                      foregroundColor: const Color(0xFF38BDF8),
+                      side: const BorderSide(color: Color(0xFF38BDF8), width: 0.8),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -350,18 +364,44 @@ class _CorporateDealsScreenState extends State<CorporateDealsScreen> with Single
 
     return RefreshIndicator(
       onRefresh: _loadAllData,
-      child: ListView.builder(
-        padding: const EdgeInsets.all(14),
-        itemCount: _inboxDeals.length,
-        itemBuilder: (ctx, idx) {
-          final deal = _inboxDeals[idx];
-          return DealCard(
-            deal: deal,
-            currentUserId: currentUserId,
-            isInbox: true,
-            onRefresh: _loadAllData,
-          );
-        },
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            color: const Color(0xFF0F172A),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Tawaran Masuk Perlu Tindakan:', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.bold)),
+                InkWell(
+                  onTap: () => UserInboxModal.show(context, initialCategory: 'P2P_DEAL'),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.history_rounded, size: 13, color: Color(0xFF38BDF8)),
+                      SizedBox(width: 4),
+                      Text('Riwayat Pesan P2P', style: TextStyle(color: Color(0xFF38BDF8), fontSize: 11, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.all(14),
+              itemCount: _inboxDeals.length,
+              itemBuilder: (ctx, idx) {
+                final deal = _inboxDeals[idx];
+                return DealCard(
+                  deal: deal,
+                  currentUserId: currentUserId,
+                  isInbox: true,
+                  onRefresh: _loadAllData,
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -322,7 +322,7 @@ export default function CourtOversightPage() {
 
   return (
     <div className="space-y-6 page-enter">
-      {/* 0. Executive Control Panel: Majelis Hakim Bot Otomatis PNAF (ON / OFF Manual) */}
+      {/* 0. Executive Control Panel: Majelis Hakim Arbitrase PNAF (ON / OFF Manual) */}
       <Card
         className={`border transition-all ${
           autoJudge.enabled
@@ -339,24 +339,24 @@ export default function CourtOversightPage() {
                   : 'bg-amber-500/15 border-amber-400/40 text-amber-300'
               }`}
             >
-              <Bot size={24} />
+              <Scale size={24} />
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <h3 className="text-sm font-black tracking-wide text-slate-100 uppercase">
-                  Otomasi Majelis Hakim & Kepaniteraan AI PNAF
+                  Majelis Hakim Arbitrase & Kepaniteraan PNAF
                 </h3>
                 {autoJudge.enabled ? (
                   <Badge tone="emerald" pulse>
-                    OTOMATIS AKTIF (24/7)
+                    SIDANG ARBITRASE AKTIF (24/7)
                   </Badge>
                 ) : (
-                  <Badge tone="amber">MODE MANUAL ADMIN</Badge>
+                  <Badge tone="amber">MODE MANUAL HAKIM AGUNG</Badge>
                 )}
               </div>
               <p className="text-xs text-slate-300 mt-1 leading-relaxed">
                 {autoJudge.enabled
-                  ? `Dipimpin otomatis oleh ${autoJudge.judgeName} & ${autoJudge.clerkName}. Bot otomatis mengirim Relaas Panggilan, memeriksa bukti akta, menghadirkan kuasa hukum bot lawan, dan mengetuk palu putusan (APPROVED / PKPU / PAILIT / DITOLAK).`
+                  ? `Dipimpin oleh ${autoJudge.judgeName} & ${autoJudge.clerkName}. Sistem memproses otomatis Relaas Panggilan, pemeriksaan bukti akta notariat, kehadiran kuasa hukum para pihak, dan pembacaan amar putusan (APPROVED / PKPU / PAILIT / DITOLAK).`
                   : 'Mode Otomatis dimatikan. Seluruh perkara yang masuk akan menunggu jadwal, pemeriksaan, dan ketukan palu manual dari Anda selaku Hakim Agung.'}
               </p>
               <div className="flex flex-wrap items-center gap-4 mt-2 text-[11px] text-slate-400 font-medium">
@@ -364,7 +364,7 @@ export default function CourtOversightPage() {
                   Antrean Sidang Aktif: <strong className="text-amber-300">{inTrialCount} Perkara</strong>
                 </span>
                 <span>
-                  Diputus Bot Hakim: <strong className="text-emerald-300">{autoJudge.totalDecidedByBot || 0} Perkara</strong>
+                  Diputus Majelis Hakim: <strong className="text-emerald-300">{autoJudge.totalDecidedByBot || 0} Perkara</strong>
                 </span>
               </div>
             </div>
@@ -378,7 +378,7 @@ export default function CourtOversightPage() {
                 icon={Zap}
                 disabled={processingNow}
                 onClick={handleProcessAllNow}
-                title="Minta Bot Hakim memutus seluruh perkara yang sedang berlangsung sekarang juga"
+                title="Minta Majelis Hakim memutus seluruh perkara yang sedang berlangsung sekarang juga"
               >
                 {processingNow ? 'Memutus Sidang...' : `Putuskan Instan (${inTrialCount})`}
               </Button>
@@ -399,7 +399,7 @@ export default function CourtOversightPage() {
                 ? 'Menyimpan...'
                 : autoJudge.enabled
                 ? 'Matikan Otomatis (Ubah ke Manual)'
-                : 'Aktifkan Bot Hakim Otomatis'}
+                : 'Aktifkan Sidang Arbitrase Otomatis'}
             </Button>
           </div>
         </div>
@@ -417,7 +417,7 @@ export default function CourtOversightPage() {
         <StatCard
           label="Sedang Disidangkan"
           value={inTrialCount}
-          hint={autoJudge.enabled ? 'Diproses Bot Hakim PNAF' : 'Menunggu Ketuk Palu Manual'}
+          hint={autoJudge.enabled ? 'Diproses Majelis Hakim PNAF' : 'Menunggu Ketuk Palu Manual'}
           icon={Clock}
           tone="amber"
         />
@@ -597,7 +597,7 @@ export default function CourtOversightPage() {
                           {isRejected && <Badge tone="slate">DITOLAK / GUGUR</Badge>}
                           {!isInTrial && c.decided_by === 'BOT_JUDGE' && (
                             <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
-                              🤖 BOT HAKIM
+                              ⚖️ MAJELIS HAKIM PNAF
                             </span>
                           )}
                         </div>

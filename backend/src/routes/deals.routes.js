@@ -119,6 +119,27 @@ module.exports = function(io) {
           grossAmount
         });
 
+        // Simpan pesan penawaran ke Inbox Pembeli
+        try {
+          await query.run(
+            `INSERT INTO user_inbox (id, user_id, sender_name, category, title, message, reference_id, is_read, created_at)
+             VALUES (?, ?, ?, 'P2P_DEAL', ?, ?, ?, 0, ?)`,
+            [
+              uuidv4(),
+              buyerUserId,
+              `@${seller.username}`,
+              `📩 Tawaran Saham P2P: ${pct}% ${comp.name}`,
+              `@${seller.username} menawarkan paket pengalihan ${pct}% saham ${comp.name} (${comp.symbol}) senilai IB ${grossAmount.toLocaleString('id-ID')} (Akta #${dealNumber}). Silakan tandatangani di tab Inbox P2P.`,
+              dealId,
+              new Date().toISOString()
+            ]
+          );
+          io.to(buyerUserId).emit('user:new_inbox', {
+            title: `📩 Tawaran Saham P2P: ${pct}% ${comp.name}`,
+            message: `@${seller.username} menawarkan saham ${comp.name}.`
+          });
+        } catch (_) {}
+
         // Jika pembeli yang dituju adalah BOT (seperti @haziq / Top Konglomerat):
         // Aktifkan Bot Evaluator cerdas yang bermain kooperatif mengevaluasi harga & membeli!
         const isBotBuyer = buyerUserId.startsWith('bot-user-') || buyerUserId.startsWith('user-bot-') || (buyerName && (buyerName.toLowerCase().includes('haziq') || buyerName.toLowerCase().includes('reza') || buyerName.toLowerCase().includes('fajar')));
@@ -392,6 +413,36 @@ module.exports = function(io) {
         io.emit('user:conglomerate_updated', { userId: seller.id });
       }
 
+      // Simpan catatan transaksi ke Inbox Pembeli & Penjual
+      try {
+        await query.run(
+          `INSERT INTO user_inbox (id, user_id, sender_name, category, title, message, reference_id, is_read, created_at)
+           VALUES (?, ?, ?, 'P2P_DEAL', ?, ?, ?, 0, ?)`,
+          [
+            uuidv4(),
+            seller.id,
+            `@${buyer.username}`,
+            `✅ Penjualan Saham Berhasil: ${comp.name}`,
+            `Peralihan ${pctToBuy.toFixed(1)}% saham ${comp.name} kepada @${buyer.username} telah selesai ditandatangani. Hasil penjualan bersih IB ${totalPrice.toLocaleString('id-ID')} telah disetorkan ke Kas Pribadi Anda (Akta #${deedNumber}).`,
+            deedNumber,
+            new Date().toISOString()
+          ]
+        );
+        await query.run(
+          `INSERT INTO user_inbox (id, user_id, sender_name, category, title, message, reference_id, is_read, created_at)
+           VALUES (?, ?, ?, 'P2P_DEAL', ?, ?, ?, 0, ?)`,
+          [
+            uuidv4(),
+            buyer.id,
+            'Notariat PNAF',
+            `✅ Kepemilikan Saham Baru: ${comp.name}`,
+            `Anda resmi memiliki porsi ${pctToBuy.toFixed(1)}% saham ${comp.name} (${comp.symbol}). Akta kepemilikan #${deedNumber} telah tersimpan di Brankas Akta Anda.`,
+            deedNumber,
+            new Date().toISOString()
+          ]
+        );
+      } catch (_) {}
+
       // Siarkan Breaking News ke seluruh bursa
       const newsItem = {
         id: uuidv4(),
@@ -581,7 +632,61 @@ module.exports = function(io) {
       if (!deal) return res.status(404).json({ error: 'Kesepakatan tidak ditemukan' });
 
       await query.run('UPDATE private_deals SET status = "CANCELLED" WHERE id = ?', [dealId]);
-      res.json({ success: true, message: 'Tawaran berhasil ditolak / dibatalkan.' });
+
+      const comp = await query.get('SELECT * FROM companies WHERE id = ?', [deal.company_id]);
+      const compName = comp ? comp.name : deal.company_name;
+      const rejector = userId ? await query.get('SELECT username FROM users WHERE id = ?', [userId]) : null;
+      const rejectorName = rejector?.username || deal.buyer_name || 'Calon Pembeli';
+
+      // 1. Simpan pesan notifikasi resmi ke Inbox Penjual
+      try {
+        await query.run(
+          `INSERT INTO user_inbox (id, user_id, sender_name, category, title, message, reference_id, is_read, created_at)
+           VALUES (?, ?, ?, 'P2P_DEAL', ?, ?, ?, 0, ?)`,
+          [
+            uuidv4(),
+            deal.seller_user_id,
+            `@${rejectorName}`,
+            `❌ Tawaran Saham Ditolak: ${compName}`,
+            `@${rejectorName} telah menolak penawaran pengalihan ${deal.percentage_offered}% saham ${compName}. Paket saham tetap aman di portofolio Anda.`,
+            dealId,
+            new Date().toISOString()
+          ]
+        );
+      } catch (_) {}
+
+      // 2. Simpan juga pesan konfirmasi penolakan ke Inbox Pembeli yang menolak
+      if (userId && userId !== deal.seller_user_id) {
+        try {
+          await query.run(
+            `INSERT INTO user_inbox (id, user_id, sender_name, category, title, message, reference_id, is_read, created_at)
+             VALUES (?, ?, ?, 'P2P_DEAL', ?, ?, ?, 0, ?)`,
+            [
+              uuidv4(),
+              userId,
+              'Notariat PNAF',
+              `Pembatalan Tawaran Saham ${compName}`,
+              `Anda telah menolak draft perjanjian peralihan saham ${deal.percentage_offered}% ${compName} dari @${deal.seller_name}.`,
+              dealId,
+              new Date().toISOString()
+            ]
+          );
+        } catch (_) {}
+      }
+
+      if (io) {
+        io.emit(`user:deal_offer:${deal.seller_user_id}`, {
+          type: 'REJECTED',
+          dealId,
+          message: `@${rejectorName} menolak tawaran saham ${compName}.`
+        });
+        io.to(deal.seller_user_id).emit('user:new_inbox', {
+          title: `❌ Tawaran Saham Ditolak: ${compName}`,
+          message: `@${rejectorName} telah menolak penawaran saham Anda.`
+        });
+      }
+
+      res.json({ success: true, message: 'Tawaran berhasil ditolak dan tercatat di Inbox kedua belah pihak.' });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }

@@ -23,18 +23,18 @@ import {
 
 export default function PublicDownloadLandingPage() {
   const [versionInfo, setVersionInfo] = useState({
-    version: '1.8.0',
-    buildNumber: 25,
-    apkVersion: 'v1.8.0 (Build 25)',
+    version: '1.9.0',
+    buildNumber: 26,
+    apkVersion: 'v1.9.0 (Build 26)',
     minAndroid: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
-    fileSizeMb: '56.3 MB',
+    fileSizeMb: '56.4 MB',
     downloadUrl: '/api/download/apk',
-    downloadCount: 320,
+    downloadCount: 325,
     totalCompanies: 504,
     totalPlayers: 1053,
-    sha256: 'ffbe3d5828261e42b8c0a658b72324ab731cb336d2e4e09d8d0f81370137dbd2',
+    sha256: 'dea4c402cec5e7d41eb518350b782fd9f21fb1cbe432288f5486b2b758af455f',
     releaseNotes:
-      'v1.8.0: Integrasi Resmi Google OAuth & Sign-In (Web & Android), Push Notifikasi Cerdas FCM (Panggilan Sidang Resmi PNAF, Vonis Hakim, Penyitaan Saham/Aset, dan Proposal M&A), serta Pembebasan Notifikasi Bebas Spam Berita Pasar.',
+      'v1.9.0: Fitur Kotak Masuk (Inbox) Terpadu untuk Notifikasi Tawaran & Penolakan P2P Real-Time, Navigasi Langsung Emiten dari Warta Berita Bursa, Pembaruan Majelis Hakim Arbitrase PNAF Resmi (Ketua Majelis Prof. Dr. Bagas Daniswara, S.H., M.H.), Gugatan Sengketa Pemulihan Saham Curian/Manipulasi, dan Sanksi Rekonvensi Denda Pencemaran Nama Baik untuk Tuduhan Palsu.',
   });
   const [topLeaders, setTopLeaders] = useState([]);
   const [topStocks, setTopStocks] = useState([]);

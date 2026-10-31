@@ -126,7 +126,7 @@ class _CourtCommercialScreenState extends State<CourtCommercialScreen> {
     prov.fetchUserData();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(res['message']?.toString() ?? '⚡ Pemeriksaan Bot Hakim selesai.'),
+        content: Text(res['message']?.toString() ?? '⚡ Pemeriksaan Majelis Hakim Arbitrase selesai.'),
         backgroundColor: const Color(0xFF059669),
       ),
     );
@@ -858,7 +858,7 @@ class _CourtCommercialScreenState extends State<CourtCommercialScreen> {
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
-                          item.isBotDecided ? '🤖 Bot Hakim PNAF' : '👨‍⚖️ Hakim Agung',
+                          item.isBotDecided ? '⚖️ Majelis Hakim PNAF' : '👨‍⚖️ Hakim Agung',
                           style: const TextStyle(
                             color: Color(0xFFCBD5E1),
                             fontSize: 8.5,

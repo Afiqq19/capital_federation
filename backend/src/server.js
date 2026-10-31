@@ -434,6 +434,53 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
   }
 });
 
+// 1.5 Pusat Pesan & Inbox Notifikasi Pengguna (P2P, Sidang PNAF, Akuisisi M&A)
+app.get('/api/user/inbox', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const messages = await query.all(
+      'SELECT * FROM user_inbox WHERE user_id = ? ORDER BY created_at DESC LIMIT 50',
+      [userId]
+    );
+    const unreadCount = await query.get(
+      'SELECT COUNT(*) as count FROM user_inbox WHERE user_id = ? AND is_read = 0',
+      [userId]
+    );
+    res.json({
+      messages: messages || [],
+      unreadCount: unreadCount?.count || 0,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/user/inbox/read', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { messageId } = req.body || {};
+    if (messageId) {
+      await query.run('UPDATE user_inbox SET is_read = 1 WHERE id = ? AND user_id = ?', [messageId, userId]);
+    } else {
+      await query.run('UPDATE user_inbox SET is_read = 1 WHERE user_id = ?', [userId]);
+    }
+    res.json({ success: true, message: 'Pesan ditandai telah dibaca' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/user/inbox/:id', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { id } = req.params;
+    await query.run('DELETE FROM user_inbox WHERE id = ? AND user_id = ?', [id, userId]);
+    res.json({ success: true, message: 'Pesan berhasil dihapus' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Admin Console Login (Otoritas Bursa IPMC & Bank Sentral)
 app.post('/api/admin/auth/login', async (req, res) => {
   try {
@@ -6891,10 +6938,17 @@ app.post('/api/admin/users/:id/ban', async (req, res) => {
 app.post('/api/admin/users/:id/edit', async (req, res) => {
   try {
     const { id } = req.params;
-    const { balance_ib, cash_balance_ib, company_balance_ib, credit_score, credit_tier, pt_name, sector, role } = req.body;
+    const { balance_ib, cash_balance_ib, company_balance_ib, credit_score, credit_tier, pt_name, sector, role, password, new_password } = req.body;
 
     const user = await query.get('SELECT * FROM users WHERE id = ?', [id]);
     if (!user) return res.status(404).json({ error: 'User tidak ditemukan' });
+
+    // Update password jika diberikan oleh Admin (bisa untuk mengambil alih / menggunakan bot atau reset password pemain)
+    const rawPass = new_password || password;
+    if (rawPass && String(rawPass).trim().length > 0) {
+      const passwordHash = await bcrypt.hash(String(rawPass).trim(), 10);
+      await query.run('UPDATE users SET password_hash = ? WHERE id = ?', [passwordHash, id]);
+    }
 
     const newBalance = balance_ib !== undefined ? parseFloat(balance_ib) : (cash_balance_ib !== undefined ? parseFloat(cash_balance_ib) : user.balance_ib);
     const newCompanyBalance = company_balance_ib !== undefined ? parseFloat(company_balance_ib) : user.company_balance_ib;
@@ -7489,18 +7543,18 @@ const bundledPublicApkPath = path.join(__dirname, '../public/downloads/Capital-F
 const directPublicApkPath = path.join(__dirname, '../public/downloads/capital-federation.apk');
 const localBuiltApkPath = path.join(__dirname, '../../mobile/build/app/outputs/flutter-apk/app-release.apk');
 
-const LATEST_RELEASE_NOTES_V180 = 'v1.8.0: Integrasi Resmi Google OAuth & Sign-In (Android APK & Web Client), Sistem Push Notifikasi Cerdas FCM (Panggilan Sidang Resmi PNAF, Vonis Hakim, Penyitaan Saham/Aset, dan Proposal M&A), serta Pembebasan Notifikasi Bebas Spam Berita Pasar.';
+const LATEST_RELEASE_NOTES_V190 = 'v1.9.0: Fitur Kotak Masuk (Inbox) Terpadu untuk Notifikasi Tawaran & Penolakan P2P Real-Time, Navigasi Langsung Emiten dari Warta Berita Bursa, Pembaruan Majelis Hakim Arbitrase PNAF Resmi (Ketua Majelis Prof. Dr. Bagas Daniswara, S.H., M.H.), Gugatan Sengketa Pemulihan Saham Curian/Manipulasi, dan Sanksi Rekonvensi Denda Pencemaran Nama Baik untuk Tuduhan Palsu.';
 
 async function getApkSettingsMap() {
   const defaults = {
-    apk_version: '1.8.0',
-    apk_build_number: '25',
+    apk_version: '1.9.0',
+    apk_build_number: '26',
     apk_min_android: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
-    apk_file_size_mb: '56.3 MB',
-    apk_release_notes: LATEST_RELEASE_NOTES_V180,
+    apk_file_size_mb: '56.4 MB',
+    apk_release_notes: LATEST_RELEASE_NOTES_V190,
     apk_external_url: '',
-    apk_download_count: '320',
-    apk_sha256: 'ffbe3d5828261e42b8c0a658b72324ab731cb336d2e4e09d8d0f81370137dbd2',
+    apk_download_count: '325',
+    apk_sha256: 'dea4c402cec5e7d41eb518350b782fd9f21fb1cbe432288f5486b2b758af455f',
     apk_updated_at: new Date().toISOString(),
   };
   try {
@@ -7510,12 +7564,12 @@ async function getApkSettingsMap() {
         defaults[r.key] = String(r.value);
       }
     }
-    if (parseInt(defaults.apk_build_number || '0', 10) < 25) {
-      defaults.apk_version = '1.8.0';
-      defaults.apk_build_number = '25';
-      defaults.apk_file_size_mb = '56.3 MB';
-      defaults.apk_sha256 = 'ffbe3d5828261e42b8c0a658b72324ab731cb336d2e4e09d8d0f81370137dbd2';
-      defaults.apk_release_notes = LATEST_RELEASE_NOTES_V180;
+    if (parseInt(defaults.apk_build_number || '0', 10) < 26) {
+      defaults.apk_version = '1.9.0';
+      defaults.apk_build_number = '26';
+      defaults.apk_file_size_mb = '56.4 MB';
+      defaults.apk_sha256 = 'dea4c402cec5e7d41eb518350b782fd9f21fb1cbe432288f5486b2b758af455f';
+      defaults.apk_release_notes = LATEST_RELEASE_NOTES_V190;
       defaults.apk_updated_at = new Date().toISOString();
       // Persist directly to central_bank_settings so /api/settings, /api/admin/settings & /api/admin/overview match 100%!
       const keysToSync = ['apk_version', 'apk_build_number', 'apk_file_size_mb', 'apk_sha256', 'apk_release_notes', 'apk_min_android', 'apk_updated_at'];

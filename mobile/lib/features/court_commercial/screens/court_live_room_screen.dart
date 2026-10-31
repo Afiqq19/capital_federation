@@ -703,7 +703,7 @@ class _CourtLiveRoomScreenState extends State<CourtLiveRoomScreen> {
                   borderRadius: BorderRadius.circular(5),
                 ),
                 child: Text(
-                  isBot ? '🤖 Bot Hakim' : '👨‍⚖️ Hakim Agung',
+                  isBot ? '⚖️ Majelis Hakim' : '👨‍⚖️ Hakim Agung',
                   style: const TextStyle(
                     color: Color(0xFFE2E8F0),
                     fontSize: 8.5,

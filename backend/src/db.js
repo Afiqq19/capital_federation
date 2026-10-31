@@ -476,6 +476,20 @@ async function initDb() {
   await safeAddColumn('users', "google_id TEXT");
   await safeAddColumn('users', "avatar_url TEXT");
   await query.exec(`
+    CREATE TABLE IF NOT EXISTS user_inbox (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      sender_name TEXT DEFAULT 'Sistem Bursa IPMC',
+      category TEXT NOT NULL,
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      reference_id TEXT,
+      is_read INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_inbox_user ON user_inbox(user_id, created_at);
+  `);
+  await query.exec(`
     CREATE TABLE IF NOT EXISTS market_oversight_log (
       id TEXT PRIMARY KEY,
       company_id TEXT NOT NULL,

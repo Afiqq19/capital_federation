@@ -31,6 +31,7 @@ export default function EditUserModal({ open, onClose, user, onConfirm }) {
   const [role, setRole] = useState('PLAYER');
   const [ptName, setPtName] = useState('');
   const [sector, setSector] = useState('');
+  const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -42,6 +43,7 @@ export default function EditUserModal({ open, onClose, user, onConfirm }) {
       setRole(user.role ?? 'PLAYER');
       setPtName(user.pt_name ?? '');
       setSector(user.sector || 'Teknologi');
+      setPassword('');
     }
   }, [user?.id, open]);
 
@@ -60,6 +62,7 @@ export default function EditUserModal({ open, onClose, user, onConfirm }) {
         role,
         pt_name: ptName,
         sector,
+        password: password.trim() ? password.trim() : undefined,
       });
       onClose();
     } finally {
@@ -180,6 +183,20 @@ export default function EditUserModal({ open, onClose, user, onConfirm }) {
               <option value="VIP">VIP</option>
               <option value="ADMIN">ADMIN</option>
             </Select>
+          </FormField>
+        </div>
+
+        <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2">
+          <FormField
+            label="Ganti Kata Sandi Akun / Pengambilalihan Bot (Opsional)"
+            hint="Kosongkan jika tidak ingin mengubah kata sandi. Isi sandi baru di sini jika Anda ingin login sebagai akun bot ini di mobile/web."
+          >
+            <Input
+              type="text"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Masukkan sandi baru (misal: 123456)..."
+            />
           </FormField>
         </div>
       </form>

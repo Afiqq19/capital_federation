@@ -97,9 +97,9 @@ class ApiService {
     return null;
   }
 
-  static const String currentAppVersion = '1.8.0';
-  static const int currentBuildNumber = 25;
-  static const String currentApkDisplayVersion = 'v1.8.0-CFX Production (Build 25)';
+  static const String currentAppVersion = '1.9.0';
+  static const int currentBuildNumber = 26;
+  static const String currentApkDisplayVersion = 'v1.9.0-CFX Production (Build 26)';
 
   // Fetch Live Server Version & Update Detection Info
   static Future<Map<String, dynamic>?> getServerVersion() async {
@@ -1181,7 +1181,54 @@ class ApiService {
           .timeout(const Duration(seconds: 8));
       return Map<String, dynamic>.from(jsonDecode(response.body));
     } catch (e) {
-      return {'error': 'Gagal memicu putusan Bot Hakim: Gangguan koneksi'};
+      return {'error': 'Gagal memicu putusan Majelis Hakim: Gangguan koneksi'};
+    }
+  }
+
+  // User Inbox (Notifikasi P2P, Sidang PNAF, Notariat, dsb)
+  static Future<Map<String, dynamic>> getUserInbox({String? userId, String? category}) async {
+    try {
+      final uid = userId ?? await LocalCache.getUserId();
+      final uri = Uri.parse('$baseUrl/api/user/inbox');
+      final queryParams = <String, String>{};
+      if (uid != null && uid.isNotEmpty) queryParams['userId'] = uid;
+      if (category != null && category.isNotEmpty) queryParams['category'] = category;
+      
+      final url = queryParams.isEmpty ? uri : uri.replace(queryParameters: queryParams);
+      final res = await http.get(url).timeout(const Duration(seconds: 10));
+      if (res.statusCode == 200) {
+        return Map<String, dynamic>.from(jsonDecode(res.body));
+      }
+    } catch (_) {}
+    return {'messages': [], 'unreadCount': 0};
+  }
+
+  static Future<bool> markInboxRead({String? userId, String? messageId}) async {
+    try {
+      final uid = userId ?? await LocalCache.getUserId();
+      final res = await http.post(
+        Uri.parse('$baseUrl/api/user/inbox/read'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          if (uid != null) 'userId': uid,
+          if (messageId != null) 'messageId': messageId,
+        }),
+      ).timeout(const Duration(seconds: 8));
+      return res.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<bool> deleteInboxMessage(String messageId, {String? userId}) async {
+    try {
+      final uid = userId ?? await LocalCache.getUserId();
+      final uri = Uri.parse('$baseUrl/api/user/inbox/$messageId');
+      final url = uid != null ? uri.replace(queryParameters: {'userId': uid}) : uri;
+      final res = await http.delete(url).timeout(const Duration(seconds: 8));
+      return res.statusCode == 200;
+    } catch (_) {
+      return false;
     }
   }
 

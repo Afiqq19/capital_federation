@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Penyimpanan cache lokal (di HP) untuk data terakhir dari server, supaya
@@ -21,6 +22,19 @@ class LocalCache {
     } catch (_) {
       return null;
     }
+  }
+
+  static Future<String?> getUserId() async {
+    try {
+      final str = await read('user');
+      if (str != null && str.isNotEmpty) {
+        final decoded = jsonDecode(str);
+        if (decoded is Map && decoded['id'] != null) {
+          return decoded['id'].toString();
+        }
+      }
+    } catch (_) {}
+    return null;
   }
 
   /// Waktu simpan terakhir (epoch ms, UTC) untuk [key].

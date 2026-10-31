@@ -1,8 +1,8 @@
 const { v4: uuidv4 } = require('uuid');
 const { query, recordCashFlow } = require('../db');
 
-const BOT_JUDGE_NAME = 'Yang Mulia Hakim Agung Dr. Ariswara, S.H., M.H.';
-const BOT_CLERK_NAME = 'Panitera Utama Raden Pramono, S.H.';
+const BOT_JUDGE_NAME = 'Prof. Dr. Bagas Daniswara, S.H., M.H. (Ketua Majelis Hakim PNAF)';
+const BOT_CLERK_NAME = 'R. Arya Wicaksana, S.H. (Panitera Sidang Niaga PNAF)';
 const AUTO_JUDGE_SETTING_KEY = 'court_bot_auto_judge';
 
 function getWibParts(date = new Date()) {
@@ -355,7 +355,7 @@ async function executeCourtVerdict(
     /^Berkas perkara telah diterima/i.test(verdictNotes.trim()) ||
     /^Permohonan gugatan resmi/i.test(verdictNotes.trim());
 
-  const judgeLabel = decidedBy === 'BOT_JUDGE' ? `Majelis Hakim Otomatis PNAF (${BOT_JUDGE_NAME})` : 'Majelis Hakim Agung PNAF';
+  const judgeLabel = decidedBy === 'BOT_JUDGE' ? `Majelis Hakim Arbitrase PNAF (${BOT_JUDGE_NAME})` : 'Majelis Hakim Agung PNAF';
   let finalNotes = verdictNotes && !isDefaultFilingNote ? verdictNotes.trim() : '';
 
   if (!finalNotes) {
@@ -375,7 +375,7 @@ async function executeCourtVerdict(
           ? `🔨 VONIS PAILIT & SITA EKSEKUSI: ${judgeLabel} menjatuhkan putusan pailit/verstek terhadap ${c.defendant_name} dan mengeksekusi klaim sebesar IB ${awardedAmount.toLocaleString('id-ID')} untuk ${c.plaintiff_name}.`
           : `🔨 VONIS PAILIT & SITA JAMINAN: ${judgeLabel} menyatakan Tergugat (${c.defendant_name}) dalam keadaan pailit dan memerintahkan Kurator PNAF mengeksekusi aset jaminan.`;
     } else {
-      finalNotes = `❌ PUTUSAN DITOLAK / GUGUR: ${judgeLabel} menolak/menggugurkan gugatan Perkara No. ${c.case_number} setelah memeriksa alat bukti dan fakta hukum persidangan.`;
+      finalNotes = `❌ PUTUSAN DITOLAK / GUGUR: ${judgeLabel} menolak/menggugurkan gugatan Perkara No. ${c.case_number} setelah memeriksa fakta hukum persidangan.`;
     }
   }
 
@@ -390,6 +390,95 @@ async function executeCourtVerdict(
     if (matchedPl) {
       plaintiffId = matchedPl.id;
       await query.run('UPDATE court_cases SET plaintiff_user_id = ? WHERE id = ?', [plaintiffId, caseId]);
+    }
+  }
+
+  // SANKSI PENCEMARAN NAMA BAIK (REKONVENSI) JIKA GUGATAN DITOLAK
+  if (finalStatus === 'VERDICT_REJECTED' && !alreadyDelivered) {
+    const rawClaim = Number(c.claim_amount_ib || c.claimed_amount || 0);
+    let defamationFine = Math.round(rawClaim * 0.10);
+    if (defamationFine < 10000000) defamationFine = 10000000; // Min IB 10 Juta
+    if (defamationFine > 100000000) defamationFine = 100000000; // Max IB 100 Juta
+
+    finalNotes = `❌ PUTUSAN DITOLAK & SANKSI PENCEMARAN NAMA BAIK: ${judgeLabel} menolak seluruh gugatan Perkara No. ${c.case_number}. Tergugat (${c.defendant_name}) dinyatakan TIDAK BERSALAH dan nama baiknya dipulihkan. Menghukum Penggugat (${c.plaintiff_name}) membayar denda pencemaran nama baik sebesar IB ${defamationFine.toLocaleString('id-ID')} kepada Tergugat.`;
+
+    if (plaintiffId && c.defendant_user_id && plaintiffId !== c.defendant_user_id && !['admin-001', 'bank-central-bcf'].includes(plaintiffId)) {
+      const plUser = await query.get('SELECT id, balance_ib, company_balance_ib, username FROM users WHERE id = ?', [plaintiffId]);
+      const defUser = await query.get('SELECT id, balance_ib, username FROM users WHERE id = ?', [c.defendant_user_id]);
+
+      if (plUser && defUser) {
+        let plBal = Number(plUser.balance_ib || 0);
+        let plCompBal = Number(plUser.company_balance_ib || 0);
+        let deductPersonal = Math.min(plBal, defamationFine);
+        let deductComp = defamationFine - deductPersonal;
+        let newPlBal = Math.max(0, plBal - deductPersonal);
+        let newPlCompBal = plCompBal - deductComp;
+
+        await query.run('UPDATE users SET balance_ib = ?, company_balance_ib = ? WHERE id = ?', [newPlBal, newPlCompBal, plUser.id]);
+        if (deductComp > 0) {
+          await query.run('UPDATE companies SET company_balance_ib = company_balance_ib - ? WHERE owner_id = ?', [deductComp, plUser.id]);
+        }
+
+        const newDefBal = Number(defUser.balance_ib || 0) + defamationFine;
+        await query.run('UPDATE users SET balance_ib = ? WHERE id = ?', [newDefBal, defUser.id]);
+
+        await recordCashFlow({
+          userId: plUser.id,
+          accountType: 'PERSONAL',
+          category: 'COURT_FINE',
+          title: `Denda Pencemaran Nama Baik PNAF (${c.case_number})`,
+          amountIb: defamationFine,
+          direction: 'EXPENSE',
+          balanceAfter: newPlBal,
+          notes: `Gugatan terhadap ${c.defendant_name} tidak terbukti. Kewajiban ganti rugi reputasi.`,
+        });
+
+        await recordCashFlow({
+          userId: defUser.id,
+          accountType: 'PERSONAL',
+          category: 'COURT_VERDICT',
+          title: `Kompensasi Pemulihan Nama Baik PNAF (${c.case_number})`,
+          amountIb: defamationFine,
+          direction: 'INCOME',
+          balanceAfter: newDefBal,
+          notes: `Ganti rugi pencemaran nama baik dari ${c.plaintiff_name} setelah gugatan ditolak.`,
+        });
+
+        try {
+          await query.run(
+            `INSERT INTO user_inbox (id, user_id, sender_name, category, title, message, reference_id, is_read, created_at)
+             VALUES (?, ?, ?, 'COURT', ?, ?, ?, 0, ?)`,
+            [
+              uuidv4(),
+              plUser.id,
+              'Majelis Hakim Arbitrase PNAF',
+              `⚖️ Gugatan Ditolak: Denda Pencemaran Nama Baik (${c.case_number})`,
+              `Majelis Hakim PNAF menolak seluruh gugatan Anda terhadap ${c.defendant_name} karena tidak memiliki bukti hukum sah. Anda dijatuhi sanksi ganti rugi pencemaran nama baik sebesar IB ${defamationFine.toLocaleString('id-ID')} yang telah didebit dan diserahkan kepada Tergugat.`,
+              caseId,
+              new Date().toISOString(),
+            ]
+          );
+
+          await query.run(
+            `INSERT INTO user_inbox (id, user_id, sender_name, category, title, message, reference_id, is_read, created_at)
+             VALUES (?, ?, ?, 'COURT', ?, ?, ?, 0, ?)`,
+            [
+              uuidv4(),
+              defUser.id,
+              'Majelis Hakim Arbitrase PNAF',
+              `🛡️ Gugatan Ditolak: Nama Baik Dipulihkan (${c.case_number})`,
+              `Kabar baik! Majelis Hakim PNAF menolak gugatan ${c.plaintiff_name} terhadap Anda. Nama baik Anda dipulihkan dan kompensasi ganti rugi pencemaran nama baik sebesar IB ${defamationFine.toLocaleString('id-ID')} telah disetorkan ke saldo Anda!`,
+              caseId,
+              new Date().toISOString(),
+            ]
+          );
+        } catch (_) {}
+
+        if (io) {
+          io.emit('user:balance_updated', { userId: plUser.id, newBalance: newPlBal });
+          io.emit('user:balance_updated', { userId: defUser.id, newBalance: newDefBal });
+        }
+      }
     }
   }
 
@@ -409,6 +498,21 @@ async function executeCourtVerdict(
           balanceAfter: newPlBalance,
           notes: finalNotes,
         });
+        try {
+          await query.run(
+            `INSERT INTO user_inbox (id, user_id, sender_name, category, title, message, reference_id, is_read, created_at)
+             VALUES (?, ?, ?, 'COURT', ?, ?, ?, 0, ?)`,
+            [
+              uuidv4(),
+              plUser.id,
+              'Majelis Hakim Arbitrase PNAF',
+              `✅ Putusan Dikabulkan: Kompensasi IB ${awardedAmount.toLocaleString('id-ID')} (${c.case_number})`,
+              `Majelis Hakim PNAF mengabulkan gugatan Anda terhadap ${c.defendant_name}. Dana ganti rugi sebesar IB ${awardedAmount.toLocaleString('id-ID')} telah disetorkan ke Kas Rekening Anda.`,
+              caseId,
+              new Date().toISOString(),
+            ]
+          );
+        } catch (_) {}
         if (io) {
           io.emit('user:balance_updated', { userId: plUser.id, newBalance: newPlBalance });
         }
@@ -483,10 +587,140 @@ async function executeCourtVerdict(
           });
         }
 
+        try {
+          await query.run(
+            `INSERT INTO user_inbox (id, user_id, sender_name, category, title, message, reference_id, is_read, created_at)
+             VALUES (?, ?, ?, 'COURT', ?, ?, ?, 0, ?)`,
+            [
+              uuidv4(),
+              defUser.id,
+              'Majelis Hakim Arbitrase PNAF',
+              `🔨 Vonis Pengadilan PNAF (${c.case_number})`,
+              `Majelis Hakim PNAF menjatuhkan putusan bersalah atas perkara ${c.case_number}. Dana ganti rugi sebesar IB ${awardedAmount.toLocaleString('id-ID')} telah dieksekusi dari kas Anda.`,
+              caseId,
+              new Date().toISOString(),
+            ]
+          );
+        } catch (_) {}
+
         if (io) {
           io.emit('user:balance_updated', { userId: defUser.id, newBalance: newDefPersonal });
         }
       }
+    }
+  }
+
+  // PEMULIHAN KEPEMILIKAN SAHAM JIKA GUGATAN SENGKETA SAHAM / PENIPUAN DIKABULKAN
+  const isStockDispute = /saham|penipuan|ambil alih|pengalihan|sengketa/i.test(`${c.title || ''} ${c.case_type || ''} ${c.notes || ''}`);
+  if (finalStatus === 'VERDICT_APPROVED' && isStockDispute && plaintiffId && c.defendant_user_id && plaintiffId !== c.defendant_user_id) {
+    try {
+      let targetComp = null;
+      if (c.defendant_company_id) {
+        targetComp = await query.get('SELECT * FROM companies WHERE id = ?', [c.defendant_company_id]);
+      }
+      if (!targetComp) {
+        targetComp = await query.get(
+          `SELECT c.* FROM companies c
+           INNER JOIN company_shareholders sh ON c.id = sh.company_id
+           WHERE sh.user_id = ? AND (c.owner_id = ? OR EXISTS (SELECT 1 FROM company_shareholders sh2 WHERE sh2.company_id = c.id AND sh2.user_id = ?))
+           LIMIT 1`,
+          [c.defendant_user_id, plaintiffId, plaintiffId]
+        );
+      }
+      if (!targetComp) {
+        targetComp = await query.get('SELECT * FROM companies WHERE owner_id = ? LIMIT 1', [plaintiffId]);
+      }
+
+      if (targetComp) {
+        const defSh = await query.get(
+          'SELECT * FROM company_shareholders WHERE company_id = ? AND user_id = ?',
+          [targetComp.id, c.defendant_user_id]
+        );
+        if (defSh && defSh.percentage > 0) {
+          const pctMatch = (c.title || '').match(/(\d+(?:\.\d+)?)\s*%/);
+          let pctToRecover = pctMatch ? parseFloat(pctMatch[1]) : 10.0;
+          pctToRecover = Math.min(pctToRecover, defSh.percentage);
+
+          const totalCompanyShares = Number(targetComp.total_shares) || 1000000;
+          const sharesToRecover = Math.round((pctToRecover / 100) * totalCompanyShares);
+          const lotsToRecover = Math.max(1, Math.floor(sharesToRecover / 100));
+
+          const newDefPct = Math.max(0, parseFloat((defSh.percentage - pctToRecover).toFixed(1)));
+          if (newDefPct <= 0.1) {
+            await query.run('DELETE FROM company_shareholders WHERE id = ?', [defSh.id]);
+          } else {
+            await query.run(
+              'UPDATE company_shareholders SET percentage = ?, shares_count = MAX(0, shares_count - ?) WHERE id = ?',
+              [newDefPct, sharesToRecover, defSh.id]
+            );
+          }
+
+          const plSh = await query.get(
+            'SELECT * FROM company_shareholders WHERE company_id = ? AND user_id = ?',
+            [targetComp.id, plaintiffId]
+          );
+          if (plSh) {
+            const newPlPct = parseFloat((plSh.percentage + pctToRecover).toFixed(1));
+            await query.run(
+              'UPDATE company_shareholders SET percentage = ?, shares_count = shares_count + ? WHERE id = ?',
+              [newPlPct, sharesToRecover, plSh.id]
+            );
+          } else {
+            const plUser = await query.get('SELECT username FROM users WHERE id = ?', [plaintiffId]);
+            await query.run(
+              `INSERT INTO company_shareholders (id, company_id, holder_name, holder_type, shares_count, percentage, user_id)
+               VALUES (?, ?, ?, 'FOUNDER', ?, ?, ?)`,
+              [uuidv4(), targetComp.id, `${plUser?.username || c.plaintiff_name} (Pendiri Terpulihkan)`, sharesToRecover, pctToRecover, plaintiffId]
+            );
+          }
+
+          const defPort = await query.get('SELECT * FROM portfolios WHERE user_id = ? AND company_id = ?', [c.defendant_user_id, targetComp.id]);
+          if (defPort) {
+            await query.run('UPDATE portfolios SET lots_owned = MAX(0, lots_owned - ?) WHERE id = ?', [lotsToRecover, defPort.id]);
+          }
+          const plPort = await query.get('SELECT * FROM portfolios WHERE user_id = ? AND company_id = ?', [plaintiffId, targetComp.id]);
+          if (plPort) {
+            await query.run('UPDATE portfolios SET lots_owned = lots_owned + ? WHERE id = ?', [lotsToRecover, plPort.id]);
+          } else {
+            await query.run(
+              'INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price) VALUES (?, ?, ?, ?, ?)',
+              [uuidv4(), plaintiffId, targetComp.id, lotsToRecover, targetComp.current_price || 100]
+            );
+          }
+
+          await query.run(
+            `INSERT INTO user_inbox (id, user_id, sender_name, category, title, message, reference_id, is_read, created_at)
+             VALUES (?, ?, ?, 'COURT', ?, ?, ?, 0, ?)`,
+            [
+              uuidv4(),
+              plaintiffId,
+              'Majelis Hakim Arbitrase PNAF',
+              `📈 Pemulihan Saham Berhasil: ${pctToRecover}% ${targetComp.name}`,
+              `Putusan inkrah Perkara No. ${c.case_number} membatalkan pengalihan sepihak oleh ${c.defendant_name}. Sebanyak ${pctToRecover}% saham (${sharesToRecover.toLocaleString('id-ID')} lbr / ${lotsToRecover} lot) resmi dikembalikan ke portofolio Anda!`,
+              caseId,
+              new Date().toISOString(),
+            ]
+          );
+
+          await query.run(
+            `INSERT INTO user_inbox (id, user_id, sender_name, category, title, message, reference_id, is_read, created_at)
+             VALUES (?, ?, ?, 'COURT', ?, ?, ?, 0, ?)`,
+            [
+              uuidv4(),
+              c.defendant_user_id,
+              'Majelis Hakim Arbitrase PNAF',
+              `⚖️ Eksekusi Pengembalian Saham: ${pctToRecover}% ${targetComp.name}`,
+              `Berdasarkan amar putusan Perkara No. ${c.case_number}, kepemilikan ${pctToRecover}% saham ${targetComp.name} Anda resmi dibatalkan dan dikembalikan kepada ${c.plaintiff_name}.`,
+              caseId,
+              new Date().toISOString(),
+            ]
+          );
+
+          finalNotes += ` [EKSEKUSI SAHAM: Memerintahkan pengembalian ${pctToRecover}% saham ${targetComp.name} (${targetComp.symbol}) dari Tergugat kepada Penggugat.]`;
+        }
+      }
+    } catch (err) {
+      console.error('Error in court stock recovery:', err);
     }
   }
 
@@ -1002,7 +1236,7 @@ class CourtJudgeBotService {
           caseId: c.id,
           verdictStatus: 'VERDICT_REJECTED',
           verdictType: 'GUGUR_DISMISSED',
-          verdictNotes: `❌ NE BIS IN IDEM: Majelis Hakim Otomatis PNAF menolak gugatan ganda karena klaim atas Akta #${linkedDeed.deed_number} telah diputus dan dieksekusi pada Perkara No. ${priorWon.case_number}.`,
+          verdictNotes: `❌ NE BIS IN IDEM: Majelis Hakim Arbitrase PNAF menolak gugatan ganda karena klaim atas Akta #${linkedDeed.deed_number} telah diputus dan dieksekusi pada Perkara No. ${priorWon.case_number}.`,
           customAwardedAmount: 0,
           decidedBy: 'BOT_JUDGE',
         });

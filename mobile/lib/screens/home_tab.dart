@@ -15,6 +15,7 @@ import '../widgets/bank_loan_dialog.dart';
 import 'cash_flow_ledger_screen.dart';
 import '../widgets/sovereign_bonds_modal.dart';
 import '../widgets/government_tenders_modal.dart';
+import '../widgets/user_inbox_modal.dart';
 import 'profile_screen.dart';
 
 class HomeTab extends StatefulWidget {
@@ -28,6 +29,18 @@ class _HomeTabState extends State<HomeTab> {
   String _selectedCompanyId = 'primary';
   final Set<String> _fetchingShareholders = {};
   bool _isUpgradingBusiness = false;
+  int _inboxUnreadCount = 0;
+
+  Future<void> _checkInboxCount() async {
+    try {
+      final data = await ApiService.getUserInbox();
+      if (mounted) {
+        setState(() {
+          _inboxUnreadCount = (data['unreadCount'] as num?)?.toInt() ?? 0;
+        });
+      }
+    } catch (_) {}
+  }
 
   double _resolveEntityCash(UserModel user, Map<String, dynamic>? entity, {required bool isPrimary}) {
     final entityCash = (entity?['companyBalance'] as num?)?.toDouble();
@@ -49,6 +62,7 @@ class _HomeTabState extends State<HomeTab> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<GameProvider>().fetchConglomerate();
+      _checkInboxCount();
     });
   }
 
@@ -231,6 +245,60 @@ class _HomeTabState extends State<HomeTab> {
                       border: Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.4)),
                     ),
                     child: const Icon(Icons.policy_rounded, color: Color(0xFF38BDF8), size: 16),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                // Kotak Masuk / Inbox Notifikasi Button
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () async {
+                    await UserInboxModal.show(context, onInboxUpdated: _checkInboxCount);
+                    _checkInboxCount();
+                  },
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(7),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0F172A),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: _inboxUnreadCount > 0
+                                ? const Color(0xFFF59E0B)
+                                : const Color(0xFF38BDF8).withValues(alpha: 0.4),
+                          ),
+                        ),
+                        child: Icon(
+                          _inboxUnreadCount > 0 ? Icons.mark_email_unread_rounded : Icons.mail_outline_rounded,
+                          color: _inboxUnreadCount > 0 ? const Color(0xFFF59E0B) : const Color(0xFF38BDF8),
+                          size: 16,
+                        ),
+                      ),
+                      if (_inboxUnreadCount > 0)
+                        Positioned(
+                          top: -3,
+                          right: -3,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEF4444),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: const Color(0xFF0F172A), width: 1.5),
+                            ),
+                            constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
+                            child: Text(
+                              _inboxUnreadCount > 99 ? '99+' : '$_inboxUnreadCount',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 8,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
                 const SizedBox(width: 6),
