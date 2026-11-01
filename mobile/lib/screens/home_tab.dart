@@ -423,6 +423,32 @@ class _HomeTabState extends State<HomeTab> {
                         ),
                       ),
                     ),
+                    if (!isPrimary && (activeEntity['companyDbId'] != null || (activeEntity['id'] != null && activeEntity['id'] != 'primary'))) ...[
+                      const SizedBox(width: 6),
+                      InkWell(
+                        onTap: () => _confirmSetPrimaryCompany(context, activeEntity),
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF10B981).withValues(alpha: 0.18),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.6)),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.stars_rounded, color: Color(0xFF10B981), size: 11),
+                              SizedBox(width: 4),
+                              Text(
+                                'JADIKAN PT UTAMA',
+                                style: TextStyle(color: Color(0xFF10B981), fontSize: 9, fontWeight: FontWeight.w900),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -1127,45 +1153,87 @@ class _HomeTabState extends State<HomeTab> {
                   style: const TextStyle(color: Color(0xFFE2E8F0), fontSize: 11, height: 1.4),
                 ),
                 const SizedBox(height: 14),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF10B981),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          elevation: 0,
+                if (isSeized || isCourtSeizure || isBankCreditSeizure) ...[
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFEF4444),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 11),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            elevation: 0,
+                          ),
+                          icon: const Icon(Icons.lock_open_rounded, size: 16),
+                          label: const Text(
+                            'TEBUS PERSEROAN (CABUT SITA)',
+                            style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w900),
+                          ),
+                          onPressed: () => _showHomeRedemptionSheet(context, provider, user, activeEntity),
                         ),
-                        icon: const Icon(Icons.volunteer_activism_rounded, size: 16),
-                        label: const Text(
-                          'SUNTIK KAS PRIBADI',
-                          style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w900),
-                        ),
-                        onPressed: () => _showTransferModal(context, provider, isInject: true, activeEntity: activeEntity),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF0284C7),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          elevation: 0,
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF0284C7),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 11),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            elevation: 0,
+                          ),
+                          icon: const Icon(Icons.account_balance_rounded, size: 16),
+                          label: const Text(
+                            'PINJAM BANK BCF',
+                            style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w900),
+                          ),
+                          onPressed: () => showBankLoanModal(context),
                         ),
-                        icon: const Icon(Icons.account_balance_rounded, size: 16),
-                        label: const Text(
-                          'PINJAM BANK BCF',
-                          style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w900),
-                        ),
-                        onPressed: () => showBankLoanModal(context),
                       ),
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
+                ] else ...[
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF10B981),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            elevation: 0,
+                          ),
+                          icon: const Icon(Icons.volunteer_activism_rounded, size: 16),
+                          label: const Text(
+                            'SUNTIK KAS PRIBADI',
+                            style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w900),
+                          ),
+                          onPressed: () => _showTransferModal(context, provider, isInject: true, activeEntity: activeEntity),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF0284C7),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            elevation: 0,
+                          ),
+                          icon: const Icon(Icons.account_balance_rounded, size: 16),
+                          label: const Text(
+                            'PINJAM BANK BCF',
+                            style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w900),
+                          ),
+                          onPressed: () => showBankLoanModal(context),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
@@ -2702,47 +2770,93 @@ class _HomeTabState extends State<HomeTab> {
                         ],
                       ),
                       const SizedBox(height: 18),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 46,
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: canAfford ? const Color(0xFF10B981) : const Color(0xFF334155),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      if (!canAfford) ...[
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF7F1D1D).withValues(alpha: 0.3),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.5)),
                           ),
-                          onPressed: (!canAfford || isSubmitting)
-                              ? null
-                              : () async {
-                                  setModalState(() => isSubmitting = true);
-                                  final res = await ApiService.redeemCompany(companyId: companyId, userId: user.id);
-                                  if (!context.mounted) return;
-                                  Navigator.pop(ctx);
-                                  final messenger = ScaffoldMessenger.of(context);
-                                  if (res['success'] == true) {
-                                    messenger.showSnackBar(
-                                      SnackBar(
-                                        content: Text(res['message'] ?? 'Perseroan berhasil ditebus!'),
-                                        backgroundColor: const Color(0xFF10B981),
-                                      ),
-                                    );
-                                    provider.fetchConglomerate();
-                                    provider.refreshPortfolio();
-                                    provider.loadInitialData();
-                                  } else {
-                                    messenger.showSnackBar(
-                                      SnackBar(
-                                        content: Text(res['error'] ?? 'Gagal menebus perseroan'),
-                                        backgroundColor: const Color(0xFFEF4444),
-                                      ),
-                                    );
-                                  }
-                                },
-                          child: Text(
-                            canAfford ? 'LUNASI & AMBIL ALIH KEMBALI' : 'SALDO KAS PRIBADI TIDAK CUKUP',
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.info_outline_rounded, color: Color(0xFFF87171), size: 16),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Saldo pribadi Anda kurang IB ${CurrencyFormatter.formatFull(totalCost - user.balanceIb).replaceAll('IB ', '')}. Silakan ajukan pinjaman likuiditas ke Bank BCF untuk melunasi tebusan ini.',
+                                  style: const TextStyle(color: Color(0xFFFECACA), fontSize: 10),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 46,
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF0284C7),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            icon: const Icon(Icons.account_balance_rounded, size: 18),
+                            label: const Text(
+                              'AJUKAN PINJAMAN TALANGAN BANK BCF',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11.5),
+                            ),
+                            onPressed: () {
+                              Navigator.pop(ctx);
+                              showBankLoanModal(context);
+                            },
+                          ),
+                        ),
+                      ] else ...[
+                        SizedBox(
+                          width: double.infinity,
+                          height: 46,
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF10B981),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            icon: const Icon(Icons.check_circle_rounded, size: 18),
+                            label: Text(
+                              isSubmitting ? 'MEMPROSES PENEBUSAN...' : 'LUNASI & CABUT SITA SEKARANG (${CurrencyFormatter.formatCompact(totalCost)})',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                            ),
+                            onPressed: isSubmitting
+                                ? null
+                                : () async {
+                                    setModalState(() => isSubmitting = true);
+                                    final res = await ApiService.redeemCompany(companyId: companyId, userId: user.id);
+                                    if (!context.mounted) return;
+                                    Navigator.pop(ctx);
+                                    final messenger = ScaffoldMessenger.of(context);
+                                    if (res['success'] == true) {
+                                      messenger.showSnackBar(
+                                        SnackBar(
+                                          content: Text(res['message'] ?? 'Perseroan berhasil ditebus & sita dicabut!'),
+                                          backgroundColor: const Color(0xFF10B981),
+                                        ),
+                                      );
+                                      provider.fetchConglomerate();
+                                      provider.refreshPortfolio();
+                                      provider.loadInitialData();
+                                    } else {
+                                      messenger.showSnackBar(
+                                        SnackBar(
+                                          content: Text(res['error'] ?? 'Gagal menebus perseroan'),
+                                          backgroundColor: const Color(0xFFEF4444),
+                                        ),
+                                      );
+                                    }
+                                  },
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 10),
                     ],
                   ),
@@ -3778,6 +3892,77 @@ class _HomeTabState extends State<HomeTab> {
         ),
       );
     }
+  }
+
+  void _confirmSetPrimaryCompany(BuildContext context, Map<String, dynamic> entity) {
+    final provider = context.read<GameProvider>();
+    final user = provider.user;
+    if (user == null) return;
+    final compId = entity['companyDbId']?.toString() ?? entity['id']?.toString();
+    if (compId == null || compId == 'primary') return;
+    final entityName = entity['name']?.toString() ?? 'Perusahaan';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF0F172A),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: const BorderSide(color: Color(0xFF10B981))),
+        title: const Row(
+          children: [
+            Icon(Icons.stars_rounded, color: Color(0xFF10B981), size: 22),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Tetapkan Sebagai PT Utama?',
+                style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'Apakah Anda ingin menetapkan "$entityName" sebagai PT Utama konglomerasi Anda? Seluruh identitas induk holding akan dipusatkan pada perseroan ini.',
+          style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 12, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Batal', style: TextStyle(color: Color(0xFF94A3B8))),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF10B981),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final res = await ApiService.setPrimaryCompany(userId: user.id, companyId: compId);
+              if (!context.mounted) return;
+              final messenger = ScaffoldMessenger.of(context);
+              if (res['success'] == true) {
+                messenger.showSnackBar(
+                  SnackBar(
+                    content: Text(res['message'] ?? 'PT Utama berhasil diubah!'),
+                    backgroundColor: const Color(0xFF10B981),
+                  ),
+                );
+                setState(() => _selectedCompanyId = 'primary');
+                await provider.fetchConglomerate();
+                await provider.loadInitialData();
+              } else {
+                messenger.showSnackBar(
+                  SnackBar(
+                    content: Text(res['error'] ?? 'Gagal mengubah PT Utama'),
+                    backgroundColor: const Color(0xFFEF4444),
+                  ),
+                );
+              }
+            },
+            child: const Text('Ya, Jadikan PT Utama', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showRenameDialog(BuildContext context, Map<String, dynamic> entity) {

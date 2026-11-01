@@ -971,15 +971,49 @@ async function findUserPrimaryCompany(userId, userRow = null) {
   if (!user) return null;
 
   let primaryComp = null;
-  if (user.pt_symbol || user.pt_name) {
+  const userSymbol = (user.pt_symbol || '').trim().toUpperCase();
+  const rawPtName = (user.pt_name || '').trim();
+  const cleanUserPt = rawPtName.replace(/PT\.|\bTbk\b|\./gi, '').trim().toLowerCase();
+
+  // 1. Coba cocokkan dengan simbol atau nama PT user (dengan normalisasi tanpa PT/Tbk)
+  if (userSymbol || cleanUserPt) {
     primaryComp = await query.get(
-      'SELECT * FROM companies WHERE owner_id = ? AND (symbol = ? OR name = ?)',
-      [userId, user.pt_symbol || '---', user.pt_name || '---']
+      `SELECT * FROM companies 
+       WHERE owner_id = ? 
+         AND (
+           (LENGTH(?) > 0 AND UPPER(symbol) = ?)
+           OR (LENGTH(?) > 0 AND (LOWER(name) = ? OR LOWER(name) LIKE ?))
+         )
+       LIMIT 1`,
+      [userId, userSymbol, userSymbol, cleanUserPt, cleanUserPt, `%${cleanUserPt}%`]
     );
   }
+
+  // 2. Proteksi Akuisisi: Jika primaryComp ternyata adalah hasil akuisisi (is_acquired = 1),
+  // cek apakah user memiliki PT asli yang didirikannya sendiri (misal: Syafiq Capital).
+  // Jangan biarkan emiten hasil akuisisi (seperti ARSJ) merebut status PT Utama asli!
+  if (!primaryComp || primaryComp.is_acquired === 1) {
+    const trueFounded = await query.get(
+      `SELECT * FROM companies 
+       WHERE owner_id = ? 
+         AND COALESCE(is_acquired, 0) = 0 
+         AND (COALESCE(is_bot, 0) = 0 OR founder_name = ? OR LOWER(name) LIKE '%' || LOWER(?) || '%')
+       ORDER BY 
+         CASE WHEN LOWER(name) LIKE '%' || LOWER(?) || '%' THEN 0 ELSE 1 END ASC,
+         CASE WHEN founder_name = ? THEN 0 ELSE 1 END ASC,
+         founded_at DESC, id ASC 
+       LIMIT 1`,
+      [userId, user.username, user.username, user.username, user.username]
+    );
+    if (trueFounded) {
+      primaryComp = trueFounded;
+    }
+  }
+
+  // 3. Fallback jika belum ditemukan: pilih yang didirikan sendiri dulu sebelum hasil akuisisi
   if (!primaryComp) {
     primaryComp = await query.get(
-      'SELECT * FROM companies WHERE owner_id = ? ORDER BY is_bot ASC, founded_at ASC, id ASC LIMIT 1',
+      'SELECT * FROM companies WHERE owner_id = ? ORDER BY COALESCE(is_acquired, 0) ASC, is_bot ASC, founded_at ASC, id ASC LIMIT 1',
       [userId]
     );
   }
@@ -1005,6 +1039,17 @@ async function findUserPrimaryCompany(userId, userRow = null) {
       primaryComp = await query.get('SELECT * FROM companies WHERE id = ?', [founderSh.id]);
     }
   }
+
+  // Sinkronkan kembali user.pt_name & user.pt_symbol jika berbeda agar tidak berubah-ubah lagi!
+  if (primaryComp && (user.pt_symbol !== primaryComp.symbol || user.pt_name !== primaryComp.name)) {
+    await query.run(
+      'UPDATE users SET pt_name = ?, pt_symbol = ?, sector = COALESCE(?, sector), has_pt = 1 WHERE id = ?',
+      [primaryComp.name, primaryComp.symbol, primaryComp.sector, userId]
+    );
+    user.pt_name = primaryComp.name;
+    user.pt_symbol = primaryComp.symbol;
+  }
+
   return primaryComp;
 }
 
@@ -3469,6 +3514,51 @@ app.post('/api/company/rename', async (req, res) => {
         newSymbol: cleanSymbol
       });
     }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Tetapkan / Ganti PT Utama Konglomerasi Pilihan Pemain
+app.post('/api/user/set-primary-company', async (req, res) => {
+  try {
+    const { userId, companyId } = req.body;
+    if (!userId || !companyId) {
+      return res.status(400).json({ error: 'userId dan companyId wajib diisi' });
+    }
+    const user = await query.get('SELECT * FROM users WHERE id = ?', [userId]);
+    if (!user) return res.status(404).json({ error: 'User tidak ditemukan' });
+
+    const targetComp = await query.get('SELECT * FROM companies WHERE id = ? AND owner_id = ?', [companyId, userId]);
+    if (!targetComp) {
+      return res.status(400).json({ error: 'Perusahaan tidak ditemukan atau bukan milik Anda' });
+    }
+
+    await query.run(
+      `UPDATE users
+       SET pt_name = ?, pt_symbol = ?, sector = ?, is_ipo = ?,
+           company_balance_ib = ?, rd_level = ?, marketing_level = ?, hr_level = ?, capacity_level = ?,
+           pt_level = ?, employees_count = ?, ceo_level = ?, cfo_level = ?, cmo_level = ?, fundamental_score = ?,
+           has_pt = 1
+       WHERE id = ?`,
+      [
+        targetComp.name, targetComp.symbol, targetComp.sector || user.sector, targetComp.is_ipo || 0,
+        targetComp.company_balance_ib || 0, targetComp.rd_level || 1, targetComp.marketing_level || 1,
+        targetComp.hr_level || 1, targetComp.capacity_level || 1, targetComp.pt_level || 1,
+        targetComp.employees_count || 0, targetComp.ceo_level || 0, targetComp.cfo_level || 0,
+        targetComp.cmo_level || 0, targetComp.fundamental_score || 80,
+        userId
+      ]
+    );
+
+    invalidateMarketCaches();
+    io.emit('user:conglomerate_updated', { userId });
+    io.emit('user:balance_updated', { userId, companyBalance: targetComp.company_balance_ib || 0 });
+
+    res.json({
+      success: true,
+      message: `Berhasil! ${targetComp.name} kini resmi ditetapkan sebagai PT Utama konglomerasi Anda.`
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -7910,18 +8000,18 @@ const bundledPublicApkPath = path.join(__dirname, '../public/downloads/Capital-F
 const directPublicApkPath = path.join(__dirname, '../public/downloads/capital-federation.apk');
 const localBuiltApkPath = path.join(__dirname, '../../mobile/build/app/outputs/flutter-apk/app-release.apk');
 
-const LATEST_RELEASE_NOTES_V199 = 'v1.9.9 (Build 38): Sinkronisasi Versi Internal APK (Bebas Popup Update Ganda saat Login), Fitur Negosiasi Harga Saham P2P Kustom (Bebas Tentukan Valuasi Miliaran IB), Pengetatan Majelis Hakim Bot PNAF (Pemeriksaan Ketat Bukti Saham & Pencemaran Nama Baik), 100% Sekuritas Fiksi Federasi, Sinkronisasi Otomatis Judul Kategori Gugatan, serta Penjelasan Dinamis Pembekuan Kasus Hukum & Kredit BCF.';
+const LATEST_RELEASE_NOTES_V199 = 'v1.9.9 (Build 39): Tombol Tebus Perseroan (Cabut Sita) Langsung di Kartu Pembekuan + Opsi Pinjaman BCF jika Saldo Kurang, Pemulihan Otomatis PT Utama (PT Syafiq Capital Tbk. Terlindungi Penuh dari Overwrite Akuisisi), Tombol Manual "Jadikan PT Utama" di Profil Perusahaan, serta Sinkronisasi Dinamis Pajak Transaksi Bursa Web Admin.';
 
 async function getApkSettingsMap() {
   const defaults = {
     apk_version: '1.9.9',
-    apk_build_number: '38',
+    apk_build_number: '39',
     apk_min_android: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
     apk_file_size_mb: '56.9 MB',
     apk_release_notes: LATEST_RELEASE_NOTES_V199,
     apk_external_url: '',
     apk_download_count: '435',
-    apk_sha256: '19a48f1a1d3d27c11683e81eff9d13a0746910d4db1300ce8e43056a396e2351',
+    apk_sha256: '5ca4c2a88b25c8bf021ee695d6fb88e047360463f57f113158f7f45787ea9d50',
     apk_updated_at: new Date().toISOString(),
   };
   try {
@@ -7931,11 +8021,11 @@ async function getApkSettingsMap() {
         defaults[r.key] = String(r.value);
       }
     }
-    if (parseInt(defaults.apk_build_number || '0', 10) < 38 || defaults.apk_sha256 !== '19a48f1a1d3d27c11683e81eff9d13a0746910d4db1300ce8e43056a396e2351') {
+    if (parseInt(defaults.apk_build_number || '0', 10) < 39 || defaults.apk_sha256 !== '5ca4c2a88b25c8bf021ee695d6fb88e047360463f57f113158f7f45787ea9d50') {
       defaults.apk_version = '1.9.9';
-      defaults.apk_build_number = '38';
+      defaults.apk_build_number = '39';
       defaults.apk_file_size_mb = '56.9 MB';
-      defaults.apk_sha256 = '19a48f1a1d3d27c11683e81eff9d13a0746910d4db1300ce8e43056a396e2351';
+      defaults.apk_sha256 = '5ca4c2a88b25c8bf021ee695d6fb88e047360463f57f113158f7f45787ea9d50';
       defaults.apk_release_notes = LATEST_RELEASE_NOTES_V199;
       defaults.apk_updated_at = new Date().toISOString();
       // Persist directly to central_bank_settings so /api/settings, /api/admin/settings & /api/admin/overview match 100%!

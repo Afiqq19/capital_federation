@@ -98,8 +98,8 @@ class ApiService {
   }
 
   static const String currentAppVersion = '1.9.9';
-  static const int currentBuildNumber = 38;
-  static const String currentApkDisplayVersion = 'v1.9.9-CFX Production (Build 38)';
+  static const int currentBuildNumber = 39;
+  static const String currentApkDisplayVersion = 'v1.9.9-CFX Production (Build 39)';
 
   // Fetch Live Server Version & Update Detection Info
   static Future<Map<String, dynamic>?> getServerVersion() async {
@@ -488,6 +488,31 @@ class ApiService {
         return {'success': true, 'message': data['message'] ?? 'Berhasil menebus perseroan!'};
       }
       return {'success': false, 'error': data['error'] ?? 'Gagal menebus perseroan'};
+    } catch (e) {
+      return {'success': false, 'error': 'Koneksi error: $e'};
+    }
+  }
+
+  // Tetapkan / Ganti PT Utama Konglomerasi Pilihan Pemain
+  static Future<Map<String, dynamic>> setPrimaryCompany({
+    required String userId,
+    required String companyId,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/user/set-primary-company'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'userId': userId,
+          'companyId': companyId,
+        }),
+      ).timeout(const Duration(seconds: 15));
+
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        return {'success': true, 'message': data['message'] ?? 'Berhasil mengubah PT Utama!'};
+      }
+      return {'success': false, 'error': data['error'] ?? 'Gagal mengubah PT Utama'};
     } catch (e) {
       return {'success': false, 'error': 'Koneksi error: $e'};
     }

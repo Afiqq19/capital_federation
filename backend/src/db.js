@@ -1262,13 +1262,50 @@ async function healRealPlayerCompanies() {
     `);
 
     for (const u of (realUsersWithPt || [])) {
-      const primaryOwned = await query.get(
-        'SELECT * FROM companies WHERE owner_id = ? AND (symbol = ? OR name = ?)',
-        [u.id, u.pt_symbol || '---', u.pt_name || '---']
-      ) || await query.get(
-        'SELECT * FROM companies WHERE owner_id = ? ORDER BY is_bot ASC, founded_at ASC, id ASC LIMIT 1',
-        [u.id]
-      );
+      const userSymbol = (u.pt_symbol || '').trim().toUpperCase();
+      const rawPtName = (u.pt_name || '').trim();
+      const cleanUserPt = rawPtName.replace(/PT\.|\bTbk\b|\./gi, '').trim().toLowerCase();
+
+      let primaryOwned = null;
+      if (userSymbol || cleanUserPt) {
+        primaryOwned = await query.get(
+          `SELECT * FROM companies 
+           WHERE owner_id = ? 
+             AND (
+               (LENGTH(?) > 0 AND UPPER(symbol) = ?)
+               OR (LENGTH(?) > 0 AND (LOWER(name) = ? OR LOWER(name) LIKE ?))
+             )
+           LIMIT 1`,
+          [u.id, userSymbol, userSymbol, cleanUserPt, cleanUserPt, `%${cleanUserPt}%`]
+        );
+      }
+
+      // Proteksi Akuisisi: Jika primaryOwned ternyata adalah hasil akuisisi (is_acquired = 1),
+      // pulihkan PT asli yang didirikan sendiri oleh pemain jika ada!
+      if (!primaryOwned || primaryOwned.is_acquired === 1) {
+        const trueFounded = await query.get(
+          `SELECT * FROM companies 
+           WHERE owner_id = ? 
+             AND COALESCE(is_acquired, 0) = 0 
+             AND (COALESCE(is_bot, 0) = 0 OR founder_name = ? OR LOWER(name) LIKE '%' || LOWER(?) || '%')
+           ORDER BY 
+             CASE WHEN LOWER(name) LIKE '%' || LOWER(?) || '%' THEN 0 ELSE 1 END ASC,
+             CASE WHEN founder_name = ? THEN 0 ELSE 1 END ASC,
+             founded_at DESC, id ASC 
+           LIMIT 1`,
+          [u.id, u.username, u.username, u.username, u.username]
+        );
+        if (trueFounded) {
+          primaryOwned = trueFounded;
+        }
+      }
+
+      if (!primaryOwned) {
+        primaryOwned = await query.get(
+          'SELECT * FROM companies WHERE owner_id = ? ORDER BY COALESCE(is_acquired, 0) ASC, is_bot ASC, founded_at ASC, id ASC LIMIT 1',
+          [u.id]
+        );
+      }
 
       if (primaryOwned) {
         const bestBal = (Number(primaryOwned.company_balance_ib || 0) < 0 && Number(u.company_balance_ib || 0) === 0)

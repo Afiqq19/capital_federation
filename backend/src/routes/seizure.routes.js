@@ -162,7 +162,16 @@ module.exports = function(io, simulationEngine) {
 
       const totalBankDebt = bankLoanPrincipal + bankLoanInterest;
       const totalRedemptionCost = pnafSanctionFine + totalBankDebt;
-      const isOwner = Boolean(ownerId && userId && String(ownerId) === String(userId));
+      let isOwner = Boolean(ownerId && userId && String(ownerId) === String(userId));
+      if (!isOwner && userId) {
+        const port = await query.get('SELECT lots_owned FROM portfolios WHERE user_id = ? AND company_id = ?', [userId, id]);
+        const sh = await query.get('SELECT percentage FROM company_shareholders WHERE user_id = ? AND company_id = ?', [userId, id]);
+        const hasShares = (port && port.lots_owned > 0) || (sh && sh.percentage > 0);
+        const isBotOwned = !comp.owner_id || String(comp.owner_id).startsWith('bot-user-') || String(comp.owner_id).startsWith('user-bot-');
+        if (hasShares || isBotOwned) {
+          isOwner = true;
+        }
+      }
 
       res.json({
         companyId: comp.id,
@@ -201,10 +210,21 @@ module.exports = function(io, simulationEngine) {
         return res.status(400).json({ error: 'Perusahaan ini tidak dalam status disita.' });
       }
 
-      // Validasi 1: Hanya Pemilik / Founder yang berhak menebus!
-      if (!userId || !comp.owner_id || String(comp.owner_id) !== String(userId)) {
+      // Validasi 1: Pemilik, Founder, atau Pemegang Saham Pengendali Konglomerat berhak menebus
+      let canRedeem = Boolean(userId && comp.owner_id && String(comp.owner_id) === String(userId));
+      if (!canRedeem && userId) {
+        const port = await query.get('SELECT lots_owned FROM portfolios WHERE user_id = ? AND company_id = ?', [userId, id]);
+        const sh = await query.get('SELECT percentage FROM company_shareholders WHERE user_id = ? AND company_id = ?', [userId, id]);
+        const hasShares = (port && port.lots_owned > 0) || (sh && sh.percentage > 0);
+        const isBotOwned = !comp.owner_id || String(comp.owner_id).startsWith('bot-user-') || String(comp.owner_id).startsWith('user-bot-');
+        if (hasShares || isBotOwned) {
+          canRedeem = true;
+        }
+      }
+
+      if (!canRedeem) {
         return res.status(403).json({
-          error: 'Akses Ditolak: Anda bukan Pemilik/Founder dari perseroan ini. Penebusan perseroan hanya berhak dilakukan oleh pemilik sah sebelum batas jatuh tempo lelang!'
+          error: 'Akses Ditolak: Anda bukan Pemilik, Founder, atau Pemegang Saham dari perseroan ini. Penebusan perseroan hanya berhak dilakukan oleh pemilik sah sebelum batas jatuh tempo lelang!'
         });
       }
 
@@ -279,9 +299,11 @@ module.exports = function(io, simulationEngine) {
       await query.run(
         `UPDATE companies 
          SET is_seized = 0, seized_by = NULL, seized_at = NULL, seizure_deadline = NULL, is_auction_ready = 0, seize_reason = NULL, 
-             status = 'CRITICAL', current_price = ?, fundamental_score = ?
+             status = 'HEALTHY', current_price = ?, fundamental_score = ?,
+             owner_id = CASE WHEN owner_id IS NULL OR owner_id LIKE 'bot-user-%' OR owner_id LIKE 'user-bot-%' THEN ? ELSE owner_id END,
+             founder_name = CASE WHEN owner_id IS NULL OR owner_id LIKE 'bot-user-%' OR owner_id LIKE 'user-bot-%' THEN ? ELSE founder_name END
          WHERE id = ?`,
-        [correctedPrice, newFundamental, id]
+        [correctedPrice, newFundamental, userId, user.username, id]
       );
 
       // Reset tren di simulationEngine agar merintis stabil pasca koreksi

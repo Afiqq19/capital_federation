@@ -147,7 +147,7 @@ export default function TreasuryVaultPage() {
           label="Bea Meterai & Pajak Transaksi"
           value={ibShort(meteraiTaxTotal)}
           subValue={ib(meteraiTaxTotal)}
-          hint="Penerimaan PNBP & Pajak Bursa 0.1%"
+          hint="Penerimaan PNBP & Pajak Transaksi Bursa"
           icon={FileCheck2}
           tone="sky"
         />
@@ -247,7 +247,7 @@ export default function TreasuryVaultPage() {
                 <option value="EXPENSE">Pengeluaran (-EXPENSE)</option>
                 <option value="SEIZURE_FINE">Denda Sitaan PNAF</option>
                 <option value="METERAI_FEE">Bea Meterai Digital</option>
-                <option value="TRANSACTION_TAX">Pajak Bursa 0.1%</option>
+                <option value="TRANSACTION_TAX">Pajak Transaksi Bursa</option>
                 <option value="BAILOUT_DISBURSEMENT">Dana Bailout Emiten</option>
               </select>
             </div>
@@ -311,7 +311,7 @@ export default function TreasuryVaultPage() {
                         {row.source_type === 'SEIZURE_FINE' && <Badge tone="amber">DENDA SITAAN</Badge>}
                         {row.source_type === 'PNAF_FILING_FEE' && <Badge tone="sky">BIAYA SIDANG</Badge>}
                         {row.source_type === 'METERAI_FEE' && <Badge tone="emerald">METERAI DIGITAL</Badge>}
-                        {row.source_type === 'TRANSACTION_TAX' && <Badge tone="violet">PAJAK BURSA 0.1%</Badge>}
+                        {row.source_type === 'TRANSACTION_TAX' && <Badge tone="violet">PAJAK BURSA</Badge>}
                         {row.source_type === 'BAILOUT_DISBURSEMENT' && <Badge tone="rose">STIMULUS NEGARA</Badge>}
                       </td>
 

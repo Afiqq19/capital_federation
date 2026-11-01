@@ -637,6 +637,14 @@ class MarketSimulationEngine {
         let tickBotTaxIb = 0;
         let lastBotTraderName = 'haziq';
         let lastBotSymbol = 'KEAP';
+        let tradingFeePct = 0.1;
+        try {
+          const feeRow = await query.get("SELECT value FROM central_bank_settings WHERE key = 'trading_fee_pct'");
+          if (feeRow && !isNaN(parseFloat(feeRow.value))) {
+            tradingFeePct = Math.max(0.01, Math.min(5.0, parseFloat(feeRow.value)));
+          }
+        } catch (_) {}
+        const tradingTaxRate = tradingFeePct / 100.0;
 
         for (let t = 0; t < tradesCount; t++) {
           const randComp = tradeableList[Math.floor(Math.random() * tradeableList.length)];
@@ -651,7 +659,7 @@ class MarketSimulationEngine {
             : Math.floor(Math.random() * 90) + 5;
 
           const tradeValueIb = lotSize * 100 * (randComp.current_price || 1000);
-          const feeIb = Math.max(1500, Math.round(tradeValueIb * 0.0015)); // 0.15% Pajak Transaksi Bursa
+          const feeIb = Math.max(1500, Math.round(tradeValueIb * tradingTaxRate)); // Pajak Transaksi Bursa sesuai pengaturan
           tickBotTaxIb += feeIb;
           if (randomBot) lastBotTraderName = randomBot.username;
           lastBotSymbol = randComp.symbol;
@@ -696,7 +704,7 @@ class MarketSimulationEngine {
           this.io.emit('trade:executed', bgTrade);
         }
 
-        // Setorkan Pajak Transaksi Bursa (0.15%) dari aktivitas Bandar & Ritel Bot ke Kas Negara setiap 4 tick (~16 detik)
+        // Setorkan Pajak Transaksi Bursa dari aktivitas Bandar & Ritel Bot ke Kas Negara setiap 4 tick (~16 detik)
         if (this.tickCount % 4 === 0 && tickBotTaxIb > 0) {
           try {
             await query.run(
@@ -704,7 +712,7 @@ class MarketSimulationEngine {
                VALUES (?, 'TRANSACTION_TAX', ?, ?, 'INCOME', ?, ?)`,
               [
                 uuidv4(),
-                `Pajak Transaksi Bursa (0.15%) - Aktivitas Bandar & Ritel (${lastBotSymbol})`,
+                `Pajak Transaksi Bursa (${tradingFeePct}%) - Aktivitas Bandar & Ritel (${lastBotSymbol})`,
                 tickBotTaxIb * 4,
                 lastBotSymbol,
                 `Setoran otomatis pajak transaksi bursa oleh ${lastBotTraderName} dkk.`
