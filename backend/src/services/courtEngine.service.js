@@ -1477,29 +1477,126 @@ class CourtJudgeBotService {
         verdictNotes = `✅ LAPORAN PENGAWASAN BURSA DIKABULKAN (APPROVED): ${BOT_JUDGE_NAME} mengesahkan temuan kepatuhan bursa terhadap ${c.defendant_name} dan mencairkan insentif pelapor sebesar IB ${customAwardedAmount.toLocaleString('id-ID')}.`;
       }
     } else if (c.case_type === 'DEFAMATION') {
-      verdictStatus = 'VERDICT_APPROVED';
-      verdictType = 'APPROVED_PLAINTIFF_WIN';
-      customAwardedAmount = Math.min(rawClaim || 50000000, 250000000);
-      verdictNotes = `✅ GUGATAN PENCEMARAN NAMA BAIK DIKABULKAN (APPROVED): ${BOT_JUDGE_NAME} menyatakan tuduhan terhadap ${c.plaintiff_name} TIDAK TERBUKTI dan merugikan reputasi saham. Memerintahkan Tergugat (${c.defendant_name}) membayar ganti rugi pemulihan reputasi sebesar IB ${customAwardedAmount.toLocaleString('id-ID')} kepada Penggugat serta merehabilitasi nama baik perseroan.`;
+      // PEMERIKSAAN KETAT ALAT BUKTI PENCEMARAN NAMA BAIK
+      // 1. Cek apakah Tergugat pernah menggugat Penggugat secara fiktif dan perkaranya ditolak
+      const priorDismissed = await query.get(
+        `SELECT case_number, title FROM court_cases 
+         WHERE (plaintiff_user_id = ? OR plaintiff_name LIKE ?)
+           AND (defendant_user_id = ? OR defendant_name LIKE ?)
+           AND status IN ('VERDICT_REJECTED', 'DISMISSED')
+         LIMIT 1`,
+        [c.defendant_user_id, `%${c.defendant_name}%`, c.plaintiff_user_id, `%${c.plaintiff_name}%`]
+      );
+
+      // 2. Cek apakah perseroan Penggugat mengalami kejatuhan pasar atau UMA
+      const plComp = c.plaintiff_company_id 
+        ? await query.get('SELECT * FROM companies WHERE id = ?', [c.plaintiff_company_id])
+        : await query.get('SELECT * FROM companies WHERE owner_id = ? LIMIT 1', [c.plaintiff_user_id]);
+
+      const hasDetailedFacts = (c.notes && c.notes.length > 25) || (c.target_asset_description && c.target_asset_description.length > 20);
+
+      let isDefamationProven = false;
+      let rejectReason = '';
+
+      if (priorDismissed) {
+        // Terbukti ada rekam jejak perkara fitnah / fiktif sebelumnya yang telah ditolak Pengadilan PNAF
+        isDefamationProven = true;
+      } else if (plComp && (plComp.uma_flag === 1 || Number(plComp.price_change_pct || 0) <= -12)) {
+        // Terbukti terjadi anjlok pasar signifikan / suspensi reputasi akibat rumor Tergugat
+        isDefamationProven = true;
+      } else if (c.defendant_present === 0) {
+        // Tergugat mangkir dari persidangan dan tidak memberikan bantahan hukum
+        isDefamationProven = true;
+      } else if (!hasDetailedFacts) {
+        isDefamationProven = false;
+        rejectReason = 'Penggugat tidak menyertakan kronologi fakta materiil, data kerugian, atau alat bukti otentik.';
+      } else {
+        // Pengadilan memeriksa bukti objektif dari kedua belah pihak
+        const roll = Math.random();
+        if (roll < 0.40) {
+          isDefamationProven = true;
+        } else {
+          isDefamationProven = false;
+          rejectReason = 'Setelah menguji log transaksi dan fakta persidangan, Tergugat tidak terbukti menyebarkan fitnah atau merugikan reputasi korporasi secara melawan hukum.';
+        }
+      }
+
+      if (isDefamationProven) {
+        verdictStatus = 'VERDICT_APPROVED';
+        verdictType = 'APPROVED_PLAINTIFF_WIN';
+        customAwardedAmount = Math.min(rawClaim || 50000000, 500000000);
+        verdictNotes = `✅ GUGATAN PENCEMARAN NAMA BAIK DIKABULKAN (APPROVED): ${BOT_JUDGE_NAME} memeriksa alat bukti persidangan dan menyatakan Tergugat (${c.defendant_name}) TERBUKTI mencemarkan nama baik perseroan Penggugat (${c.plaintiff_name}). Menghukum Tergugat membayar ganti rugi sebesar IB ${customAwardedAmount.toLocaleString('id-ID')}. Apabila kas Tergugat tidak mencukupi, berlaku klausul sita eksekusi hak milik perseroan!`;
+      } else {
+        verdictStatus = 'VERDICT_REJECTED';
+        verdictType = 'GUGUR_DISMISSED';
+        const finePl = Math.max(10000000, Math.min(100000000, Math.round(rawClaim * 0.10)));
+        customAwardedAmount = 0;
+        verdictNotes = `❌ GUGATAN PENCEMARAN NAMA BAIK DITOLAK: ${BOT_JUDGE_NAME} memeriksa fakta hukum persidangan. ${rejectReason} Gugatan Penggugat dinyatakan TIDAK TERBUKTI. Menghukum Penggugat membayar sanksi denda perkara fiktif sebesar IB ${finePl.toLocaleString('id-ID')} kepada Tergugat.`;
+      }
     } else if (c.case_type === 'RECONVENTION') {
-      verdictStatus = 'VERDICT_APPROVED';
-      verdictType = 'APPROVED_PLAINTIFF_WIN';
-      customAwardedAmount = Math.min(rawClaim || 50000000, 250000000);
-      verdictNotes = `✅ GUGATAN BALASAN RECONVENTION DIKABULKAN (APPROVED): ${BOT_JUDGE_NAME} menetapkan bahwa perkara yang dialamatkan kepada ${c.plaintiff_name} adalah TIDAK BERDASAR & TIDAK TERBUKTI. Memerintahkan Tergugat (${c.defendant_name}) membayar kompensasi ganti rugi immaterial & biaya perkara sebesar IB ${customAwardedAmount.toLocaleString('id-ID')} kepada Penggugat.`;
-    } else {
-      // DISPUTE (Sengketa Saham / Wanprestasi Akta)
-      if (!linkedDeed && rawClaim > 50000000000) {
-        // Klaim > 50 Miliar tanpa bukti akta notaris -> ditolak demi menjaga stabilitas moneter
+      // PEMERIKSAAN KETAT GUGATAN REKONVENSI (TUNTUTAN BALIK)
+      const priorBogus = await query.get(
+        `SELECT id, case_number, title FROM court_cases 
+         WHERE (plaintiff_user_id = ? OR plaintiff_name LIKE ?)
+           AND (defendant_user_id = ? OR defendant_name LIKE ?)
+           AND status IN ('VERDICT_REJECTED', 'DISMISSED')
+         ORDER BY closed_at DESC LIMIT 1`,
+        [c.defendant_user_id, `%${c.defendant_name}%`, c.plaintiff_user_id, `%${c.plaintiff_name}%`]
+      );
+
+      if (priorBogus || c.defendant_present === 0) {
+        verdictStatus = 'VERDICT_APPROVED';
+        verdictType = 'APPROVED_PLAINTIFF_WIN';
+        customAwardedAmount = Math.min(rawClaim || 50000000, 300000000);
+        verdictNotes = `✅ GUGATAN REKONVENSI DIKABULKAN (APPROVED): ${BOT_JUDGE_NAME} mengabulkan gugatan rekonvensi Penggugat (${c.plaintiff_name}) karena tuduhan Tergugat (${c.defendant_name}) dalam perkara sebelumnya telah diputus TIDAK TERBUKTI dan fiktif. Menghukum Tergugat membayar ganti rugi immaterial sebesar IB ${customAwardedAmount.toLocaleString('id-ID')}.`;
+      } else {
         verdictStatus = 'VERDICT_REJECTED';
         verdictType = 'GUGUR_DISMISSED';
         customAwardedAmount = 0;
-        verdictNotes = `❌ GUGATAN DITOLAK: Tuntutan sebesar IB ${rawClaim.toLocaleString('id-ID')} tidak didukung bukti Akta Notaris / Meterai Digital yang sah di Brankas Kepaniteraan PNAF.`;
-      } else if (c.defendant_present === 0) {
-        // Tergugat mangkir dari persidangan -> Putusan Verstek memenangkan Penggugat
-        verdictStatus = 'VERDICT_APPROVED';
-        verdictType = 'VERSTEK_PLAINTIFF_WIN';
-      } else if (linkedDeed) {
-        // PEMERIKSAAN MATERI BUKTI AKTA OLEH MAJELIS HAKIM (BOT BISA MENGALAHKAN PENGGUNA ASLI)
+        verdictNotes = `❌ GUGATAN REKONVENSI DITOLAK: ${BOT_JUDGE_NAME} meneliti arsip PNAF dan tidak menemukan putusan perkara fiktif sebelumnya yang diajukan oleh Tergugat terhadap Penggugat. Gugatan rekonvensi gugur demi hukum.`;
+      }
+    } else {
+      // DISPUTE (Sengketa Saham & Akta Wanprestasi)
+      if (!linkedDeed) {
+        let hasShareRelationship = false;
+        if (c.plaintiff_user_id && (c.defendant_company_id || c.defendant_user_id)) {
+          const compId = c.defendant_company_id;
+          if (compId) {
+            const sh = await query.get('SELECT id FROM company_shareholders WHERE company_id = ? AND user_id = ?', [compId, c.plaintiff_user_id]);
+            if (sh) hasShareRelationship = true;
+          }
+        }
+
+        if (c.defendant_present === 0) {
+          verdictStatus = 'VERDICT_APPROVED';
+          verdictType = 'VERSTEK_PLAINTIFF_WIN';
+        } else if (!hasShareRelationship && rawClaim > 5000000000) {
+          // Tuntutan saham miliaran tanpa ada bukti akta dan bukan pemegang saham -> DITOLAK KERAS!
+          verdictStatus = 'VERDICT_REJECTED';
+          verdictType = 'GUGUR_DISMISSED';
+          const defamationFine = Math.max(10000000, Math.min(100000000, Math.round(rawClaim * 0.10)));
+          customAwardedAmount = 0;
+          verdictNotes = `❌ SENGKETA SAHAM DITOLAK: ${BOT_JUDGE_NAME} memeriksa buku pemegang saham perseroan. Penggugat tidak memiliki bukti Akta Notaris maupun catatan kepemilikan saham di Brankas PNAF. Penggugat dihukum denda perkara fiktif IB ${defamationFine.toLocaleString('id-ID')}.`;
+        } else {
+          // Ada sengketa proporsional, uji pembuktian
+          const roll = Math.random();
+          if (roll < 0.40) {
+            verdictStatus = 'VERDICT_APPROVED';
+            verdictType = 'APPROVED_PLAINTIFF_WIN';
+          } else if (roll < 0.75) {
+            verdictStatus = 'VERDICT_REJECTED';
+            verdictType = 'GUGUR_DISMISSED';
+            const fine = Math.max(10000000, Math.min(50000000, Math.round(rawClaim * 0.10)));
+            customAwardedAmount = 0;
+            verdictNotes = `❌ GUGATAN SENGKETA SAHAM DITOLAK: Kuasa Hukum Tergugat membuktikan bahwa penguasaan saham telah sesuai anggaran dasar. Penggugat dihukum membayar biaya perkara IB ${fine.toLocaleString('id-ID')}.`;
+          } else {
+            verdictStatus = 'VERDICT_PKPU';
+            verdictType = 'SETTLED_MEDIATION';
+            verdictNotes = `🤝 PUTUSAN MEDIASI ARBITRASE PNAF: Majelis Hakim menetapkan sengketa kepemilikan saham diselesaikan melalui RUPS luar biasa tanpa eksekusi sepihak.`;
+          }
+        }
+      } else {
+        // PEMERIKSAAN MATERI BUKTI AKTA OLEH MAJELIS HAKIM
         const isDeedFulfilled = linkedDeed.status === 'COMPLETED' || String(linkedDeed.status || '').startsWith('LUNAS');
         if (isDeedFulfilled) {
           // Akta terbukti sudah lunas / selesai -> Gugatan Penggugat adalah pencemaran nama baik fiktif!
@@ -1509,28 +1606,23 @@ class CourtJudgeBotService {
           customAwardedAmount = 0;
           verdictNotes = `❌ GUGATAN DITOLAK & PENGGUGAT DIHUKUM DENDA REKONVENSI: ${BOT_JUDGE_NAME} memeriksa berkas Akta #${linkedDeed.deed_number} dan menemukan seluruh kewajiban telah lunas dieksekusi secara sah. Tuduhan wanprestasi Penggugat (${c.plaintiff_name}) dinyatakan TIDAK TERBUKTI. Menghukum Penggugat membayar denda pencemaran nama baik sebesar IB ${defamationFine.toLocaleString('id-ID')} kepada Tergugat (${c.defendant_name}).`;
         } else {
-          // Ada sengketa klausul nyata: Bot bisa menang jika pembelaan kuat!
+          // Ada sengketa klausul nyata
           const roll = Math.random();
           if (roll < 0.50) {
             verdictStatus = 'VERDICT_APPROVED';
             verdictType = 'APPROVED_PLAINTIFF_WIN';
           } else if (roll < 0.80) {
-            // Kuasa Hukum Tergugat Bot berhasil mematahkan dalil gugatan -> Bot menang, Penggugat kalah!
             verdictStatus = 'VERDICT_REJECTED';
             verdictType = 'GUGUR_DISMISSED';
             const defamationFine = Math.max(10000000, Math.min(50000000, Math.round(rawClaim * 0.10)));
             customAwardedAmount = 0;
             verdictNotes = `❌ GUGATAN DITOLAK: Majelis Hakim PNAF memeriksa pembuktian Tergugat (${c.defendant_name}) dan menyatakan tidak terdapat wanprestasi sepihak atas Akta #${linkedDeed.deed_number}. Gugatan Penggugat dinyatakan gugur dan Penggugat dihukum membayar ganti rugi biaya perkara IB ${defamationFine.toLocaleString('id-ID')} kepada Tergugat.`;
           } else {
-            // Mediasi / Restrukturisasi PKPU
             verdictStatus = 'VERDICT_PKPU';
             verdictType = 'SETTLED_MEDIATION';
             verdictNotes = `🤝 PUTUSAN MEDIASI ARBITRASE PNAF: Majelis Hakim memutus sengketa Akta #${linkedDeed.deed_number} diselesaikan melalui jalur musyawarah perdata tanpa eksekusi sita paksa.`;
           }
         }
-      } else {
-        verdictStatus = 'VERDICT_PKPU';
-        verdictType = 'SETTLED_MEDIATION';
       }
     }
 
