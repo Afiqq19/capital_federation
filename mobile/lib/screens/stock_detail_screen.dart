@@ -1179,53 +1179,6 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                               ),
                             ],
                           ),
-                          if (availableRegularLots <= 0 && !c.isPreIpo && c.status != 'SUSPENDED') ...[
-                            const SizedBox(height: 10),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF59E0B).withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.45)),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      const Icon(Icons.handshake_rounded, color: Color(0xFFF59E0B), size: 15),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Text(
-                                          'Seluruh kuota Pasar Reguler (${c.regularMarketQuotaPct.toStringAsFixed(0)}% = ${CurrencyFormatter.formatNumberOnly(maxRegularLots)} Lot) telah habis Anda serap sehingga antrean Offer kosong (0 Lot / Cornering the Float).',
-                                          style: const TextStyle(color: Color(0xFFFBBF24), fontSize: 10.5, height: 1.35),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 8),
-                                  SizedBox(
-                                    width: double.infinity,
-                                    height: 34,
-                                    child: ElevatedButton.icon(
-                                      onPressed: () => showTakeoverModalSheet(context, c),
-                                      icon: const Icon(Icons.handshake_rounded, size: 14),
-                                      label: const Text(
-                                        '🤝 AKUISISI SAHAM PENGENDALI',
-                                        style: TextStyle(fontWeight: FontWeight.w900, fontSize: 10.5),
-                                      ),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: const Color(0xFFF59E0B),
-                                        foregroundColor: const Color(0xFF0F172A),
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
                         ],
                       ),
                     ),

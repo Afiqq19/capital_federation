@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import Modal from '../../components/ui/Modal';
 import Button from '../../components/ui/Button';
 import { FormField, Input, Textarea, Select } from '../../components/ui/Form';
@@ -12,6 +12,26 @@ export default function WithdrawModal({ open, onClose, users, companies, treasur
   const [amountIb, setAmountIb] = useState(50000000); // Default IB 50 Juta
   const [purpose, setPurpose] = useState('Pencairan Anggaran Negara untuk Penguatan Likuiditas');
   const [submitting, setSubmitting] = useState(false);
+
+  // Kunci daftar user dan PT selama modal terbuka agar dropdown tidak me-refresh sendiri saat mengetik/memilih
+  const stableCompaniesRef = useRef([]);
+  const stableUsersRef = useRef([]);
+  useEffect(() => {
+    if (open) {
+      if (stableCompaniesRef.current.length === 0 && companies?.length) {
+        stableCompaniesRef.current = [...companies];
+      }
+      if (stableUsersRef.current.length === 0 && users?.length) {
+        stableUsersRef.current = [...users];
+      }
+    } else {
+      stableCompaniesRef.current = [];
+      stableUsersRef.current = [];
+    }
+  }, [open, companies, users]);
+
+  const companyList = stableCompaniesRef.current.length > 0 ? stableCompaniesRef.current : (companies || []);
+  const userList = stableUsersRef.current.length > 0 ? stableUsersRef.current : (users || []);
 
   const newTreasuryBalance = Math.max(0, (treasuryBalance || 0) - (Number(amountIb) || 0));
 
@@ -129,9 +149,9 @@ export default function WithdrawModal({ open, onClose, users, companies, treasur
               required
             >
               <option value="">-- Pilih Pemain --</option>
-              {(users || []).map((u) => (
+              {userList.map((u) => (
                 <option key={u.id} value={u.id}>
-                  {u.username} (Kas Pribadi: {ib(u.balance_ib || 0)})
+                  {u.username}
                 </option>
               ))}
             </Select>
@@ -144,9 +164,9 @@ export default function WithdrawModal({ open, onClose, users, companies, treasur
               required
             >
               <option value="">-- Pilih Perusahaan --</option>
-              {(companies || []).map((c) => (
+              {companyList.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.symbol} - {c.name} (Kas PT: {ib(c.company_balance_ib || 0)})
+                  {c.symbol} - {c.name}
                 </option>
               ))}
             </Select>

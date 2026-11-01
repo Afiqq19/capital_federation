@@ -88,22 +88,56 @@ export function AdminProvider({ children }) {
     const onConnect = () => setOnline(true);
     const onDisconnect = () => setOnline(false);
 
+    // Throttled ticker update agar form/modal input admin tidak ter-refresh setiap detik
+    let pendingTicker = null;
+    let tickerTimer = null;
+    const flushTicker = () => {
+      if (pendingTicker && mounted.current) {
+        const updated = pendingTicker;
+        pendingTicker = null;
+        const map = new Map(updated.map((c) => [c.id, c]));
+        setCompanies((prev) => prev.map((c) => (map.has(c.id) ? { ...c, ...map.get(c.id) } : c)));
+      }
+      tickerTimer = null;
+    };
+
     const onTicker = (updated) => {
       if (!Array.isArray(updated)) return;
-      const map = new Map(updated.map((c) => [c.id, c]));
-      setCompanies((prev) => prev.map((c) => (map.has(c.id) ? { ...c, ...map.get(c.id) } : c)));
+      pendingTicker = updated;
+      if (!tickerTimer) {
+        tickerTimer = setTimeout(flushTicker, 4000);
+      }
     };
+
+    let pendingMarket = null;
+    let marketTimer = null;
+    const flushMarket = () => {
+      if (pendingMarket && mounted.current) {
+        setMarketIndex(pendingMarket);
+        pendingMarket = null;
+      }
+      marketTimer = null;
+    };
+
+    const onMarketOverview = (mkt) => {
+      if (!mkt) return;
+      pendingMarket = mkt;
+      if (!marketTimer) {
+        marketTimer = setTimeout(flushMarket, 4000);
+      }
+    };
+
     const onTrade = (t) => {
       if (!t) return;
       const trader = t.userName || t.username || 'Investor';
       if (!t.isBotTrade) {
         pushFeed(`💰 ${trader} ${t.type} ${t.lots} lot ${t.symbol}`, 'info');
       }
-      scheduleSilent('transactions', refreshTransactions, 4000);
+      scheduleSilent('transactions', refreshTransactions, 5000);
     };
     const onMacro = (ev) => {
       pushFeed(`📢 Event makro aktif: ${ev.title} (${ev.priceImpactPct > 0 ? '+' : ''}${ev.priceImpactPct}%)`, 'info');
-      scheduleSilent('overview', refreshOverview, 1500);
+      scheduleSilent('overview', refreshOverview, 2000);
     };
     const onRate = (d) => {
       const rate = d.interestRate ?? d.rate;
@@ -113,28 +147,28 @@ export function AdminProvider({ children }) {
       }
     };
     const onStatus = () => {
-      scheduleSilent('companies', refreshCompanies, 2000);
-      scheduleSilent('oversight', refreshOversight, 2000);
+      scheduleSilent('companies', refreshCompanies, 2500);
+      scheduleSilent('oversight', refreshOversight, 2500);
     };
     const onUma = (d) => {
       pushFeed(d?.uma ? `⚠️ UMA ${d.source === 'AUTO' ? 'otomatis' : 'manual'}: ${d.symbol}` : `✅ UMA dicabut: ${d?.symbol || ''}`, 'info');
-      scheduleSilent('companies', refreshCompanies, 1500);
-      scheduleSilent('oversight', refreshOversight, 1500);
+      scheduleSilent('companies', refreshCompanies, 2000);
+      scheduleSilent('oversight', refreshOversight, 2000);
     };
     const onNews = (n) => n?.title && pushFeed(n.title, 'info');
     const onIntervention = (d) => { pushFeed(`🏛️ QE: ${d.symbol} disuntik likuiditas`, 'info'); };
     const onSeized = () => {
-      scheduleSilent('companies', refreshCompanies, 1000);
-      scheduleSilent('oversight', refreshOversight, 1000);
-      scheduleSilent('overview', refreshOverview, 1000);
+      scheduleSilent('companies', refreshCompanies, 1500);
+      scheduleSilent('oversight', refreshOversight, 1500);
+      scheduleSilent('overview', refreshOverview, 1500);
     };
     const onUserUpdate = () => {
-      scheduleSilent('users', refreshUsers, 3500);
-      scheduleSilent('overview', refreshOverview, 3500);
+      scheduleSilent('users', refreshUsers, 4000);
+      scheduleSilent('overview', refreshOverview, 4000);
     };
     const onTreasury = () => {
-      scheduleSilent('overview', refreshOverview, 3500);
-      scheduleSilent('bank', refreshBank, 3500);
+      scheduleSilent('overview', refreshOverview, 4000);
+      scheduleSilent('bank', refreshBank, 4000);
     };
 
     socket.on('connect', onConnect);
@@ -155,12 +189,10 @@ export function AdminProvider({ children }) {
     socket.on('treasury:updated', onTreasury);
     socket.on('market:breaking_news', onNews);
     socket.on('market:intervention', onIntervention);
-    const onMarketOverview = (mkt) => {
-      if (mkt) setMarketIndex(mkt);
-    };
-
     socket.on('market:overview', onMarketOverview);
     return () => {
+      if (tickerTimer) clearTimeout(tickerTimer);
+      if (marketTimer) clearTimeout(marketTimer);
       socket.off('connect', onConnect);
       socket.off('disconnect', onDisconnect);
       socket.off('market:overview', onMarketOverview);
@@ -291,10 +323,10 @@ export function AdminProvider({ children }) {
     info: (m) => notify(m, 'info'),
   }), [notify]);
 
-  const value = {
+  const value = useMemo(() => ({
     overview, marketIndex, companies, users, bank, oversight, transactions, settings, feed, toasts, online, loading,
     refreshAll, notify, toast, actions,
-  };
+  }), [overview, marketIndex, companies, users, bank, oversight, transactions, settings, feed, toasts, online, loading, refreshAll, notify, toast, actions]);
 
   return <AdminContext.Provider value={value}>{children}</AdminContext.Provider>;
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import Modal from '../../components/ui/Modal';
 import Button from '../../components/ui/Button';
 import { FormField, Input, Textarea, Select } from '../../components/ui/Form';
@@ -11,7 +11,20 @@ export default function BailoutModal({ open, onClose, companies, treasuryBalance
   const [reason, setReason] = useState('Stimulus penyelamatan stabilitas pasar modal & pemulihan likuiditas emiten');
   const [submitting, setSubmitting] = useState(false);
 
-  const selectedCompany = (companies || []).find((c) => String(c.id) === String(selectedCompanyId));
+  // Kunci daftar emiten selama modal terbuka agar dropdown tidak me-refresh / menutup sendiri
+  const stableCompaniesRef = useRef([]);
+  useEffect(() => {
+    if (open) {
+      if (stableCompaniesRef.current.length === 0 && companies?.length) {
+        stableCompaniesRef.current = [...companies];
+      }
+    } else {
+      stableCompaniesRef.current = [];
+    }
+  }, [open, companies]);
+
+  const companyList = stableCompaniesRef.current.length > 0 ? stableCompaniesRef.current : (companies || []);
+  const selectedCompany = companyList.find((c) => String(c.id) === String(selectedCompanyId));
   const newTreasuryBalance = Math.max(0, (treasuryBalance || 0) - (Number(amountIb) || 0));
 
   const PRESET_AMOUNTS = [
@@ -86,11 +99,11 @@ export default function BailoutModal({ open, onClose, companies, treasuryBalance
             required
           >
             <option value="">-- Pilih Emiten Target --</option>
-            {(companies || []).map((c) => {
+            {companyList.map((c) => {
               const chg = changePct(c);
               return (
                 <option key={c.id} value={c.id}>
-                  {c.symbol} - {c.name} (IB {c.current_price?.toLocaleString('id-ID')} | {signedPct(chg)})
+                  {c.symbol} - {c.name}
                 </option>
               );
             })}

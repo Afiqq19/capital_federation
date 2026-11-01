@@ -7757,18 +7757,18 @@ const bundledPublicApkPath = path.join(__dirname, '../public/downloads/Capital-F
 const directPublicApkPath = path.join(__dirname, '../public/downloads/capital-federation.apk');
 const localBuiltApkPath = path.join(__dirname, '../../mobile/build/app/outputs/flutter-apk/app-release.apk');
 
-const LATEST_RELEASE_NOTES_V195 = 'v1.9.5 (Build 32): Tampilan Bursa Bersih & Elegan (Tombol AKUISISI PERSEROAN eksklusif di Cap Table Insider), Pembaruan Email Resmi Kustodian ke capital.federation19@gmail.com, serta Peningkatan Stabilitas.';
+const LATEST_RELEASE_NOTES_V195 = 'v1.9.5 (Build 33): Tombol Orderbook Dihapus Bersih (Cukup 1 Tombol Eksklusif AKUISISI PERSEROAN di Insider Cap Table), dan Form Input Website Dioptimasi Anti-Refresh.';
 
 async function getApkSettingsMap() {
   const defaults = {
     apk_version: '1.9.5',
-    apk_build_number: '32',
+    apk_build_number: '33',
     apk_min_android: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
     apk_file_size_mb: '56.9 MB',
     apk_release_notes: LATEST_RELEASE_NOTES_V195,
     apk_external_url: '',
-    apk_download_count: '355',
-    apk_sha256: '7be23e80376d93cf65f746abdfda29714824cb9965980eabb1eac892cbb64d76',
+    apk_download_count: '360',
+    apk_sha256: '6c0f3cd085b1bacc10dd2dcfb5d6d93f371837d4f3a88e753adfe2f15fc23f3c',
     apk_updated_at: new Date().toISOString(),
   };
   try {
@@ -7778,11 +7778,11 @@ async function getApkSettingsMap() {
         defaults[r.key] = String(r.value);
       }
     }
-    if (parseInt(defaults.apk_build_number || '0', 10) < 32) {
+    if (parseInt(defaults.apk_build_number || '0', 10) < 33) {
       defaults.apk_version = '1.9.5';
-      defaults.apk_build_number = '32';
+      defaults.apk_build_number = '33';
       defaults.apk_file_size_mb = '56.9 MB';
-      defaults.apk_sha256 = '7be23e80376d93cf65f746abdfda29714824cb9965980eabb1eac892cbb64d76';
+      defaults.apk_sha256 = '6c0f3cd085b1bacc10dd2dcfb5d6d93f371837d4f3a88e753adfe2f15fc23f3c';
       defaults.apk_release_notes = LATEST_RELEASE_NOTES_V195;
       defaults.apk_updated_at = new Date().toISOString();
       // Persist directly to central_bank_settings so /api/settings, /api/admin/settings & /api/admin/overview match 100%!
