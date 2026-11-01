@@ -7788,18 +7788,18 @@ const bundledPublicApkPath = path.join(__dirname, '../public/downloads/Capital-F
 const directPublicApkPath = path.join(__dirname, '../public/downloads/capital-federation.apk');
 const localBuiltApkPath = path.join(__dirname, '../../mobile/build/app/outputs/flutter-apk/app-release.apk');
 
-const LATEST_RELEASE_NOTES_V196 = 'v1.9.6 (Build 34): Redesain Kartu Uang Pemasukan (Omzet) & Pengeluaran (Beban Operasional) Bergaya Finansial Modern Ultra Elegan, Rasio Efisiensi Arus Kas, dan Akses Cepat Buku Kas.';
+const LATEST_RELEASE_NOTES_V197 = 'v1.9.7 (Build 35): Kategori Perkara PNAF Lengkap (Pencemaran Nama Baik & Rekonvensi Perkara Fiktif), Klausul Eksekusi Ambil Alih Hak Milik PT jika Tergugat Gagal Bayar, dan Hakim Bot Objektif & Berkeadilan.';
 
 async function getApkSettingsMap() {
   const defaults = {
-    apk_version: '1.9.6',
-    apk_build_number: '34',
+    apk_version: '1.9.7',
+    apk_build_number: '35',
     apk_min_android: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
     apk_file_size_mb: '56.9 MB',
-    apk_release_notes: LATEST_RELEASE_NOTES_V196,
+    apk_release_notes: LATEST_RELEASE_NOTES_V197,
     apk_external_url: '',
-    apk_download_count: '370',
-    apk_sha256: 'a87837ab3373ee6daeb4dd99bbcadd7469a5b448c30e93d063356191ee79c6b5',
+    apk_download_count: '385',
+    apk_sha256: '5b252ad32572f7de25a93f67da37f6a6c53a9a47350878a0dcb2ed6736f9423e',
     apk_updated_at: new Date().toISOString(),
   };
   try {
@@ -7809,12 +7809,12 @@ async function getApkSettingsMap() {
         defaults[r.key] = String(r.value);
       }
     }
-    if (parseInt(defaults.apk_build_number || '0', 10) < 34) {
-      defaults.apk_version = '1.9.6';
-      defaults.apk_build_number = '34';
+    if (parseInt(defaults.apk_build_number || '0', 10) < 35) {
+      defaults.apk_version = '1.9.7';
+      defaults.apk_build_number = '35';
       defaults.apk_file_size_mb = '56.9 MB';
-      defaults.apk_sha256 = 'a87837ab3373ee6daeb4dd99bbcadd7469a5b448c30e93d063356191ee79c6b5';
-      defaults.apk_release_notes = LATEST_RELEASE_NOTES_V196;
+      defaults.apk_sha256 = '5b252ad32572f7de25a93f67da37f6a6c53a9a47350878a0dcb2ed6736f9423e';
+      defaults.apk_release_notes = LATEST_RELEASE_NOTES_V197;
       defaults.apk_updated_at = new Date().toISOString();
       // Persist directly to central_bank_settings so /api/settings, /api/admin/settings & /api/admin/overview match 100%!
       const keysToSync = ['apk_version', 'apk_build_number', 'apk_file_size_mb', 'apk_sha256', 'apk_release_notes', 'apk_min_android', 'apk_updated_at'];

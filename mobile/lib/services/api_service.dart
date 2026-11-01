@@ -1330,6 +1330,7 @@ class ApiService {
     required double claimAmountIb,
     String? hearingDate,
     String? notes,
+    String? targetAssetDescription,
   }) async {
     try {
       final response = await http.post(
@@ -1346,6 +1347,7 @@ class ApiService {
           'claimAmountIb': claimAmountIb,
           if (hearingDate != null) 'hearingDate': hearingDate,
           if (notes != null) 'notes': notes,
+          if (targetAssetDescription != null) 'targetAssetDescription': targetAssetDescription,
         }),
       ).timeout(const Duration(seconds: 6));
       return jsonDecode(response.body);

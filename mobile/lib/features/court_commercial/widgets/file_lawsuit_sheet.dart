@@ -24,7 +24,8 @@ class FileLawsuitSheet extends StatefulWidget {
 }
 
 class _FileLawsuitSheetState extends State<FileLawsuitSheet> {
-  String _caseType = 'DISPUTE'; // 'DISPUTE', 'BANKRUPTCY', 'REGULATORY'
+  String _caseType = 'DISPUTE'; // 'DISPUTE', 'DEFAMATION', 'RECONVENTION', 'BANKRUPTCY', 'REGULATORY'
+  bool _takeoverIfInsolvent = true;
   final TextEditingController _defendantCtrl = TextEditingController();
   final TextEditingController _titleCtrl = TextEditingController();
   final TextEditingController _claimCtrl = TextEditingController(text: '500000000');
@@ -64,6 +65,10 @@ class _FileLawsuitSheetState extends State<FileLawsuitSheet> {
           _titleCtrl.text = 'Permohonan Kepailitan & Eksekusi Sita Jaminan ${comp.name}';
         } else if (_caseType == 'DISPUTE') {
           _titleCtrl.text = 'Gugatan Wanprestasi Akta & Sengketa Saham ${comp.symbol}';
+        } else if (_caseType == 'DEFAMATION') {
+          _titleCtrl.text = 'Gugatan Pencemaran Nama Baik & Kerugian Reputasi ${comp.symbol}';
+        } else if (_caseType == 'RECONVENTION') {
+          _titleCtrl.text = 'Gugatan Rekonvensi atas Perkara Tidak Terbukti ${comp.symbol}';
         } else {
           _titleCtrl.text = 'Laporan Pelanggaran Regulasi Bursa & Goreng Saham ${comp.symbol}';
         }
@@ -273,6 +278,14 @@ class _FileLawsuitSheetState extends State<FileLawsuitSheet> {
 
     final plaintiffName = user.ptName.isNotEmpty ? '${user.username} (${user.ptName})' : user.username;
 
+    final targetAsset = _takeoverIfInsolvent
+        ? '100% Saham & Hak Milik Perseroan Tergugat Dialihkan Jadi Milik Penggugat jika Duit Kurang'
+        : 'Saham Portofolio & Kas Perseroan Tergugat';
+
+    final fullNotes = _takeoverIfInsolvent
+        ? '${notes.isNotEmpty ? notes : 'Permohonan gugatan resmi diajukan ke PNAF.'} [KLAUSUL AKUISISI EKSEKUSI: Jika Tergugat kalah & kas kurang, perseroan disita dan dialihkan jadi hak milik Penggugat]'
+        : (notes.isNotEmpty ? notes : 'Permohonan gugatan resmi diajukan melalui aplikasi terpadu PNAF Federasi.');
+
     final res = await ApiService.fileCourtCase(
       plaintiffName: plaintiffName,
       plaintiffUserId: user.id,
@@ -282,7 +295,8 @@ class _FileLawsuitSheetState extends State<FileLawsuitSheet> {
       caseType: _caseType,
       title: title,
       claimAmountIb: claimAmount,
-      notes: notes.isNotEmpty ? notes : 'Permohonan gugatan resmi diajukan melalui aplikasi terpadu PNAF Federasi.',
+      notes: fullNotes,
+      targetAssetDescription: targetAsset,
     );
 
     setState(() => _isSubmitting = false);
@@ -384,8 +398,22 @@ class _FileLawsuitSheetState extends State<FileLawsuitSheet> {
                   _buildTypeTile(
                     'DISPUTE',
                     '📜 Sengketa Akta Saham / Wanprestasi',
-                    'Menggugat pelanggaran klausul perjanjian jual-beli saham atau sengketa dividen.',
+                    'Menggugat sengketa saham, pelanggaran akta notaris, atau wanprestasi. Saham dikembalikan / PT dialihkan!',
                     const Color(0xFFF59E0B),
+                  ),
+                  const Divider(color: Color(0xFF1E293B), height: 8),
+                  _buildTypeTile(
+                    'DEFAMATION',
+                    '🛡️ Pencemaran Nama Baik & Kerugian Reputasi',
+                    'Fitnah pasar, hoax emiten, tuduhan palsu perusak reputasi. Tuntut denda & ambil alih PT jika kas kurang!',
+                    const Color(0xFF38BDF8),
+                  ),
+                  const Divider(color: Color(0xFF1E293B), height: 8),
+                  _buildTypeTile(
+                    'RECONVENTION',
+                    '⚔️ Gugatan Balasan Rekonvensi (Perkara Fiktif)',
+                    'Tuntutan ganti rugi atas perkara lawan yang terbukti fiktif / tidak terbukti. Sita aset pembuat fitnah!',
+                    const Color(0xFFA855F7),
                   ),
                   const Divider(color: Color(0xFF1E293B), height: 8),
                   _buildTypeTile(
@@ -618,6 +646,46 @@ class _FileLawsuitSheetState extends State<FileLawsuitSheet> {
                 enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF1E293B))),
                 focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFF5B942))),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              ),
+            ),
+            const SizedBox(height: 14),
+
+            // Klausul Eksekusi Ambil Alih Hak Milik jika Duit Kurang
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: _takeoverIfInsolvent ? const Color(0xFFF5B942).withValues(alpha: 0.12) : const Color(0xFF070B14),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: _takeoverIfInsolvent ? const Color(0xFFF5B942).withValues(alpha: 0.5) : const Color(0xFF1E293B)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.workspace_premium_rounded, color: _takeoverIfInsolvent ? const Color(0xFFF5B942) : Colors.grey, size: 22),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          '👑 Klausul Ambil Alih Hak Milik PT (Jika Kas Kurang)',
+                          style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          _takeoverIfInsolvent
+                              ? 'Jika Tergugat kalah & uang kasnya kurang / tidak bayar denda, 100% kepemilikan PT Tergugat disita dan dialihkan jadi hak milik Anda!'
+                              : 'Sita biasa / lelang terbuka ke Balai Lelang BCF jika Tergugat tidak mampu membayar.',
+                          style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 9.5),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Switch(
+                    value: _takeoverIfInsolvent,
+                    activeColor: const Color(0xFFF5B942),
+                    onChanged: (val) => setState(() => _takeoverIfInsolvent = val),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 14),
