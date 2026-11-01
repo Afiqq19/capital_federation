@@ -33,6 +33,7 @@ import {
   Check,
   ShieldAlert,
   ShieldCheck,
+  Crown,
 } from 'lucide-react';
 
 export default function CourtOversightPage() {
@@ -79,7 +80,9 @@ export default function CourtOversightPage() {
   const [newHearingDate, setNewHearingDate] = useState('Hari Ini');
   const [newHearingTime, setNewHearingTime] = useState('10:00 WIB');
   const [newCourtRoom, setNewCourtRoom] = useState('Ruang Sidang Utama Kartika PNAF');
-  const [newTargetAsset, setNewTargetAsset] = useState('Saham Portofolio, Dividen, dan Rekening Konglomerat');
+  const [newTargetAsset, setNewTargetAsset] = useState('Ambil Alih Kepemilikan & Seluruh Saham Perseroan Tergugat Menjadi HAK MILIK Penggugat jika kas tidak mencukupi');
+  const [newCaseDescription, setNewCaseDescription] = useState('');
+  const [executionClauseType, setExecutionClauseType] = useState('TAKEOVER_PLAINTIFF');
   const [submittingNewCase, setSubmittingNewCase] = useState(false);
 
   const handleSelectPlaintiffCompany = (comp) => {
@@ -124,12 +127,20 @@ export default function CourtOversightPage() {
     const ownerLabel = comp.owner_username ? ` - @${comp.owner_username}` : '';
     const defName = `${comp.name} (${comp.symbol})${ownerLabel}`;
     setNewDefendant(defName);
-    setNewTargetAsset(`Saham Portofolio & Kas Perseroan ${comp.name} (${comp.symbol})`);
+    if (executionClauseType === 'TAKEOVER_PLAINTIFF') {
+      setNewTargetAsset(`Ambil Alih Kepemilikan & Seluruh Saham Perseroan ${comp.name} (${comp.symbol}) Menjadi HAK MILIK Penggugat jika kas tidak mencukupi`);
+    } else {
+      setNewTargetAsset(`Saham Portofolio & Kas Perseroan ${comp.name} (${comp.symbol})`);
+    }
     if (!newTitle || newTitle.startsWith('Gugatan') || newTitle.startsWith('Sengketa') || newTitle.startsWith('Laporan') || newTitle.startsWith('Permohonan')) {
       if (newCaseType === 'BANKRUPTCY') {
         setNewTitle(`Gugatan Kepailitan & Eksekusi Sita Jaminan atas ${comp.name} (${comp.symbol})`);
       } else if (newCaseType === 'DISPUTE') {
         setNewTitle(`Sengketa Kepemilikan Saham & Wanprestasi Akta atas ${comp.symbol}`);
+      } else if (newCaseType === 'DEFAMATION') {
+        setNewTitle(`Gugatan Pencemaran Nama Baik & Kerugian Reputasi terhadap ${comp.name} (${comp.symbol})`);
+      } else if (newCaseType === 'RECONVENTION') {
+        setNewTitle(`Gugatan Balasan Rekonvensi atas Perkara Fiktif ${comp.name} (${comp.symbol})`);
       } else {
         setNewTitle(`Laporan Dugaan Manipulasi Pasar Bursa & Goreng Saham ${comp.symbol}`);
       }
@@ -284,10 +295,12 @@ export default function CourtOversightPage() {
         hearingTime: newHearingTime,
         courtRoomName: newCourtRoom,
         targetAssetDescription: newTargetAsset,
+        notes: newCaseDescription || `Perkara ${newTitle}. Eksekusi: ${newTargetAsset}.`,
       });
       setIsFileModalOpen(false);
       setNewTitle('');
       setNewDefendant('');
+      setNewCaseDescription('');
       setSelectedDefComp(null);
       setSelectedDefUser(null);
       setSelectedPlaintiffComp(null);
@@ -852,6 +865,129 @@ export default function CourtOversightPage() {
         }
       >
         <form onSubmit={handleFileNewCase} className="space-y-3.5">
+          {/* Quick Case Archetypes Shortcut */}
+          <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                ⚡ Template Kilat Kategori Perkara & Tuntutan:
+              </span>
+              <span className="text-[10px] text-amber-400 font-semibold">1-Klik Langsung Terisi Lengkap</span>
+            </div>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setNewCaseType('DEFAMATION');
+                  setExecutionClauseType('TAKEOVER_PLAINTIFF');
+                  const compLabel = selectedPlaintiffComp ? selectedPlaintiffComp.symbol : '';
+                  setNewTitle(`Gugatan Pencemaran Nama Baik & Kerugian Reputasi Korporasi ${compLabel}`.trim());
+                  setNewCaseDescription(
+                    `Tergugat dengan sengaja menyebarkan fitnah, tuduhan palsu, dan pencemaran nama baik yang merusak reputasi pasar saham ${
+                      selectedPlaintiffComp ? selectedPlaintiffComp.name : 'Penggugat'
+                    }. Menuntut pemulihan nama baik dan denda ganti rugi. Apabila kas Tergugat tidak mencukupi atau tidak membayar, 100% kepemilikan perseroan Tergugat wajib dieksekusi dan dialihkan menjadi HAK MILIK Penggugat.`
+                  );
+                  setNewTargetAsset(
+                    `100% Saham & Hak Milik Perseroan ${
+                      selectedDefComp ? selectedDefComp.name : 'Tergugat'
+                    } Dialihkan Jadi Milik Penggugat jika Duit Kurang`
+                  );
+                }}
+                className={`p-2 rounded-lg text-left text-xs font-bold border transition-all ${
+                  newCaseType === 'DEFAMATION'
+                    ? 'bg-sky-500/20 text-sky-200 border-sky-500/50 shadow-sm shadow-sky-500/20'
+                    : 'bg-slate-950/70 text-slate-400 border-slate-800 hover:text-slate-200 hover:border-slate-700'
+                }`}
+              >
+                <div className="flex items-center gap-1 text-[11px] text-sky-400 font-bold mb-0.5">
+                  🛡️ Pencemaran Nama Baik
+                </div>
+                <div className="text-[10px] text-slate-400 font-normal leading-tight">
+                  Fitnah pasar & ambil alih PT jika kas kurang
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setNewCaseType('RECONVENTION');
+                  setExecutionClauseType('TAKEOVER_PLAINTIFF');
+                  const compLabel = selectedPlaintiffComp ? selectedPlaintiffComp.symbol : '';
+                  setNewTitle(`Gugatan Rekonvensi atas Perkara Tidak Terbukti & Tuduhan Fiktif ${compLabel}`.trim());
+                  setNewCaseDescription(
+                    `Gugatan Rekonvensi (Tuntutan Balik): Gugatan dan tuduhan yang diajukan oleh Tergugat dalam perkara sebelumnya dinyatakan TIDAK TERBUKTI dan fiktif. Menuntut kompensasi immateriil serta pengalihan hak milik perseroan Tergugat jika denda tidak dibayar.`
+                  );
+                  setNewTargetAsset(
+                    `100% Saham & Hak Milik Perseroan ${
+                      selectedDefComp ? selectedDefComp.name : 'Tergugat'
+                    } Dialihkan Jadi Milik Penggugat jika Duit Kurang`
+                  );
+                }}
+                className={`p-2 rounded-lg text-left text-xs font-bold border transition-all ${
+                  newCaseType === 'RECONVENTION'
+                    ? 'bg-amber-500/20 text-amber-200 border-amber-500/50 shadow-sm shadow-amber-500/20'
+                    : 'bg-slate-950/70 text-slate-400 border-slate-800 hover:text-slate-200 hover:border-slate-700'
+                }`}
+              >
+                <div className="flex items-center gap-1 text-[11px] text-amber-400 font-bold mb-0.5">
+                  ⚔️ Gugatan Tidak Terbukti
+                </div>
+                <div className="text-[10px] text-slate-400 font-normal leading-tight">
+                  Rekonvensi tuduhan fiktif & sita saham
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setNewCaseType('BANKRUPTCY');
+                  setExecutionClauseType('AUCTION_BCF');
+                  setNewTitle('Gugatan Kepailitan atas Gagal Bayar Kredit BIF');
+                  setNewCaseDescription(
+                    'Tergugat telah gagal bayar (wanprestasi) atas fasilitas pembiayaan yang jatuh tempo. Menuntut pelunasan pokok plus denda bunga atau sita eksekusi seluruh aset perseroan ke Balai Lelang BCF.'
+                  );
+                  setNewTargetAsset(`Saham Portofolio & Kas Perseroan ${selectedDefComp ? selectedDefComp.name : 'Tergugat'} Disita ke Lelang BCF`);
+                }}
+                className={`p-2 rounded-lg text-left text-xs font-bold border transition-all ${
+                  newCaseType === 'BANKRUPTCY'
+                    ? 'bg-rose-500/20 text-rose-200 border-rose-500/50 shadow-sm shadow-rose-500/20'
+                    : 'bg-slate-950/70 text-slate-400 border-slate-800 hover:text-slate-200 hover:border-slate-700'
+                }`}
+              >
+                <div className="flex items-center gap-1 text-[11px] text-rose-400 font-bold mb-0.5">
+                  ⚖️ Kepailitan & PKPU
+                </div>
+                <div className="text-[10px] text-slate-400 font-normal leading-tight">
+                  Gagal bayar utang & lelang terbuka BCF
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setNewCaseType('DISPUTE');
+                  setExecutionClauseType('TAKEOVER_PLAINTIFF');
+                  setNewTitle('Sengketa Kepemilikan Saham & Wanprestasi Perjanjian Notaris');
+                  setNewCaseDescription(
+                    'Tergugat melanggar kesepakatan akta pendirian perseroan. Menuntut pengembalian status kepemilikan saham perseroan kepada Penggugat.'
+                  );
+                  setNewTargetAsset(`Pengembalian Kepemilikan 100% Saham Perseroan ${selectedDefComp ? selectedDefComp.name : 'Tergugat'}`);
+                }}
+                className={`p-2 rounded-lg text-left text-xs font-bold border transition-all ${
+                  newCaseType === 'DISPUTE'
+                    ? 'bg-emerald-500/20 text-emerald-200 border-emerald-500/50 shadow-sm shadow-emerald-500/20'
+                    : 'bg-slate-950/70 text-slate-400 border-slate-800 hover:text-slate-200 hover:border-slate-700'
+                }`}
+              >
+                <div className="flex items-center gap-1 text-[11px] text-emerald-400 font-bold mb-0.5">
+                  📜 Sengketa Akta & Saham
+                </div>
+                <div className="text-[10px] text-slate-400 font-normal leading-tight">
+                  Pelanggaran akta & pemulihan kontrol
+                </div>
+              </button>
+            </div>
+          </div>
+
           {/* Section 1: Pokok Gugatan & Jenis Perkara */}
           <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
             <div className="md:col-span-7">
@@ -981,6 +1117,73 @@ export default function CourtOversightPage() {
                   <option value="RECONVENTION">⚔️ Rekonvensi / Perkara Tidak Terbukti</option>
                 </Select>
               </FormField>
+            </div>
+          </div>
+
+          {/* Uraian / Deskripsi Pokok Perkara & Duduk Fakta */}
+          <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-slate-200">
+                Deskripsi Pokok Perkara & Duduk Fakta Sengketa
+              </label>
+              <span className="text-[10px] text-slate-400">Pilih template cepat:</span>
+            </div>
+            <Textarea
+              value={newCaseDescription}
+              onChange={(e) => setNewCaseDescription(e.target.value)}
+              rows={2}
+              placeholder="Contoh: Tergugat menyebarkan fitnah finansial yang merusak reputasi saham Penggugat. Menuntut ganti rugi, dan jika kas tidak cukup atau Tergugat tidak membayar, perseroan Tergugat diambil alih menjadi hak milik Penggugat."
+            />
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setExecutionClauseType('TAKEOVER_PLAINTIFF');
+                  setNewCaseDescription(
+                    `Tergugat dengan sengaja menyebarkan fitnah, tuduhan palsu, dan pencemaran nama baik yang merusak reputasi pasar saham ${
+                      selectedPlaintiffComp ? selectedPlaintiffComp.name : 'Penggugat'
+                    }. Menuntut pemulihan reputasi dan ganti rugi. Apabila kas Tergugat tidak mencukupi atau gagal bayar, perseroan Tergugat wajib disita dan dialihkan menjadi HAK MILIK Penggugat.`
+                  );
+                }}
+                className="text-[10px] px-2 py-1 rounded bg-sky-500/10 border border-sky-500/30 text-sky-300 hover:bg-sky-500/20 transition-colors"
+              >
+                🛡️ Fitnah & Ambil Alih Hak Milik
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setExecutionClauseType('TAKEOVER_PLAINTIFF');
+                  setNewCaseDescription(
+                    `Gugatan Rekonvensi (Tuntutan Balik): Tuduhan Tergugat dalam perkara sebelumnya dinyatakan TIDAK TERBUKTI dan fiktif. Menuntut kompensasi immateriil dan sita eksekusi hak milik aset perseroan Tergugat.`
+                  );
+                }}
+                className="text-[10px] px-2 py-1 rounded bg-amber-500/10 border border-amber-500/30 text-amber-300 hover:bg-amber-500/20 transition-colors"
+              >
+                ⚔️ Rekonvensi & Perkara Tidak Terbukti
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setExecutionClauseType('TAKEOVER_PLAINTIFF');
+                  setNewCaseDescription(
+                    `Klausul Eksekusi Pengalihan Hak Milik: Apabila Tergugat tidak mampu membayar ganti rugi atau kas tidak mencukupi, 100% kepemilikan perseroan Tergugat langsung disita dan diserahkan menjadi HAK MILIK Penggugat.`
+                  );
+                }}
+                className="text-[10px] px-2 py-1 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20 transition-colors"
+              >
+                👑 Sita Hak Milik jika Duit Kurang
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setNewCaseDescription(
+                    `Tergugat gagal memenuhi kewajiban pembayaran finansial yang jatuh tempo. Menuntut pelunasan segera atau sita jaminan perseroan Tergugat ke balai lelang.`
+                  )
+                }
+                className="text-[10px] px-2 py-1 rounded bg-rose-500/10 border border-rose-500/30 text-rose-300 hover:bg-rose-500/20 transition-colors"
+              >
+                ⚖️ Wanprestasi & Gagal Bayar
+              </button>
             </div>
           </div>
 
@@ -1294,51 +1497,119 @@ export default function CourtOversightPage() {
             </div>
           </div>
 
-          {/* Section 3: Tuntutan Ganti Rugi & Objek Sitaan */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="label mb-0">Nilai Tuntutan Ganti Rugi (IB)</label>
-                <span className="font-mono text-xs font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 whitespace-nowrap">
-                  IB {Number(newClaimAmount || 0).toLocaleString('id-ID')}
-                </span>
+          {/* Section 3: Tuntutan Ganti Rugi & Klausul Eksekusi */}
+          <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="label mb-0">Nilai Tuntutan Ganti Rugi (IB)</label>
+                  <span className="font-mono text-xs font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 whitespace-nowrap">
+                    IB {Number(newClaimAmount || 0).toLocaleString('id-ID')}
+                  </span>
+                </div>
+                <Input
+                  type="number"
+                  value={newClaimAmount}
+                  onChange={(e) => setNewClaimAmount(e.target.value)}
+                  min="0"
+                  step="1000000"
+                  required
+                />
+                <div className="grid grid-cols-5 gap-1.5 mt-1.5">
+                  {[50000000, 100000000, 500000000, 1000000000, 5000000000].map((amt) => (
+                    <button
+                      key={amt}
+                      type="button"
+                      onClick={() => setNewClaimAmount(amt)}
+                      className={`py-1 rounded text-[10px] font-semibold border text-center transition-colors ${
+                        Number(newClaimAmount) === amt
+                          ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                          : 'bg-slate-900 text-slate-400 border-slate-800 hover:border-slate-700 hover:text-slate-200'
+                      }`}
+                    >
+                      {amt >= 1000000000 ? `${amt / 1000000000} M` : `${amt / 1000000} Jt`}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <Input
-                type="number"
-                value={newClaimAmount}
-                onChange={(e) => setNewClaimAmount(e.target.value)}
-                min="0"
-                step="1000000"
-                required
-              />
-              <div className="grid grid-cols-5 gap-1.5 mt-1.5">
-                {[50000000, 100000000, 500000000, 1000000000, 5000000000].map((amt) => (
+
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="label mb-0">Klausul Eksekusi Jika Tergugat Kalah</label>
+                  <span className="text-[10px] text-amber-400 font-bold">Pilih Mekanisme</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 mb-2">
                   <button
-                    key={amt}
                     type="button"
-                    onClick={() => setNewClaimAmount(amt)}
-                    className={`py-1 rounded text-[10px] font-semibold border text-center transition-colors ${
-                      Number(newClaimAmount) === amt
-                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                        : 'bg-slate-900 text-slate-400 border-slate-800 hover:border-slate-700 hover:text-slate-200'
+                    onClick={() => {
+                      setExecutionClauseType('TAKEOVER_PLAINTIFF');
+                      setNewTargetAsset(
+                        `100% Saham & Hak Milik Perseroan ${
+                          selectedDefComp ? selectedDefComp.name : 'Tergugat'
+                        } Dialihkan Jadi Milik Penggugat jika Duit Kurang`
+                      );
+                    }}
+                    className={`p-2 rounded-lg border text-left transition-all ${
+                      executionClauseType === 'TAKEOVER_PLAINTIFF'
+                        ? 'bg-amber-500/20 border-amber-500 text-amber-300 shadow-sm shadow-amber-500/30'
+                        : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
                     }`}
                   >
-                    {amt >= 1000000000 ? `${amt / 1000000000} M` : `${amt / 1000000} Jt`}
+                    <div className="flex items-center gap-1 text-[11px] font-bold text-amber-300">
+                      <Crown size={13} className="text-amber-400" />
+                      Ambil Alih Hak Milik
+                    </div>
+                    <div className="text-[9px] text-slate-400 mt-0.5 leading-tight">
+                      Jika uang kurang / tidak bayar, PT jadi milik Penggugat
+                    </div>
                   </button>
-                ))}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setExecutionClauseType('AUCTION_BCF');
+                      setNewTargetAsset(
+                        `Saham Portofolio & Kas Perseroan ${
+                          selectedDefComp ? selectedDefComp.name : 'Tergugat'
+                        } Disita ke Lelang BCF`
+                      );
+                    }}
+                    className={`p-2 rounded-lg border text-left transition-all ${
+                      executionClauseType === 'AUCTION_BCF'
+                        ? 'bg-sky-500/20 border-sky-500 text-sky-300 shadow-sm shadow-sky-500/30'
+                        : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1 text-[11px] font-bold text-sky-300">
+                      <Scale size={13} className="text-sky-400" />
+                      Sita Lelang BCF
+                    </div>
+                    <div className="text-[9px] text-slate-400 mt-0.5 leading-tight">
+                      Dilelang terbuka ke bursa Balai Lelang BCF
+                    </div>
+                  </button>
+                </div>
+
+                {executionClauseType === 'TAKEOVER_PLAINTIFF' ? (
+                  <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-[10px] text-amber-200/90 leading-tight">
+                    <span className="font-bold text-amber-300">👑 KLAUSUL AKUISISI EKSEKUSI:</span> Jika Tergugat kalah dan kasnya tidak cukup / gagal bayar, 100% saham dan status kepemilikan PT Tergugat langsung <b>DIALIHKAN menjadi HAK MILIK Penggugat</b>!
+                  </div>
+                ) : (
+                  <div className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-[10px] text-slate-400 leading-tight">
+                    <span className="font-bold text-slate-300">🏛️ SITA LELANG BCF:</span> Perseroan Tergugat disita oleh Pengadilan dan dimasukkan ke antrean lelang terbuka publik BCF.
+                  </div>
+                )}
               </div>
             </div>
 
-            <div>
-              <FormField label="Objek Sitaan / Jaminan yang Dituntut" hint="Aset yang otomatis dieksekusi saat putusan dikabulkan">
-                <Input
-                  value={newTargetAsset}
-                  onChange={(e) => setNewTargetAsset(e.target.value)}
-                  placeholder="Contoh: Saham PT. Makmur 50.000 Lot & Rekening Kas Debitur"
-                  required
-                />
-              </FormField>
-            </div>
+            <FormField label="Rincian Objek Sitaan / Jaminan yang Dituntut" hint="Aset yang otomatis dieksekusi saat putusan dikabulkan">
+              <Input
+                value={newTargetAsset}
+                onChange={(e) => setNewTargetAsset(e.target.value)}
+                placeholder="Contoh: 100% Saham & Hak Milik Perseroan Tergugat Dialihkan ke Penggugat"
+                required
+              />
+            </FormField>
           </div>
 
           {/* Section 4: Penjadwalan Sidang Majelis Hakim (3 Kolom) */}

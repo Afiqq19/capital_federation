@@ -393,11 +393,32 @@ async function executeCourtVerdict(
     }
   }
   if (!plaintiffId && c.plaintiff_name) {
-    const rawUsername = c.plaintiff_name.split('(')[0].trim();
-    const matchedPl = await query.get('SELECT id FROM users WHERE LOWER(username) = LOWER(?)', [rawUsername]);
-    if (matchedPl) {
-      plaintiffId = matchedPl.id;
-      await query.run('UPDATE court_cases SET plaintiff_user_id = ? WHERE id = ?', [plaintiffId, caseId]);
+    const atMatch = c.plaintiff_name.match(/@([a-zA-Z0-9_]+)/);
+    if (atMatch) {
+      const u = await query.get('SELECT id FROM users WHERE LOWER(username) = LOWER(?)', [atMatch[1]]);
+      if (u) {
+        plaintiffId = u.id;
+        await query.run('UPDATE court_cases SET plaintiff_user_id = ? WHERE id = ?', [plaintiffId, caseId]);
+      }
+    }
+    if (!plaintiffId) {
+      const rawUsername = c.plaintiff_name.split('(')[0].trim();
+      const matchedPl = await query.get('SELECT id FROM users WHERE LOWER(username) = LOWER(?)', [rawUsername]);
+      if (matchedPl) {
+        plaintiffId = matchedPl.id;
+        await query.run('UPDATE court_cases SET plaintiff_user_id = ? WHERE id = ?', [plaintiffId, caseId]);
+      }
+    }
+    if (!plaintiffId) {
+      const cleanName = c.plaintiff_name.replace(/PT\.|\(.*\)|@/gi, '').trim();
+      const comp = await query.get(
+        'SELECT id, owner_id FROM companies WHERE LOWER(symbol) = LOWER(?) OR LOWER(name) LIKE LOWER(?) LIMIT 1',
+        [cleanName, `%${cleanName}%`]
+      );
+      if (comp && comp.owner_id) {
+        plaintiffId = comp.owner_id;
+        await query.run('UPDATE court_cases SET plaintiff_user_id = ?, plaintiff_company_id = ? WHERE id = ?', [plaintiffId, comp.id, caseId]);
+      }
     }
   }
 
@@ -752,7 +773,138 @@ async function executeCourtVerdict(
       );
     }
 
-    if (targetComp && targetComp.is_seized !== 1) {
+    // Deteksi apakah perkara menuntut pengalihan hak milik langsung kepada Penggugat
+    const isTakeoverDemand = /ambil alih|hak milik|akuisisi|takeover|mencemarkan|fitnah|rekonvensi/i.test(
+      `${c.target_asset_description || ''} ${c.notes || ''} ${c.title || ''}`
+    );
+
+    // Cek apakah Tergugat kekurangan dana kas tunai untuk melunasi tuntutan denda
+    let isCashDeficit = false;
+    if (c.defendant_user_id) {
+      const defUserCheck = await query.get('SELECT balance_ib, company_balance_ib FROM users WHERE id = ?', [c.defendant_user_id]);
+      if (defUserCheck) {
+        const totalDefCash = (Number(defUserCheck.balance_ib) || 0) + Math.max(0, Number(defUserCheck.company_balance_ib) || 0);
+        if (awardedAmount > 0 && totalDefCash < awardedAmount) {
+          isCashDeficit = true;
+        }
+      }
+    }
+
+    if (targetComp && plaintiffId && (isTakeoverDemand || isCashDeficit) && targetComp.owner_id !== plaintiffId) {
+      // === EKSEKUSI PENGALIHAN HAK MILIK SECARA LANGSUNG KEPADA PENGGUGAT ===
+      const plUser = await query.get('SELECT id, username FROM users WHERE id = ?', [plaintiffId]);
+      if (plUser) {
+        const prevOwnerUsername = targetComp.owner_username || 'Tergugat';
+        const prevOwnerId = targetComp.owner_id;
+
+        // 1. Update status emiten: Pemilik baru menjadi Penggugat, status SEHAT, tidak disita lagi!
+        await query.run(
+          `UPDATE companies 
+           SET owner_id = ?, 
+               owner_username = ?, 
+               status = 'HEALTHY', 
+               is_seized = 0, 
+               is_auction_ready = 0, 
+               seized_by = NULL, 
+               seized_at = NULL, 
+               seizure_deadline = NULL, 
+               seize_reason = NULL 
+           WHERE id = ?`,
+          [plUser.id, plUser.username, targetComp.id]
+        );
+
+        // 2. Alihkan Kepemilikan Pemegang Saham (company_shareholders)
+        if (prevOwnerId) {
+          await query.run('DELETE FROM company_shareholders WHERE company_id = ? AND user_id = ?', [targetComp.id, prevOwnerId]);
+        }
+        const existingPlSh = await query.get('SELECT id FROM company_shareholders WHERE company_id = ? AND user_id = ?', [targetComp.id, plUser.id]);
+        if (existingPlSh) {
+          await query.run(
+            `UPDATE company_shareholders 
+             SET percentage = 100.0, holder_type = 'FOUNDER', holder_name = ? 
+             WHERE id = ?`,
+            [`${plUser.username} (Eksekusi Pengadilan)`, existingPlSh.id]
+          );
+        } else {
+          await query.run(
+            `INSERT INTO company_shareholders (id, company_id, holder_name, holder_type, shares_count, percentage, user_id) 
+             VALUES (?, ?, ?, 'FOUNDER', ?, 100.0, ?)`,
+            [uuidv4(), targetComp.id, `${plUser.username} (Eksekusi Pengadilan)`, targetComp.total_shares || 1000000, plUser.id]
+          );
+        }
+
+        // 3. Portofolio Saham: Alihkan seluruh lot pendiri ke Penggugat
+        const totalLots = Math.max(1, Math.floor((Number(targetComp.total_shares) || 1000000) / 100));
+        if (prevOwnerId) {
+          await query.run('UPDATE portfolios SET lots_owned = 0 WHERE user_id = ? AND company_id = ?', [prevOwnerId, targetComp.id]);
+        }
+        const plPort = await query.get('SELECT id FROM portfolios WHERE user_id = ? AND company_id = ?', [plUser.id, targetComp.id]);
+        if (plPort) {
+          await query.run('UPDATE portfolios SET lots_owned = lots_owned + ? WHERE id = ?', [totalLots, plPort.id]);
+        } else {
+          await query.run(
+            'INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price) VALUES (?, ?, ?, ?, ?)',
+            [uuidv4(), plUser.id, targetComp.id, totalLots, targetComp.current_price || 100]
+          );
+        }
+
+        // 4. Kirim Surat Putusan ke Kotak Pesan Penggugat
+        await query.run(
+          `INSERT INTO user_inbox (id, user_id, sender_name, category, title, message, reference_id, is_read, created_at)
+           VALUES (?, ?, ?, 'COURT', ?, ?, ?, 0, ?)`,
+          [
+            uuidv4(),
+            plUser.id,
+            'Majelis Hakim Arbitrase PNAF',
+            `👑 Hak Milik Beralih: Anda Resmi Menguasai 100% ${targetComp.name}!`,
+            `Amar Putusan Inkrah No. ${c.case_number} telah dieksekusi! Karena Tergugat (${c.defendant_name}) terbukti bersalah dan ${isCashDeficit ? 'kasnya tidak mencukupi untuk membayar ganti rugi' : 'sesuai klausul sita hak milik'}, seluruh 100% kepemilikan dan saham perseroan ${targetComp.name} (${targetComp.symbol}) resmi DIALIHKAN menjadi HAK MILIK ANDA!`,
+            caseId,
+            new Date().toISOString(),
+          ]
+        );
+
+        // 5. Kirim Surat Eksekusi ke Kotak Pesan Tergugat
+        if (prevOwnerId) {
+          await query.run(
+            `INSERT INTO user_inbox (id, user_id, sender_name, category, title, message, reference_id, is_read, created_at)
+             VALUES (?, ?, ?, 'COURT', ?, ?, ?, 0, ?)`,
+            [
+              uuidv4(),
+              prevOwnerId,
+              'Majelis Hakim Arbitrase PNAF',
+              `⚖️ Sita Eksekusi Kepemilikan: PT. ${targetComp.name} Dialihkan ke Penggugat`,
+              `Majelis Hakim PNAF mengeksekusi amar putusan No. ${c.case_number}. Karena ${isCashDeficit ? 'saldo kas Anda tidak mencukupi pelunasan ganti rugi' : 'klausul sita eksekusi hak milik'}, 100% kepemilikan perseroan ${targetComp.name} (${targetComp.symbol}) telah dicabut dan resmi diserahkan menjadi hak milik @${plUser.username}.`,
+              caseId,
+              new Date().toISOString(),
+            ]
+          );
+        }
+
+        // 6. Siarkan Breaking News ke Ticker Pasar
+        const takeoverNews = {
+          id: uuidv4(),
+          title: `👑 AKUISISI EKSEKUSI PNAF: Kendali ${targetComp.name} (${targetComp.symbol}) Resmi Menjadi Milik @${plUser.username}!`,
+          content: `Kepaniteraan Eksekusi PNAF resmi mengalihkan 100% saham dan kendali perseroan ${targetComp.name} dari Tergugat (@${prevOwnerUsername}) kepada Penggugat (@${plUser.username}) berdasarkan putusan inkrah No. ${c.case_number}. Saham perseroan dipulihkan aktif.`,
+          affected_sector: targetComp.sector,
+          sentiment: 'BULLISH',
+          published_at: new Date().toISOString(),
+        };
+        await query.run(
+          'INSERT INTO news (id, title, content, affected_sector, sentiment, published_at) VALUES (?, ?, ?, ?, ?, ?)',
+          [takeoverNews.id, takeoverNews.title, takeoverNews.content, takeoverNews.affected_sector, takeoverNews.sentiment, takeoverNews.published_at]
+        );
+
+        if (io) {
+          io.emit('market:news_broadcast', takeoverNews);
+          io.emit('company:status_changed', { companyId: targetComp.id, status: 'HEALTHY', ownerId: plUser.id, ownerUsername: plUser.username });
+          io.emit('company:seized_status', { companyId: targetComp.id, isSeized: false, reason: 'Pengalihan Hak Milik Putusan PNAF' });
+          io.emit('user:portfolio_updated', { userId: plUser.id });
+          if (prevOwnerId) io.emit('user:portfolio_updated', { userId: prevOwnerId });
+        }
+
+        finalNotes += ` [AKUISISI PAKSA EKSEKUSI: 100% kepemilikan perseroan ${targetComp.name} (${targetComp.symbol}) resmi dialihkan menjadi HAK MILIK Penggugat @${plUser.username} karena Tergugat gagal bayar / tuntutan sita hak milik.]`;
+      }
+    } else if (targetComp && targetComp.is_seized !== 1) {
       const now = new Date();
       const seizedAt = now.toISOString();
       const seizureDeadline = new Date(now.getTime() + 4 * 24 * 60 * 60 * 1000).toISOString();
