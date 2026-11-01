@@ -5010,6 +5010,11 @@ app.post('/api/company/unsuspend', async (req, res) => {
 
     const company = await query.get('SELECT * FROM companies WHERE id = ?', [companyId]);
     if (!company) return res.status(404).json({ error: 'Emiten tidak ditemukan' });
+    if (company.is_seized === 1) {
+      return res.status(400).json({ 
+        error: `Perseroan ${company.symbol} sedang berstatus DISITA EKSEKUSI oleh Pengadilan Niaga PNAF. Penebusan perseroan wajib melunasi amar putusan sidang perkara hukum melalui menu Tebus Perseroan PNAF.` 
+      });
+    }
     if (company.status !== 'SUSPENDED') {
       return res.status(400).json({ error: `Saham ${company.symbol} saat ini tidak berstatus SUSPENSI (status: ${company.status})` });
     }
@@ -8000,18 +8005,18 @@ const bundledPublicApkPath = path.join(__dirname, '../public/downloads/Capital-F
 const directPublicApkPath = path.join(__dirname, '../public/downloads/capital-federation.apk');
 const localBuiltApkPath = path.join(__dirname, '../../mobile/build/app/outputs/flutter-apk/app-release.apk');
 
-const LATEST_RELEASE_NOTES_V199 = 'v1.9.9 (Build 40): Listing Penawaran Saham Aktif di Katalog Pasar Global (25 Detik), Tombol Tarik/Batalkan Penawaran di Kartu Deal, Bot Konglomerat Triliuner Aktif Memborong Blok Saham M&A, serta Sinkronisasi Akta Notariat & Mutasi Kas Transparan.';
+const LATEST_RELEASE_NOTES_V199 = 'v1.9.9 (Build 41): Transparansi Perkara Sitaan PNAF (Pihak Penggugat, No. Perkara, Pokok Gugatan), Sinkronisasi Denda Amar Putusan Sidang Dinamis 100%, Banner Sita Eksekusi Khusus Emiten, dan Opsi Pinjaman Modal Bank BCF.';
 
 async function getApkSettingsMap() {
   const defaults = {
     apk_version: '1.9.9',
-    apk_build_number: '40',
+    apk_build_number: '41',
     apk_min_android: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
     apk_file_size_mb: '57.0 MB',
     apk_release_notes: LATEST_RELEASE_NOTES_V199,
     apk_external_url: '',
-    apk_download_count: '436',
-    apk_sha256: '9a418081b73c8f98a75eba6d0e92b157a4ab58f564be11134a8f526e130cafd4',
+    apk_download_count: '445',
+    apk_sha256: 'a4bb6ffef9e227c2db7d664f2490ff10563e7b42a82d54897eb6da763f6301ff',
     apk_updated_at: new Date().toISOString(),
   };
   try {
@@ -8021,11 +8026,11 @@ async function getApkSettingsMap() {
         defaults[r.key] = String(r.value);
       }
     }
-    if (parseInt(defaults.apk_build_number || '0', 10) < 40 || defaults.apk_sha256 !== '9a418081b73c8f98a75eba6d0e92b157a4ab58f564be11134a8f526e130cafd4') {
+    if (parseInt(defaults.apk_build_number || '0', 10) < 41 || defaults.apk_sha256 !== 'a4bb6ffef9e227c2db7d664f2490ff10563e7b42a82d54897eb6da763f6301ff') {
       defaults.apk_version = '1.9.9';
-      defaults.apk_build_number = '40';
+      defaults.apk_build_number = '41';
       defaults.apk_file_size_mb = '57.0 MB';
-      defaults.apk_sha256 = '9a418081b73c8f98a75eba6d0e92b157a4ab58f564be11134a8f526e130cafd4';
+      defaults.apk_sha256 = 'a4bb6ffef9e227c2db7d664f2490ff10563e7b42a82d54897eb6da763f6301ff';
       defaults.apk_release_notes = LATEST_RELEASE_NOTES_V199;
       defaults.apk_updated_at = new Date().toISOString();
       // Persist directly to central_bank_settings so /api/settings, /api/admin/settings & /api/admin/overview match 100%!

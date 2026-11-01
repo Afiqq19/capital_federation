@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
-const { query } = require('../db');
+const { query, recordCashFlow } = require('../db');
+const { dispatchInboxNotification } = require('../services/courtEngine.service');
 
 module.exports = function(io, simulationEngine) {
   // 1. Eksekusi Sita Perusahaan ke Kas Negara (Disertai Batas Jatuh Tempo 4 Hari Masa Tenggang)
@@ -140,8 +141,53 @@ module.exports = function(io, simulationEngine) {
       const isAuctionReady = msLeft <= 0 || comp.is_auction_ready === 1;
       const hoursLeft = Math.max(0, Math.round(msLeft / (1000 * 60 * 60)));
 
-      // Sanksi Denda PNAF (Minimal IB 100.000.000 atau 5% valuasi dasar)
-      const pnafSanctionFine = Math.max(100000000.0, Math.round((comp.base_price || 2000) * 50000));
+      // Cari berkas perkara pengadilan (court_cases) yang mendasari sita eksekusi emiten ini
+      let linkedCase = await query.get(
+        `SELECT * FROM court_cases 
+         WHERE (defendant_company_id = ? OR defendant_user_id = ? OR title LIKE ? OR target_asset_description LIKE ?)
+           AND status IN ('VERDICT_APPROVED', 'VERDICT_PAILIT', 'VERDICT_PKPU', 'IN_TRIAL')
+         ORDER BY created_at DESC LIMIT 1`,
+        [comp.id, comp.owner_id || '', `%${comp.symbol}%`, `%${comp.symbol}%`]
+      );
+      if (!linkedCase) {
+        linkedCase = await query.get(
+          `SELECT * FROM court_cases 
+           WHERE (defendant_company_id = ? OR defendant_user_id = ? OR title LIKE ? OR target_asset_description LIKE ?)
+           ORDER BY created_at DESC LIMIT 1`,
+          [comp.id, comp.owner_id || '', `%${comp.symbol}%`, `%${comp.symbol}%`]
+        );
+      }
+
+      // Hitung denda / ganti rugi amar putusan sidang
+      let courtFine = 0;
+      if (linkedCase) {
+        courtFine = Number(linkedCase.verdict_awarded_amount || linkedCase.claim_amount_ib || 0);
+      }
+      if (courtFine <= 0 && comp.seize_reason) {
+        const fineMatch = comp.seize_reason.match(/\[Tuntutan\/Denda:\s*IB\s*([\d\.]+)\]/i);
+        if (fineMatch) {
+          courtFine = Number(fineMatch[1].replace(/\./g, '')) || 0;
+        }
+      }
+      // Denda Sanksi PNAF: Dinamis 100% mengikuti tuntutan/amar putusan perkara sidang (mau berapa pun di sidang)
+      const pnafSanctionFine = courtFine > 0 ? courtFine : Math.max(100000000.0, Math.round((comp.base_price || 2000) * 50000));
+
+      // Ekstraksi info perkara lengkap
+      let caseNumber = linkedCase ? linkedCase.case_number : null;
+      let caseTitle = linkedCase ? linkedCase.title : null;
+      let plaintiffName = linkedCase ? linkedCase.plaintiff_name : null;
+      if (!caseNumber && comp.seize_reason) {
+        const match = comp.seize_reason.match(/No\.\s*([^\s\[(]+)/);
+        if (match) caseNumber = match[1];
+      }
+      if (!plaintiffName && comp.seize_reason) {
+        const match = comp.seize_reason.match(/oleh Penggugat:\s*([^\[\-]+)/);
+        if (match) plaintiffName = match[1].trim();
+      }
+      if (!caseTitle && comp.seize_reason) {
+        const match = comp.seize_reason.match(/\[Perkara:\s*([^\]]+)\]/) || comp.seize_reason.match(/\(([^)]+)\)/);
+        if (match) caseTitle = match[1].trim();
+      }
 
       // Cek pinjaman aktif pemilik di tabel loans
       const ownerId = comp.owner_id;
@@ -180,6 +226,15 @@ module.exports = function(io, simulationEngine) {
         isSeized: comp.is_seized === 1,
         seizedBy: comp.seized_by || 'Pengadilan Niaga & Arbitrase Federation (PNAF)',
         seizeReason: comp.seize_reason,
+        courtCaseId: linkedCase ? linkedCase.id : null,
+        caseNumber: caseNumber || '037.9703/Pdt.Sus-Bursa/2026/PNAF',
+        caseTitle: caseTitle || 'Laporan Dugaan Manipulasi Pasar Bursa & Transaksi Semu',
+        caseType: linkedCase ? linkedCase.case_type : 'REGULATORY',
+        plaintiffName: plaintiffName || 'Komite Pengawas Bursa OPFF',
+        defendantName: linkedCase ? linkedCase.defendant_name : comp.name,
+        verdictNotes: linkedCase ? linkedCase.verdict_notes : (comp.seize_reason || 'Terbukti Bersalah'),
+        claimAmountIb: linkedCase ? Number(linkedCase.claim_amount_ib || 0) : pnafSanctionFine,
+        verdictAwardedAmount: pnafSanctionFine,
         ownerId,
         isOwner,
         seizureDeadline,
@@ -245,8 +300,36 @@ module.exports = function(io, simulationEngine) {
       const user = await query.get('SELECT * FROM users WHERE id = ?', [userId]);
       if (!user) return res.status(404).json({ error: 'Pemain / Pemilik tidak ditemukan' });
 
-      // Hitung total kewajiban
-      const pnafSanctionFine = Math.max(100000000.0, Math.round((comp.base_price || 2000) * 50000));
+      // Cari berkas perkara pengadilan (court_cases) yang mendasari sita
+      let linkedCase = await query.get(
+        `SELECT * FROM court_cases 
+         WHERE (defendant_company_id = ? OR defendant_user_id = ? OR title LIKE ? OR target_asset_description LIKE ?)
+           AND status IN ('VERDICT_APPROVED', 'VERDICT_PAILIT', 'VERDICT_PKPU', 'IN_TRIAL')
+         ORDER BY created_at DESC LIMIT 1`,
+        [comp.id, comp.owner_id || '', `%${comp.symbol}%`, `%${comp.symbol}%`]
+      );
+      if (!linkedCase) {
+        linkedCase = await query.get(
+          `SELECT * FROM court_cases 
+           WHERE (defendant_company_id = ? OR defendant_user_id = ? OR title LIKE ? OR target_asset_description LIKE ?)
+           ORDER BY created_at DESC LIMIT 1`,
+          [comp.id, comp.owner_id || '', `%${comp.symbol}%`, `%${comp.symbol}%`]
+        );
+      }
+
+      // Hitung total kewajiban persidangan & pinjaman bank
+      let courtFine = 0;
+      if (linkedCase) {
+        courtFine = Number(linkedCase.verdict_awarded_amount || linkedCase.claim_amount_ib || 0);
+      }
+      if (courtFine <= 0 && comp.seize_reason) {
+        const fineMatch = comp.seize_reason.match(/\[Tuntutan\/Denda:\s*IB\s*([\d\.]+)\]/i);
+        if (fineMatch) {
+          courtFine = Number(fineMatch[1].replace(/\./g, '')) || 0;
+        }
+      }
+      const pnafSanctionFine = courtFine > 0 ? courtFine : Math.max(100000000.0, Math.round((comp.base_price || 2000) * 50000));
+
       const activeLoans = await query.all("SELECT * FROM loans WHERE user_id = ? AND status = 'ACTIVE'", [userId]);
       let bankLoanPrincipal = 0.0;
       let bankLoanInterest = 0.0;
@@ -261,20 +344,77 @@ module.exports = function(io, simulationEngine) {
 
       if (user.balance_ib < totalRedemptionCost) {
         return res.status(400).json({
-          error: `Saldo Kas Pribadi tidak cukup untuk menebus perseroan. Butuh IB ${totalRedemptionCost.toLocaleString('id-ID')} (Denda Sanksi PNAF: IB ${pnafSanctionFine.toLocaleString('id-ID')}, Utang Bank: IB ${totalBankDebt.toLocaleString('id-ID')}). Saldo Anda saat ini: IB ${(user.balance_ib || 0).toLocaleString('id-ID')}.`
+          error: `Saldo Kas Pribadi tidak cukup untuk menebus perseroan. Total kewajiban: IB ${totalRedemptionCost.toLocaleString('id-ID')} (Amar Putusan Sidang: IB ${pnafSanctionFine.toLocaleString('id-ID')}, Utang Bank: IB ${totalBankDebt.toLocaleString('id-ID')}). Saldo Anda saat ini: IB ${(user.balance_ib || 0).toLocaleString('id-ID')}. Anda dapat mengajukan fasilitas pinjaman ke Bank BCF terlebih dahulu.`
         });
       }
 
       // Potong saldo pemain
-      await query.run('UPDATE users SET balance_ib = balance_ib - ? WHERE id = ?', [totalRedemptionCost, userId]);
+      const newBal = user.balance_ib - totalRedemptionCost;
+      await query.run('UPDATE users SET balance_ib = ? WHERE id = ?', [newBal, userId]);
 
-      // Setor Denda Sanksi PNAF ke Kas Negara
-      const ledgerFineId = uuidv4();
-      await query.run(
-        `INSERT INTO state_treasury_ledger (id, source_type, title, amount_ib, direction, reference_id, notes) 
-         VALUES (?, 'SEIZURE_FINE', ?, ?, 'INCOME', ?, ?)`,
-        [ledgerFineId, `Penerimaan Pelunasan Denda Sitaan & Sanksi PNAF (${comp.symbol})`, pnafSanctionFine, comp.symbol, `Denda sanksi pemulihan hak perseroan ${comp.name}`]
-      );
+      // Catat Mutasi Kas Transparan Penebusan
+      await recordCashFlow({
+        userId,
+        accountType: 'PERSONAL',
+        category: 'COURT_FINE',
+        title: `Penebusan Emiten ${comp.symbol} (Pelunasan Amar Sidang PNAF & Bank)`,
+        amountIb: totalRedemptionCost,
+        direction: 'EXPENSE',
+        balanceAfter: newBal,
+        notes: `Pelunasan denda putusan sidang No. ${linkedCase?.case_number || 'PNAF'} dan utang bank untuk mencabut sitaan ${comp.name}.`
+      });
+
+      // Selesaikan perkara pengadilan jika ada
+      if (linkedCase) {
+        const resolutionNote = ` [DILUNASI: Amar putusan perkara sebesar IB ${pnafSanctionFine.toLocaleString('id-ID')} telah dibayar lunas oleh Tergugat saat menebus perseroan ${comp.name}]`;
+        await query.run(
+          `UPDATE court_cases 
+           SET status = 'RESOLVED',
+               verdict_notes = COALESCE(verdict_notes, '') || ?,
+               closed_at = ?
+           WHERE id = ?`,
+          [resolutionNote, new Date().toISOString(), linkedCase.id]
+        );
+
+        // Jika ada Penggugat perseorangan (user nyata), teruskan dana ganti rugi ke Kas Pribadi Penggugat
+        if (linkedCase.plaintiff_user_id) {
+          await query.run('UPDATE users SET balance_ib = balance_ib + ? WHERE id = ?', [pnafSanctionFine, linkedCase.plaintiff_user_id]);
+          await recordCashFlow({
+            userId: linkedCase.plaintiff_user_id,
+            accountType: 'PERSONAL',
+            category: 'COURT_AWARD',
+            title: `Penerimaan Pelunasan Ganti Rugi Putusan No. ${linkedCase.case_number} (${comp.symbol})`,
+            amountIb: pnafSanctionFine,
+            direction: 'INCOME',
+            notes: `Pembayaran tunai ganti rugi perkara dari ${comp.name} saat penebusan perseroan.`
+          });
+          await dispatchInboxNotification(io, {
+            userId: linkedCase.plaintiff_user_id,
+            senderName: 'Kepaniteraan Eksekusi PNAF',
+            category: 'COURT',
+            title: `💰 Ganti Rugi Perkara Diterima: IB ${pnafSanctionFine.toLocaleString('id-ID')}`,
+            message: `Kepaniteraan PNAF telah menerima dan meneruskan pelunasan amar putusan No. ${linkedCase.case_number} dari Tergugat (${comp.name}) sebesar IB ${pnafSanctionFine.toLocaleString('id-ID')} langsung ke Kas Pribadi Anda!`,
+            referenceId: linkedCase.id,
+          });
+          io.emit('user:balance_updated', { userId: linkedCase.plaintiff_user_id });
+        } else {
+          // Setor Denda Sanksi PNAF ke Kas Negara
+          const ledgerFineId = uuidv4();
+          await query.run(
+            `INSERT INTO state_treasury_ledger (id, source_type, title, amount_ib, direction, reference_id, notes) 
+             VALUES (?, 'SEIZURE_FINE', ?, ?, 'INCOME', ?, ?)`,
+            [ledgerFineId, `Penerimaan Pelunasan Denda Sitaan & Sanksi PNAF (${comp.symbol})`, pnafSanctionFine, comp.symbol, `Denda sanksi putusan No. ${linkedCase.case_number} pemulihan perseroan ${comp.name}`]
+          );
+        }
+      } else {
+        // Setor Denda Sanksi PNAF default ke Kas Negara
+        const ledgerFineId = uuidv4();
+        await query.run(
+          `INSERT INTO state_treasury_ledger (id, source_type, title, amount_ib, direction, reference_id, notes) 
+           VALUES (?, 'SEIZURE_FINE', ?, ?, 'INCOME', ?, ?)`,
+          [ledgerFineId, `Penerimaan Pelunasan Denda Sitaan & Sanksi PNAF (${comp.symbol})`, pnafSanctionFine, comp.symbol, `Denda sanksi pemulihan hak perseroan ${comp.name}`]
+        );
+      }
 
       // Jika ada utang bank, lunaskan di database dan setor pokok+bunga ke kas negara
       if (activeLoans.length > 0) {
@@ -315,7 +455,7 @@ module.exports = function(io, simulationEngine) {
       const newsItem = {
         id: uuidv4(),
         title: `🏛️ SITAAN DICABUT: Perseroan ${comp.name} (${comp.symbol}) Resmi Bebas & Buka Suspensi!`,
-        content: `Konglomerat ${user.username} telah melunasi denda sanksi dan utang kredit bank. Sesuai dinamika bursa nyata pasca suspensi, perdagangan ${comp.symbol} dibuka kembali pada level IB ${correctedPrice.toLocaleString('id-ID')} dan perseroan mulai merintis kembali untuk meyakinkan investor.`,
+        content: `Konglomerat ${user.username} telah melunasi denda amar putusan sidang PNAF dan kewajiban kredit perbankan. Sesuai dinamika bursa nyata pasca pembekuan, perdagangan ${comp.symbol} dibuka kembali pada level IB ${correctedPrice.toLocaleString('id-ID')} dan perseroan mulai merintis kembali untuk meyakinkan investor.`,
         affected_sector: comp.sector,
         sentiment: 'NEUTRAL',
         published_at: new Date().toISOString()
@@ -327,13 +467,15 @@ module.exports = function(io, simulationEngine) {
 
       io.emit('market:news_broadcast', newsItem);
       io.emit('company:seized_status', { companyId: id, isSeized: false });
-      io.emit('user:balance_updated', { userId, newBalance: user.balance_ib - totalRedemptionCost });
+      io.emit('company:status_changed', { companyId: id, status: 'HEALTHY' });
+      io.emit('user:balance_updated', { userId, newBalance: newBal });
+      if (linkedCase) io.emit('court:case_updated', { caseId: linkedCase.id, status: 'RESOLVED' });
       io.emit('treasury:updated');
 
       res.json({
         success: true,
-        message: `🎉 Penebusan Sukses! Status perseroan ${comp.name} resmi dipulihkan dan seluruh utang bank lunas.`,
-        newBalance: user.balance_ib - totalRedemptionCost,
+        message: `🎉 Penebusan Sukses! Status perseroan ${comp.name} resmi dipulihkan dan seluruh kewajiban amar sidang serta utang bank lunas.`,
+        newBalance: newBal,
       });
     } catch (err) {
       res.status(500).json({ error: err.message });

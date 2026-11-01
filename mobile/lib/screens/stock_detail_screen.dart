@@ -1038,9 +1038,13 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                     // Stockbit Bursa IDX 3x3 Stats Card (Open, Prev, Lot, High, ARA, Val, Low, ARB, Avg)
                     _buildStockbitBursaStats(c, candlePoints),
 
-                    // Suspended / UMA Banners
-                    if (c.status == 'SUSPENDED') _buildSuspendedBanner(context, c),
-                    if (c.status == 'CRITICAL') _buildCriticalUmaBanner(context, c),
+                    // Suspended / UMA Banners / PNAF Court Seizure
+                    if (c.isSeized)
+                      _buildCourtSeizedBanner(context, c)
+                    else ...[
+                      if (c.status == 'SUSPENDED') _buildSuspendedBanner(context, c),
+                      if (c.status == 'CRITICAL') _buildCriticalUmaBanner(context, c),
+                    ],
 
                     if (_selectedSubTab == 'Orderbook') ...[
                     // ==========================================
@@ -1374,7 +1378,7 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                       onPressed: () => _showRedemptionSheet(context, c),
                       icon: const Icon(Icons.currency_exchange_rounded, color: Colors.white, size: 20),
                       label: const Text(
-                        'TEBUS PERSEROAN SAYA (MASA TENGGANG JATUH TEMPO)',
+                        'TEBUS PERSEROAN (LUNASI AMAR PUTUSAN SIDANG)',
                         style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 12),
                       ),
                       style: ElevatedButton.styleFrom(
@@ -3050,7 +3054,239 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
     );
   }
 
+  Widget _buildCourtSeizedBanner(BuildContext context, CompanyModel c) {
+    final provider = context.watch<GameProvider>();
+    final user = provider.user;
+    final isOwner = user != null &&
+        ((c.ownerId != null && c.ownerId == user.id) ||
+            user.ptSymbol == c.symbol ||
+            user.ptName == c.name ||
+            provider.companies.any((item) => item.id == c.id && item.ownerId == user.id));
+
+    // Parse seize reason details if available
+    final rawReason = c.seizeReason ?? 'Sita Eksekusi Putusan Hakim PNAF';
+    String caseNo = '037.9703/Pdt.Sus-Bursa/2026/PNAF';
+    String plaintiff = 'Komite Pengawas Bursa OPFF';
+    String caseTitle = 'Laporan Dugaan Manipulasi Pasar Bursa & Goreng Saham';
+    String fineStr = '';
+
+    final caseNoMatch = RegExp(r'No\.\s*([^\s\[(]+)').firstMatch(rawReason);
+    if (caseNoMatch != null) caseNo = caseNoMatch.group(1) ?? caseNo;
+
+    final plaintiffMatch = RegExp(r'oleh Penggugat:\s*([^\[\-]+)').firstMatch(rawReason);
+    if (plaintiffMatch != null) plaintiff = plaintiffMatch.group(1)?.trim() ?? plaintiff;
+
+    final titleMatch = RegExp(r'\[Perkara:\s*([^\]]+)\]').firstMatch(rawReason) ?? RegExp(r'\(([^)]+)\)').firstMatch(rawReason);
+    if (titleMatch != null) caseTitle = titleMatch.group(1)?.trim() ?? caseTitle;
+
+    final fineMatch = RegExp(r'\[Tuntutan\/Denda:\s*([^\]]+)\]').firstMatch(rawReason);
+    if (fineMatch != null) fineStr = fineMatch.group(1)?.trim() ?? '';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEF4444).withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.8), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFEF4444).withValues(alpha: 0.15),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEF4444).withValues(alpha: 0.25),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.gavel_rounded, color: Color(0xFFEF4444), size: 18),
+              ),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'PERSEROAN DISITA & DIBEKUKAN PNAF',
+                  style: TextStyle(
+                    color: Color(0xFFEF4444),
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.4,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEF4444).withValues(alpha: 0.25),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Text(
+                  'SITA EKSEKUSI',
+                  style: TextStyle(color: Color(0xFFFCA5A5), fontSize: 9, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          // Rincian Fakta Hukum & Gugatan Sidang
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0F172A).withValues(alpha: 0.8),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFF334155)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('🏛️ No. Perkara: ', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.w600)),
+                    Expanded(
+                      child: Text(caseNo, style: const TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('👤 Pihak Penggugat: ', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.w600)),
+                    Expanded(
+                      child: Text(plaintiff, style: const TextStyle(color: Color(0xFFFBBF24), fontSize: 10.5, fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('📜 Pokok Gugatan: ', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.w600)),
+                    Expanded(
+                      child: Text(caseTitle, style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 10.5)),
+                    ),
+                  ],
+                ),
+                if (fineStr.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('💰 Nilai Amar Putusan: ', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.w600)),
+                      Expanded(
+                        child: Text(fineStr, style: const TextStyle(color: Color(0xFF34D399), fontSize: 10.5, fontWeight: FontWeight.w900)),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            'Berdasarkan amar putusan Majelis Hakim Pengadilan Niaga & Arbitrase Federasi (PNAF), perseroan dinyatakan bersalah / wanprestasi. Seluruh transaksi efek, pencairan dividen, dan operasional perseroan dibekukan hingga kewajiban perkara dilunasi pemilik.',
+            style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 10.5, height: 1.35),
+          ),
+          const SizedBox(height: 12),
+          if (isOwner)
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _showRedemptionSheet(context, c),
+                    icon: const Icon(Icons.currency_exchange_rounded, color: Colors.white, size: 14),
+                    label: const FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        'TEBUS PERSEROAN (LUNASI SIDANG)',
+                        style: TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.w900),
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFEF4444),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _showLoanGuidanceModal(context),
+                    icon: const Icon(Icons.account_balance_rounded, color: Colors.white, size: 14),
+                    label: const FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        'PINJAM BANK BCF (TALANGAN)',
+                        style: TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.w900),
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0284C7),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _showLoanGuidanceModal(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF0F172A),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: Color(0xFF0284C7)),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.account_balance_rounded, color: Color(0xFF38BDF8)),
+            SizedBox(width: 8),
+            Text('Fasilitas Kredit Bank BCF', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Untuk mengajukan pinjaman dana talangan pelunasan amar sidang:\n\n'
+              '1. Buka Tab Beranda (Home)\n'
+              '2. Klik tombol "PINJAM BANK BCF" pada kartu status perseroan atau menu Perbankan Sentral\n'
+              '3. Tentukan plafon pinjaman talangan yang Anda butuhkan lalu konfirmasi pencairan instan ke Kas Pribadi.\n\n'
+              'Setelah dana cair ke Kas Pribadi, Anda dapat langsung kembali ke saham ini untuk menebus perseroan & mencabut sitaan.',
+              style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 12, height: 1.45),
+            ),
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0284C7)),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Mengerti', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSuspendedBanner(BuildContext context, CompanyModel c) {
+    if (c.isSeized) return _buildCourtSeizedBanner(context, c);
     final provider = context.watch<GameProvider>();
     final user = provider.user;
     final isOwner = user != null && c.ownerId != null && c.ownerId == user.id;
@@ -3187,7 +3423,7 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                   label: const FittedBox(
                     fit: BoxFit.scaleDown,
                     child: Text(
-                      'Bayar Denda (IB 50 Juta)',
+                      'Buka Suspensi Bursa (IB 50 Juta)',
                       style: TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.w900),
                     ),
                   ),
@@ -4146,6 +4382,9 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
             final double totalCost = (data['totalRedemptionCost'] as num?)?.toDouble() ?? (pnafFine + totalBankDebt);
             final bool canAfford = user.balanceIb >= totalCost;
             final bool isExpired = isAuctionReady || hoursLeft <= 0;
+            final String caseNo = data['caseNumber']?.toString() ?? '037.9703/Pdt.Sus-Bursa/2026/PNAF';
+            final String plaintiff = data['plaintiffName']?.toString() ?? 'Komite Pengawas Bursa OPFF';
+            final String caseTitle = data['caseTitle']?.toString() ?? 'Laporan Dugaan Manipulasi Pasar Bursa';
 
             return StatefulBuilder(
               builder: (ctx, setModalState) {
@@ -4242,6 +4481,56 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                           ),
                         ),
 
+                      // Card Fakta Duduk Perkara & Amar Putusan Sidang
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1E293B).withValues(alpha: 0.7),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.4)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Row(
+                              children: [
+                                Icon(Icons.gavel_rounded, color: Color(0xFFF87171), size: 15),
+                                SizedBox(width: 6),
+                                Text(
+                                  'DUDUK PERKARA & AMAR PUTUSAN SIDANG',
+                                  style: TextStyle(color: Color(0xFFF87171), fontSize: 11, fontWeight: FontWeight.w900),
+                                ),
+                              ],
+                            ),
+                            const Divider(color: Color(0xFF334155), height: 16),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('🏛️ No. Perkara: ', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.w600)),
+                                Expanded(child: Text(caseNo, style: const TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.bold))),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('👤 Pihak Penggugat: ', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.w600)),
+                                Expanded(child: Text(plaintiff, style: const TextStyle(color: Color(0xFFFBBF24), fontSize: 10.5, fontWeight: FontWeight.bold))),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('📜 Pokok Gugatan: ', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.w600)),
+                                Expanded(child: Text(caseTitle, style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 10.5))),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
@@ -4254,7 +4543,7 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                const Text('⚖️ Denda Sanksi PNAF', style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 12)),
+                                const Text('⚖️ Amar Putusan Sidang (Denda/Ganti Rugi)', style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 11.5)),
                                 Text(CurrencyFormatter.formatFull(pnafFine), style: const TextStyle(color: Color(0xFFFBBF24), fontSize: 12, fontWeight: FontWeight.bold)),
                               ],
                             ),
@@ -4262,7 +4551,7 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                const Text('🏦 Pokok Utang Bank Sentral (BCF)', style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 12)),
+                                const Text('🏦 Pokok Utang Bank Sentral (BCF)', style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 11.5)),
                                 Text(CurrencyFormatter.formatFull(bankPrincipal), style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                               ],
                             ),
@@ -4270,7 +4559,7 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                const Text('📈 Bunga Pinjaman Bank BCF', style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 12)),
+                                const Text('📈 Bunga Pinjaman Bank BCF', style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 11.5)),
                                 Text(CurrencyFormatter.formatFull(bankInterest), style: const TextStyle(color: Color(0xFFF87171), fontSize: 12, fontWeight: FontWeight.bold)),
                               ],
                             ),
@@ -4300,6 +4589,29 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                           ),
                         ],
                       ),
+                      if (!canAfford) ...[
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFF38BDF8),
+                              side: const BorderSide(color: Color(0xFF0284C7)),
+                              padding: const EdgeInsets.symmetric(vertical: 9),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                            icon: const Icon(Icons.account_balance_rounded, size: 16),
+                            label: const Text(
+                              'AJUKAN PINJAMAN TALANGAN KE BANK BCF',
+                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                            ),
+                            onPressed: () {
+                              Navigator.pop(ctx);
+                              _showLoanGuidanceModal(context);
+                            },
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 18),
                       SizedBox(
                         width: double.infinity,

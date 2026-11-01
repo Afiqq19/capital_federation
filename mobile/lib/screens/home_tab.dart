@@ -1050,6 +1050,25 @@ class _HomeTabState extends State<HomeTab> {
       explanation = '🔒 STATUS DIBEKUKAN: Perseroan sedang dalam status pembekuan dan sita otoritas bursa (${seizeReason ?? 'Sanksi Regulasi'}). Segera suntikkan modal talangan dari kas pribadi atau hubungi Kepaniteraan untuk memulihkan status perdagangan.';
     }
 
+    String parsedCaseNo = '037.9703/Pdt.Sus-Bursa/2026/PNAF';
+    String parsedPlaintiff = 'Komite Pengawas Bursa OPFF';
+    String parsedTitle = 'Laporan Dugaan Manipulasi Pasar Bursa & Goreng Saham';
+    String parsedFine = '';
+
+    if (seizeReason != null && seizeReason.isNotEmpty) {
+      final caseNoMatch = RegExp(r'No\.\s*([^\s\[(]+)').firstMatch(seizeReason);
+      if (caseNoMatch != null) parsedCaseNo = caseNoMatch.group(1) ?? parsedCaseNo;
+
+      final plaintiffMatch = RegExp(r'oleh Penggugat:\s*([^\[\-]+)').firstMatch(seizeReason);
+      if (plaintiffMatch != null) parsedPlaintiff = plaintiffMatch.group(1)?.trim() ?? parsedPlaintiff;
+
+      final titleMatch = RegExp(r'\[Perkara:\s*([^\]]+)\]').firstMatch(seizeReason) ?? RegExp(r'\(([^)]+)\)').firstMatch(seizeReason);
+      if (titleMatch != null) parsedTitle = titleMatch.group(1)?.trim() ?? parsedTitle;
+
+      final fineMatch = RegExp(r'\[Tuntutan\/Denda:\s*([^\]]+)\]').firstMatch(seizeReason);
+      if (fineMatch != null) parsedFine = fineMatch.group(1)?.trim() ?? '';
+    }
+
     final int rdLevel = (activeEntity['rdLevel'] as num?)?.toInt() ?? user.rdLevel;
     final int marketingLevel = (activeEntity['marketingLevel'] as num?)?.toInt() ?? user.marketingLevel;
     final int hrLevel = (activeEntity['hrLevel'] as num?)?.toInt() ?? user.hrLevel;
@@ -1147,6 +1166,66 @@ class _HomeTabState extends State<HomeTab> {
                     ],
                   ),
                 ),
+                if (isCourtSeizure || isSeized) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.all(11),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.4),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.4)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(Icons.gavel_rounded, color: Color(0xFFFCA5A5), size: 14),
+                            SizedBox(width: 6),
+                            Text(
+                              'RINCIAN PERKARA & PIHAK PENGGUGAT',
+                              style: TextStyle(color: Color(0xFFFCA5A5), fontSize: 10.5, fontWeight: FontWeight.w900),
+                            ),
+                          ],
+                        ),
+                        const Divider(color: Color(0xFF7F1D1D), height: 14),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('🏛️ No. Perkara: ', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.w600)),
+                            Expanded(child: Text(parsedCaseNo, style: const TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.bold))),
+                          ],
+                        ),
+                        const SizedBox(height: 3),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('👤 Pihak Penggugat: ', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.w600)),
+                            Expanded(child: Text(parsedPlaintiff, style: const TextStyle(color: Color(0xFFFBBF24), fontSize: 10.5, fontWeight: FontWeight.bold))),
+                          ],
+                        ),
+                        const SizedBox(height: 3),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('📜 Pokok Gugatan: ', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.w600)),
+                            Expanded(child: Text(parsedTitle, style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 10.5))),
+                          ],
+                        ),
+                        if (parsedFine.isNotEmpty) ...[
+                          const SizedBox(height: 3),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('💰 Nilai Amar Sidang: ', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.w600)),
+                              Expanded(child: Text(parsedFine, style: const TextStyle(color: Color(0xFF34D399), fontSize: 10.5, fontWeight: FontWeight.w900))),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 10),
                 Text(
                   explanation,
@@ -2662,6 +2741,9 @@ class _HomeTabState extends State<HomeTab> {
             final double totalBankDebt = (data['totalBankDebt'] as num?)?.toDouble() ?? (bankPrincipal + bankInterest);
             final double totalCost = (data['totalRedemptionCost'] as num?)?.toDouble() ?? (pnafFine + totalBankDebt);
             final bool canAfford = user.balanceIb >= totalCost;
+            final String modalCaseNo = data['caseNumber']?.toString() ?? '037.9703/Pdt.Sus-Bursa/2026/PNAF';
+            final String modalPlaintiff = data['plaintiffName']?.toString() ?? 'Komite Pengawas Bursa OPFF';
+            final String modalTitle = data['caseTitle']?.toString() ?? 'Laporan Dugaan Manipulasi Pasar Bursa';
 
             return StatefulBuilder(
               builder: (ctx, setModalState) {
@@ -2711,6 +2793,57 @@ class _HomeTabState extends State<HomeTab> {
                         ],
                       ),
                       const SizedBox(height: 16),
+
+                      // Card Duduk Perkara & Amar Putusan Sidang
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1E293B).withValues(alpha: 0.7),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.4)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Row(
+                              children: [
+                                Icon(Icons.gavel_rounded, color: Color(0xFFF87171), size: 15),
+                                SizedBox(width: 6),
+                                Text(
+                                  'DUDUK PERKARA & AMAR PUTUSAN SIDANG',
+                                  style: TextStyle(color: Color(0xFFF87171), fontSize: 11, fontWeight: FontWeight.w900),
+                                ),
+                              ],
+                            ),
+                            const Divider(color: Color(0xFF334155), height: 16),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('🏛️ No. Perkara: ', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.w600)),
+                                Expanded(child: Text(modalCaseNo, style: const TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.bold))),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('👤 Pihak Penggugat: ', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.w600)),
+                                Expanded(child: Text(modalPlaintiff, style: const TextStyle(color: Color(0xFFFBBF24), fontSize: 10.5, fontWeight: FontWeight.bold))),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('📜 Pokok Gugatan: ', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.w600)),
+                                Expanded(child: Text(modalTitle, style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 10.5))),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
@@ -2723,7 +2856,7 @@ class _HomeTabState extends State<HomeTab> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                const Text('⚖️ Denda Sanksi PNAF', style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 12)),
+                                const Text('⚖️ Amar Putusan Sidang (Denda/Ganti Rugi)', style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 11.5)),
                                 Text(CurrencyFormatter.formatFull(pnafFine), style: const TextStyle(color: Color(0xFFFBBF24), fontSize: 12, fontWeight: FontWeight.bold)),
                               ],
                             ),

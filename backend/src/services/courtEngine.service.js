@@ -348,27 +348,13 @@ async function executeCourtVerdict(
     if (c.case_type === 'BANKRUPTCY' && /BCF|Bank Sentral|PKPU|Restrukturisasi/i.test(`${c.defendant_name} ${c.title}`) && c.plaintiff_user_id) {
       // Permohonan PKPU / restrukturisasi utang oleh debitur: efeknya moratorium pinjaman, bukan pencairan uang tunai gratis
       awardedAmount = 0;
-    } else if (decidedBy === 'BOT_JUDGE' && !linkedDeed) {
-      // Proteksi ekonomi untuk gugatan bebas tanpa akta saat diputus otomatis oleh Bot Hakim
-      let cap = 250000000; // Maks 250 Juta IB untuk klaim bebas non-akta otomatis
-      if (c.defendant_user_id) {
-        const defU = await query.get('SELECT balance_ib FROM users WHERE id = ?', [c.defendant_user_id]);
-        if (defU) {
-          cap = Math.min(500000000, Math.max(25000000, Math.round((defU.balance_ib || 0) * 0.25)));
-        }
-      }
-      awardedAmount = Math.min(rawClaim, cap);
-    } else if (decidedBy === 'BOT_JUDGE' && linkedDeed) {
-      const maxDeedPenalty = Math.max(Math.round((linkedDeed.total_price_ib || 0) * 0.25), 5000000);
-      awardedAmount = Math.min(rawClaim, maxDeedPenalty);
     } else {
+      // Sesuai tuntutan di persidangan secara penuh tanpa pembatasan yang mengecilkan tuntutan sidang
       awardedAmount = Math.round(rawClaim);
     }
   } else if (finalStatus === 'VERDICT_PKPU') {
     if (c.case_type === 'BANKRUPTCY' && /BCF|Bank Sentral|PKPU|Restrukturisasi/i.test(`${c.defendant_name} ${c.title}`) && c.plaintiff_user_id) {
       awardedAmount = 0;
-    } else if (decidedBy === 'BOT_JUDGE' && !linkedDeed) {
-      awardedAmount = Math.min(Math.round(rawClaim * 0.5), 150000000);
     } else {
       awardedAmount = Math.round(rawClaim * 0.5);
     }
@@ -938,7 +924,9 @@ async function executeCourtVerdict(
       const now = new Date();
       const seizedAt = now.toISOString();
       const seizureDeadline = new Date(now.getTime() + 4 * 24 * 60 * 60 * 1000).toISOString();
-      const reason = `Sita Eksekusi Putusan Hakim PNAF No. ${c.case_number} (${c.title}) - Terbukti Wanprestasi / Bersalah`;
+      const effectiveAward = Number(awardedAmount || c.verdict_awarded_amount || c.claim_amount_ib || 0);
+      const formattedAward = effectiveAward > 0 ? ` [Tuntutan/Denda: IB ${effectiveAward.toLocaleString('id-ID')}]` : '';
+      const reason = `Sita Eksekusi Putusan Hakim PNAF No. ${c.case_number} [Perkara: ${c.title}] oleh Penggugat: ${c.plaintiff_name}${formattedAward} - Terbukti Bersalah`;
 
       await query.run(
         `UPDATE companies 
@@ -1211,6 +1199,25 @@ async function healExistingCourtCases() {
         broadcastNews: false,
       });
       healedCount++;
+    }
+
+    // Penyelarasan Alasan Sita (seize_reason) Perseroan yang Disita agar memuat data Penggugat & Nilai Amar Sidang
+    const seizedComps = await query.all('SELECT * FROM companies WHERE is_seized = 1');
+    for (const sc of (seizedComps || [])) {
+      if (!sc.seize_reason || !sc.seize_reason.includes('Penggugat:')) {
+        const linkedC = await query.get(
+          `SELECT * FROM court_cases 
+           WHERE (defendant_company_id = ? OR defendant_user_id = ? OR title LIKE ? OR target_asset_description LIKE ?)
+           ORDER BY created_at DESC LIMIT 1`,
+          [sc.id, sc.owner_id || '', `%${sc.symbol}%`, `%${sc.symbol}%`]
+        );
+        if (linkedC) {
+          const award = Number(linkedC.verdict_awarded_amount || linkedC.claim_amount_ib || 0);
+          const formatted = award > 0 ? ` [Tuntutan/Denda: IB ${award.toLocaleString('id-ID')}]` : '';
+          const newReason = `Sita Eksekusi Putusan Hakim PNAF No. ${linkedC.case_number} [Perkara: ${linkedC.title}] oleh Penggugat: ${linkedC.plaintiff_name}${formatted} - Terbukti Bersalah`;
+          await query.run('UPDATE companies SET seize_reason = ? WHERE id = ?', [newReason, sc.id]);
+        }
+      }
     }
 
     if (healedCount > 0) {
@@ -1671,6 +1678,7 @@ module.exports = {
   formatCourtCase,
   formatCourtMessage,
   appendCourtChat,
+  dispatchInboxNotification,
   executeCourtVerdict,
   healExistingCourtCases,
   isAutoJudgeEnabled,
