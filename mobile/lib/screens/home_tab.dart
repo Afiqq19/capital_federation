@@ -18,6 +18,7 @@ import '../widgets/government_tenders_modal.dart';
 import '../widgets/user_inbox_modal.dart';
 import '../services/socket_service.dart';
 import 'profile_screen.dart';
+import '../features/court_commercial/screens/court_live_room_screen.dart';
 
 class HomeTab extends StatefulWidget {
   const HomeTab({super.key});
@@ -1352,6 +1353,37 @@ class _HomeTabState extends State<HomeTab> {
                 ),
                 const SizedBox(height: 14),
                 if (isSeized || isCourtSeizure || isBankCreditSeizure) ...[
+                  // Tombol Banding & Rekonvensi Pencemaran Nama Baik
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFD97706),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 11),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          side: const BorderSide(color: Color(0xFFFBBF24), width: 1.2),
+                        ),
+                        elevation: 3,
+                      ),
+                      icon: const Icon(Icons.gavel_rounded, size: 16, color: Color(0xFFFEF3C7)),
+                      label: const Text(
+                        '⚖️ AJUKAN BANDING & TUNTUT BALIK FITNAH PASAR',
+                        style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w900),
+                      ),
+                      onPressed: () => _showAppealLawsuitModal(
+                        context,
+                        provider,
+                        user,
+                        activeEntity,
+                        caseNo: parsedCaseNo,
+                        accuser: parsedPlaintiff,
+                        allegation: parsedTitle,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                   Row(
                     children: [
                       Expanded(
@@ -2876,6 +2908,538 @@ class _HomeTabState extends State<HomeTab> {
           );
         },
       ),
+    );
+  }
+
+  Future<void> _showAppealLawsuitModal(
+    BuildContext context,
+    GameProvider provider,
+    UserModel user,
+    Map<String, dynamic> activeEntity, {
+    required String caseNo,
+    required String accuser,
+    required String allegation,
+  }) async {
+    final entityName = activeEntity['isPrimary'] == true
+        ? (user.ptName.isNotEmpty ? 'PT ${user.ptName}' : 'PT Utama')
+        : (activeEntity['name'] ?? 'Perusahaan');
+
+    double selectedDamages = 10000000000.0; // Default IB 10 Miliar
+    int selectedLawyerIndex = 1; // Default Puja Azzahra
+
+    final lawyers = [
+      {
+        'name': 'Maju Mandiri (Tanpa Pengacara)',
+        'fee': 250000.0,
+        'title': 'Beracara Sendiri di Pengadilan PNAF',
+        'badge': 'HEMAT',
+        'badgeColor': const Color(0xFF64748B),
+      },
+      {
+        'name': 'Advokat Puja Azzahra, S.H., LL.M.',
+        'fee': 50000000.0,
+        'title': 'Azzahra & Partners Law Firm',
+        'badge': 'POPULER',
+        'badgeColor': const Color(0xFF10B981),
+      },
+      {
+        'name': 'Advokat Senior Zahra Bintang, S.H., M.H.',
+        'fee': 150000000.0,
+        'title': 'Bintang Law Office & Associates',
+        'badge': 'PRESTISI',
+        'badgeColor': const Color(0xFF38BDF8),
+      },
+      {
+        'name': 'Advokat Khairul Sagala, S.H., C.L.A.',
+        'fee': 500000000.0,
+        'title': 'Sagala & Partners (Sultan Tier)',
+        'badge': 'SULTAN TIER',
+        'badgeColor': const Color(0xFFF59E0B),
+      },
+    ];
+
+    final damageOptions = [
+      {'val': 5000000000.0, 'label': 'IB 5.000.000.000 (5 Miliar)', 'desc': 'Kompensasi Reputasi Standar'},
+      {'val': 10000000000.0, 'label': 'IB 10.000.000.000 (10 Miliar)', 'desc': 'Rekomendasi Pemulihan Kerugian Pasar & Likuiditas'},
+      {'val': 25000000000.0, 'label': 'IB 25.000.000.000 (25 Miliar)', 'desc': 'Tuntutan Maksimal Pencemaran Reputasi Berat'},
+    ];
+
+    bool isSubmitting = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (modalCtx, setModalState) {
+            final activeLawyer = lawyers[selectedLawyerIndex];
+            final activeFee = activeLawyer['fee'] as double;
+            final canAfford = user.balanceIb >= activeFee;
+
+            return Container(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.90,
+              ),
+              decoration: const BoxDecoration(
+                color: Color(0xFF0B1322),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                border: Border(
+                  top: BorderSide(color: Color(0xFFF59E0B), width: 2),
+                ),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Handle bar
+                  Center(
+                    child: Container(
+                      margin: const EdgeInsets.only(top: 10, bottom: 8),
+                      width: 44,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.white24,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+
+                  // Header
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF59E0B).withValues(alpha: 0.18),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.4)),
+                          ),
+                          child: const Icon(Icons.gavel_rounded, color: Color(0xFFFBBF24), size: 22),
+                        ),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'MEMORI BANDING & REKONVENSI',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 14.5,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 0.3,
+                                ),
+                              ),
+                              SizedBox(height: 2),
+                              Text(
+                                'Gugat Balik Fitnah Pasar & Audit Database Server Bursa',
+                                style: TextStyle(
+                                  color: Color(0xFF94A3B8),
+                                  fontSize: 10.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded, color: Color(0xFF94A3B8)),
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const Divider(color: Color(0xFF1E293B), height: 1),
+
+                  // Scrollable Body
+                  Flexible(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // 1. Rincian Perkara
+                          Container(
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0F172A),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: const Color(0xFF334155)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text(
+                                      'PERKARA YANG DIBANDING',
+                                      style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.w800, letterSpacing: 0.8),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFEF4444).withValues(alpha: 0.2),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.4)),
+                                      ),
+                                      child: const Text('STATUS DISITA', style: TextStyle(color: Color(0xFFFCA5A5), fontSize: 9.5, fontWeight: FontWeight.w900)),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 10),
+                                Text('🏛️ No. Perkara: $caseNo', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                                const SizedBox(height: 4),
+                                Text('👤 Tergugat Banding: $accuser', style: const TextStyle(color: Color(0xFFFBBF24), fontSize: 11.5, fontWeight: FontWeight.w700)),
+                                const SizedBox(height: 4),
+                                Text('📜 Pokok Tuduhan: $allegation', style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 11)),
+                                const SizedBox(height: 4),
+                                Text('🏢 Emiten yang Direhabilitasi: $entityName', style: const TextStyle(color: Color(0xFF34D399), fontSize: 11, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                          ),
+
+                          const SizedBox(height: 16),
+
+                          // 2. Landasan Hukum Resmi (Pasal-Pasal)
+                          Container(
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  const Color(0xFF1E293B).withValues(alpha: 0.8),
+                                  const Color(0xFF0F172A).withValues(alpha: 0.9),
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: const Color(0xFF0284C7).withValues(alpha: 0.4)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Row(
+                                  children: [
+                                    Icon(Icons.menu_book_rounded, color: Color(0xFF38BDF8), size: 16),
+                                    SizedBox(width: 8),
+                                    Text(
+                                      'LANDASAN HUKUM BANDING & GUGATAN REKONVENSI',
+                                      style: TextStyle(color: Color(0xFF38BDF8), fontSize: 10.5, fontWeight: FontWeight.w900, letterSpacing: 0.5),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 10),
+                                _buildLawArticleRow('Pasal 1365 KUHPerdata', 'Perbuatan Melawan Hukum (Onrechtmatige Daad): mewajibkan pihak yang menimbulkan kerugian karena fitnah mengganti rugi penuh.'),
+                                const SizedBox(height: 6),
+                                _buildLawArticleRow('Pasal 93 UU No. 8/1995 Pasar Modal', 'Larangan memberikan keterangan material tidak benar atau menyesatkan yang mendistorsi harga efek dan merusak valuasi emiten.'),
+                                const SizedBox(height: 6),
+                                _buildLawArticleRow('Pasal 310-311 KUHP jo. UU ITE', 'Delik pencemaran nama baik dan fitnah publik yang merusak reputasi kredibilitas bisnis emiten di hadapan investor bursa.'),
+                                const SizedBox(height: 6),
+                                _buildLawArticleRow('Pasal 83 Regulasi Arbitrase PNAF', 'Hak Korban memohon Audit Forensik Digital Server Bursa CFX dan Sita Jaminan seketika terhadap rekening Tergugat.'),
+                              ],
+                            ),
+                          ),
+
+                          const SizedBox(height: 16),
+
+                          // 3. Pilihan Nilai Tuntutan Ganti Rugi
+                          const Text(
+                            'TUNTUTAN GANTI RUGI PENCEMARAN NAMA BAIK (Tergugat Bayar ke Kas Anda):',
+                            style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 11, fontWeight: FontWeight.w900),
+                          ),
+                          const SizedBox(height: 8),
+                          ...damageOptions.map((opt) {
+                            final val = opt['val'] as double;
+                            final isSelected = selectedDamages == val;
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              decoration: BoxDecoration(
+                                color: isSelected ? const Color(0xFFF59E0B).withValues(alpha: 0.12) : const Color(0xFF0F172A),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: isSelected ? const Color(0xFFF59E0B) : const Color(0xFF1E293B),
+                                  width: isSelected ? 1.5 : 1,
+                                ),
+                              ),
+                              child: ListTile(
+                                dense: true,
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+                                leading: Icon(
+                                  isSelected ? Icons.check_circle_rounded : Icons.radio_button_off_rounded,
+                                  color: isSelected ? const Color(0xFFF59E0B) : const Color(0xFF64748B),
+                                  size: 20,
+                                ),
+                                title: Text(
+                                  opt['label'] as String,
+                                  style: TextStyle(
+                                    color: isSelected ? const Color(0xFFFEF3C7) : Colors.white,
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  opt['desc'] as String,
+                                  style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5),
+                                ),
+                                onTap: () {
+                                  setModalState(() {
+                                    selectedDamages = val;
+                                  });
+                                },
+                              ),
+                            );
+                          }),
+
+                          const SizedBox(height: 14),
+
+                          // 4. Pilihan Advokat Pendamping
+                          const Text(
+                            'PILIH ADVOKAT PENDAMPING SIDANG PNAF:',
+                            style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 11, fontWeight: FontWeight.w900),
+                          ),
+                          const SizedBox(height: 8),
+                          ...lawyers.asMap().entries.map((entry) {
+                            final idx = entry.key;
+                            final item = entry.value;
+                            final isSel = selectedLawyerIndex == idx;
+                            final fee = item['fee'] as double;
+
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              decoration: BoxDecoration(
+                                color: isSel ? const Color(0xFF0284C7).withValues(alpha: 0.15) : const Color(0xFF0F172A),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: isSel ? const Color(0xFF38BDF8) : const Color(0xFF1E293B),
+                                  width: isSel ? 1.5 : 1,
+                                ),
+                              ),
+                              child: ListTile(
+                                dense: true,
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 3),
+                                leading: Icon(
+                                  isSel ? Icons.verified_rounded : Icons.person_outline_rounded,
+                                  color: isSel ? const Color(0xFF38BDF8) : const Color(0xFF64748B),
+                                  size: 20,
+                                ),
+                                title: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        item['name'] as String,
+                                        style: TextStyle(
+                                          color: isSel ? Colors.white : const Color(0xFFCBD5E1),
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: (item['badgeColor'] as Color).withValues(alpha: 0.15),
+                                        borderRadius: BorderRadius.circular(5),
+                                        border: Border.all(color: (item['badgeColor'] as Color).withValues(alpha: 0.4)),
+                                      ),
+                                      child: Text(
+                                        item['badge'] as String,
+                                        style: TextStyle(
+                                          color: item['badgeColor'] as Color,
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w900,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                subtitle: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(item['title'] as String, style: const TextStyle(color: Color(0xFF64748B), fontSize: 10)),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      'Honorarium: ${CurrencyFormatter.formatFull(fee)}',
+                                      style: TextStyle(
+                                        color: user.balanceIb >= fee ? const Color(0xFF34D399) : const Color(0xFFEF4444),
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                onTap: () {
+                                  setModalState(() {
+                                    selectedLawyerIndex = idx;
+                                  });
+                                },
+                              ),
+                            );
+                          }),
+
+                          const SizedBox(height: 12),
+
+                          // 5. Kotak Audit Forensik Server Alert
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF10B981).withValues(alpha: 0.10),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.3)),
+                            ),
+                            child: const Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(Icons.manage_search_rounded, color: Color(0xFF34D399), size: 20),
+                                SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    '🔍 Majelis Hakim Agung PNAF akan mengaudit log server database bursa secara digital untuk membuktikan emiten Anda bersih, mencabut status sita seketika, dan menyita ganti rugi dari Tergugat untuk Kas Pribadi Anda!',
+                                    style: TextStyle(color: Color(0xFFD1FAE5), fontSize: 10.5, height: 1.4),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          const SizedBox(height: 20),
+
+                          // Tombol Submit Banding
+                          SizedBox(
+                            width: double.infinity,
+                            height: 48,
+                            child: ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: canAfford ? const Color(0xFFD97706) : const Color(0xFF1E293B),
+                                foregroundColor: canAfford ? Colors.white : const Color(0xFF64748B),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  side: BorderSide(color: canAfford ? const Color(0xFFFBBF24) : Colors.transparent),
+                                ),
+                                elevation: canAfford ? 4 : 0,
+                              ),
+                              icon: isSubmitting
+                                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                  : const Icon(Icons.gavel_rounded, size: 20),
+                              label: Text(
+                                isSubmitting
+                                    ? 'MENDAFTARKAN BANDING KE PNAF...'
+                                    : (canAfford
+                                        ? 'DAFTARKAN BANDING & MULAI AUDIT SERVER (${CurrencyFormatter.formatFull(activeFee)})'
+                                        : 'SALDO TIDAK CUKUP UNTUK HONORARIUM'),
+                                style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w900),
+                              ),
+                              onPressed: (isSubmitting || !canAfford)
+                                  ? null
+                                  : () async {
+                                      setModalState(() {
+                                        isSubmitting = true;
+                                      });
+
+                                      final plName = user.ptName.isNotEmpty ? 'PT ${user.ptName}' : user.username;
+                                      final res = await ApiService.fileCourtCase(
+                                        plaintiffName: plName,
+                                        plaintiffUserId: user.id,
+                                        defendantName: accuser,
+                                        caseType: 'DEFAMATION',
+                                        title: 'Banding & Rekonvensi Pencemaran Nama Baik atas Putusan No. $caseNo',
+                                        claimAmountIb: selectedDamages,
+                                        lawyerName: activeLawyer['name'] as String,
+                                        lawyerFeeIb: activeFee,
+                                        targetAssetDescription: 'Sita Kas & Saham $accuser untuk Pemulihan Reputasi Emiten $entityName',
+                                        notes: 'Gugatan Banding & Rekonvensi atas perkara No. $caseNo. Berdasarkan Pasal 1365 KUHPerdata jo. Pasal 93 UU Pasar Modal No. 8/1995, Penggugat memohon Majelis Hakim mengaudit database server bursa dan menghukum Tergugat membayar ganti rugi pencemaran nama baik IB ${CurrencyFormatter.formatFull(selectedDamages)}.',
+                                        isConservatoirBeslag: true,
+                                      );
+
+                                      if (modalCtx.mounted) {
+                                        Navigator.pop(ctx);
+                                      }
+
+                                      if (res['error'] != null) {
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text('❌ ${res['error']}'),
+                                              backgroundColor: const Color(0xFFEF4444),
+                                            ),
+                                          );
+                                        }
+                                        return;
+                                      }
+
+                                      // Refresh Provider State
+                                      await provider.fetchUserData();
+                                      await provider.fetchConglomerate();
+
+                                      final caseData = res['case'];
+                                      final caseId = caseData?['id']?.toString() ?? '';
+                                      final generatedCaseNo = caseData?['case_number'] ?? caseNo;
+
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text('✅ Berkas Banding No. $generatedCaseNo Sah Terdaftar! Membuka Ruang Sidang Live...'),
+                                            backgroundColor: const Color(0xFF10B981),
+                                            duration: const Duration(seconds: 3),
+                                          ),
+                                        );
+
+                                        if (caseId.isNotEmpty) {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (_) => CourtLiveRoomScreen(caseId: caseId),
+                                            ),
+                                          );
+                                        }
+                                      }
+                                    },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildLawArticleRow(String title, String desc) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Icon(Icons.arrow_right_rounded, color: Color(0xFF38BDF8), size: 18),
+        const SizedBox(width: 4),
+        Expanded(
+          child: RichText(
+            text: TextSpan(
+              children: [
+                TextSpan(
+                  text: '$title: ',
+                  style: const TextStyle(
+                    color: Color(0xFFBAE6FD),
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                TextSpan(
+                  text: desc,
+                  style: const TextStyle(
+                    color: Color(0xFF94A3B8),
+                    fontSize: 10,
+                    height: 1.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 

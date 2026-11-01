@@ -149,7 +149,8 @@ export default function DashboardPage({ onNavigate }) {
   return (
     <div className="space-y-6 page-enter">
       {/* 1. HERO COMPOSITE INDEX & REALTIME MARKET SNAPSHOT */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900/95 to-slate-950 border border-slate-800/90 shadow-2xl p-5 md:p-6">
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900/95 via-slate-900/90 to-slate-950/98 border border-slate-700/60 shadow-2xl p-5 md:p-6 backdrop-blur-xl">
+        <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-emerald-500 via-sky-500 to-amber-500 opacity-80" />
         <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
         <div className="relative z-10 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
           {/* Sisi Kiri: Indeks Acuan IPMC & Sparkline */}
@@ -239,28 +240,29 @@ export default function DashboardPage({ onNavigate }) {
 
       {/* 2. MACRO CRISIS / EMERGENCY EVENT BANNER */}
       {activeEvent && (
-        <div className="card p-4 bg-gradient-to-r from-amber-500/20 via-amber-600/10 to-slate-950 border border-amber-500/40 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-lg shadow-amber-950/20">
-          <div className="flex items-start sm:items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-300 shrink-0 mt-0.5 sm:mt-0">
-              <Zap size={22} className="animate-pulse" />
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-amber-950/40 via-amber-900/20 to-slate-950/90 border border-amber-500/50 p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-2xl shadow-amber-950/30 backdrop-blur-xl">
+          <div className="absolute top-0 left-0 bottom-0 w-1.5 bg-gradient-to-b from-amber-400 to-amber-600" />
+          <div className="flex items-start sm:items-center gap-3.5 pl-2">
+            <div className="p-3 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/40 shrink-0 shadow-lg shadow-amber-500/10">
+              <Zap size={22} className="animate-pulse text-amber-400" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-amber-400 font-mono">
+                <span className="text-xs font-black uppercase tracking-wider text-amber-400 font-mono">
                   Peristiwa Makro Sedang Berlangsung
                 </span>
                 <Badge tone="amber" pulse>AKTIF</Badge>
                 {activeEvent.affected_sector && (
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-400/20 text-amber-300">
+                  <span className="text-[10.5px] font-mono px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/30">
                     Sektor: {activeEvent.affected_sector}
                   </span>
                 )}
               </div>
-              <h4 className="text-sm font-bold text-slate-100 mt-0.5">{activeEvent.title}</h4>
-              <p className="text-xs text-slate-300 line-clamp-1">{activeEvent.description}</p>
+              <h4 className="text-sm sm:text-base font-extrabold text-white mt-1">{activeEvent.title}</h4>
+              <p className="text-xs text-slate-300 line-clamp-1 mt-0.5">{activeEvent.description}</p>
             </div>
           </div>
-          <Button variant="amber" size="sm" onClick={() => onNavigate('macro')} icon={Zap} className="shrink-0">
+          <Button variant="amber" size="sm" onClick={() => onNavigate('macro')} icon={Zap} className="shrink-0 shadow-lg shadow-amber-500/20 font-bold">
             Kelola Makro
           </Button>
         </div>
@@ -275,13 +277,19 @@ export default function DashboardPage({ onNavigate }) {
           icon={TrendingUp}
           tone="gold"
         />
-        <StatCard
-          label="Cadangan Kas Negara"
-          value={ibShort(overview?.treasuryBalance || 50000000000)}
-          hint="Brankas Fiskal Federasi"
-          icon={Coins}
-          tone="emerald"
-        />
+        {(() => {
+          const treasuryBal = Number(overview?.treasuryBalance ?? 0);
+          const isDeficit = treasuryBal < 0;
+          return (
+            <StatCard
+              label="Cadangan Kas Negara"
+              value={ibShort(overview?.treasuryBalance !== undefined ? overview.treasuryBalance : 50000000000)}
+              hint={isDeficit ? '⚠️ Defisit Fiskal Kas Negara' : 'Brankas Fiskal Federasi'}
+              icon={Coins}
+              tone={isDeficit ? 'rose' : 'emerald'}
+            />
+          );
+        })()}
         <StatCard
           label="Bunga Acuan BCF"
           value={`${bank?.interest_rate ?? 5.5}%`}

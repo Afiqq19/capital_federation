@@ -1114,13 +1114,25 @@ async function executeCourtVerdict(
       }
     }
     if ((c.case_type === 'DEFAMATION' || c.case_type === 'RECONVENTION') && finalStatus === 'VERDICT_APPROVED') {
-      // Pemulihan nama baik emiten & pembatalan status bermasalah / UMA jika gugatan pembelaan dikabulkan
-      const plCompId = c.plaintiff_company_id || (plaintiffId ? (await query.get('SELECT id FROM companies WHERE owner_id = ? LIMIT 1', [plaintiffId]))?.id : null);
+      // Pemulihan nama baik emiten & pembatalan status sita PNAF / UMA jika gugatan banding & rekonvensi dikabulkan
+      let plCompId = c.plaintiff_company_id;
+      if (!plCompId && plaintiffId) {
+        const seizedPlComp = await query.get('SELECT id FROM companies WHERE owner_id = ? AND is_seized = 1 LIMIT 1', [plaintiffId]);
+        if (seizedPlComp) plCompId = seizedPlComp.id;
+        else {
+          const anyPlComp = await query.get('SELECT id FROM companies WHERE owner_id = ? LIMIT 1', [plaintiffId]);
+          if (anyPlComp) plCompId = anyPlComp.id;
+        }
+      }
       if (plCompId) {
         await query.run(
-          "UPDATE companies SET uma_flag = 0, uma_reason = NULL, suspended_at = NULL, suspend_until = NULL, suspend_reason = NULL, is_seized = 0, is_auction_ready = 0, status = 'HEALTHY' WHERE id = ?",
+          "UPDATE companies SET uma_flag = 0, uma_reason = NULL, suspended_at = NULL, suspend_until = NULL, suspend_reason = NULL, is_seized = 0, is_auction_ready = 0, seize_reason = NULL, seized_at = NULL, seized_by = NULL, seizure_deadline = NULL, status = 'HEALTHY' WHERE id = ?",
           [plCompId]
         );
+        if (io) {
+          io.emit('company:seized_status', { companyId: plCompId, isSeized: false, reason: 'Rehabilitasi Putusan Banding PNAF' });
+          io.emit('company:status_changed', { companyId: plCompId, status: 'HEALTHY' });
+        }
       }
     }
   }

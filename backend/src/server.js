@@ -8380,18 +8380,18 @@ const bundledPublicApkPath = path.join(__dirname, '../public/downloads/Capital-F
 const directPublicApkPath = path.join(__dirname, '../public/downloads/capital-federation.apk');
 const localBuiltApkPath = path.join(__dirname, '../../mobile/build/app/outputs/flutter-apk/app-release.apk');
 
-const LATEST_RELEASE_NOTES_V200 = 'v2.0.0 (Build 45): Modernisasi Elegan UI/UX Beranda (Obsidian Fintech Prestige & Dual Treasury Glassmorphic), Standarisasi Listing Bursa Saham 10 Juta Lot (1 Miliar Lembar), Eksekusi Sita Saham Proporsional Peradilan PNAF (Fair Judicial Remedy), Skrip Debat Sidang Niaga Panas & Membara (Replik & Duplik Advokat), serta Pembersihan Label BOT di Seluruh Ruang Pengadilan.';
+const LATEST_RELEASE_NOTES_V200 = 'v2.0.0 (Build 46): Fitur Banding & Rekonvensi Peradilan PNAF (Gugat Balik Fitnah Pasar & Pencemaran Nama Baik Emiten), Audit Forensik Digital Database Server Bursa CFX, Pemulihan Status Sita Perseroan Seketika, Ganti Rugi Reputasi Pantastis (IB 5M - 25M), Pemilihan 3 Advokat Papan Atas (Puja Azzahra, Zahra Bintang, Khairul Sagala), serta Redesign Mewah & Elegan Dashboard Web Admin (Obsidian Futuristic Glassmorphism & Penyesuaian Nada Defisit Fiskal Kas Negara).';
 
 async function getApkSettingsMap() {
   const defaults = {
     apk_version: '2.0.0',
-    apk_build_number: '45',
+    apk_build_number: '46',
     apk_min_android: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
-    apk_file_size_mb: '57.3 MB',
+    apk_file_size_mb: '57.5 MB',
     apk_release_notes: LATEST_RELEASE_NOTES_V200,
     apk_external_url: '',
-    apk_download_count: '585',
-    apk_sha256: 'c191c21f63ef19793d4fdda05309a55957656a13ae01f7c76f9fea8a84be5d5e',
+    apk_download_count: '612',
+    apk_sha256: 'dcc801272685ab6905cf651407d84ba71e2bb9f3f71b8c97ca3dcd3f44480720',
     apk_updated_at: new Date().toISOString(),
   };
   try {
@@ -8401,11 +8401,11 @@ async function getApkSettingsMap() {
         defaults[r.key] = String(r.value);
       }
     }
-    if (parseInt(defaults.apk_build_number || '0', 10) < 45 || defaults.apk_sha256 !== 'c191c21f63ef19793d4fdda05309a55957656a13ae01f7c76f9fea8a84be5d5e') {
+    if (parseInt(defaults.apk_build_number || '0', 10) < 46 || defaults.apk_sha256 !== 'dcc801272685ab6905cf651407d84ba71e2bb9f3f71b8c97ca3dcd3f44480720') {
       defaults.apk_version = '2.0.0';
-      defaults.apk_build_number = '45';
-      defaults.apk_file_size_mb = '57.2 MB';
-      defaults.apk_sha256 = 'c191c21f63ef19793d4fdda05309a55957656a13ae01f7c76f9fea8a84be5d5e';
+      defaults.apk_build_number = '46';
+      defaults.apk_file_size_mb = '57.5 MB';
+      defaults.apk_sha256 = 'dcc801272685ab6905cf651407d84ba71e2bb9f3f71b8c97ca3dcd3f44480720';
       defaults.apk_release_notes = LATEST_RELEASE_NOTES_V200;
       defaults.apk_updated_at = new Date().toISOString();
       // Persist directly to central_bank_settings so /api/settings, /api/admin/settings & /api/admin/overview match 100%!
