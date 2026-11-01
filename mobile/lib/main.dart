@@ -5,6 +5,7 @@ import 'providers/game_provider.dart';
 import 'screens/main_navigation_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'services/notification_service.dart';
+import 'services/api_service.dart';
 
 import 'package:flutter/services.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -360,8 +361,8 @@ class _RootScreenState extends State<RootScreen> with SingleTickerProviderStateM
                       const Spacer(),
 
                       // Footer Version
-                      const Text(
-                        'v1.7.0 (Build 24) • Otoritas Finansial IPMC',
+                      Text(
+                        '${ApiService.currentApkDisplayVersion} • Otoritas Finansial IPMC',
                         style: TextStyle(
                           color: Color(0xFF475569),
                           fontSize: 10,

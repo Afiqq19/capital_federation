@@ -41,6 +41,24 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     });
   }
 
+  bool _isServerVersionNewer(String serverVer, int serverBuild) {
+    if (serverVer == ApiService.currentAppVersion && serverBuild <= ApiService.currentBuildNumber) {
+      return false;
+    }
+    if (serverBuild > ApiService.currentBuildNumber) {
+      return true;
+    }
+    final sParts = serverVer.split('.').map((e) => int.tryParse(e) ?? 0).toList();
+    final cParts = ApiService.currentAppVersion.split('.').map((e) => int.tryParse(e) ?? 0).toList();
+    for (int i = 0; i < 3; i++) {
+      final s = i < sParts.length ? sParts[i] : 0;
+      final c = i < cParts.length ? cParts[i] : 0;
+      if (s > c) return true;
+      if (s < c) return false;
+    }
+    return false;
+  }
+
   Future<void> _checkAppUpdate() async {
     try {
       final info = await ApiService.getServerVersion();
@@ -49,7 +67,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       final serverVer = info['version']?.toString() ?? '1.5.0';
       final releaseNotes = info['releaseNotes']?.toString() ?? 'Pembaruan sistem & perbaikan performa.';
 
-      if (serverBuild > ApiService.currentBuildNumber && mounted) {
+      if (_isServerVersionNewer(serverVer, serverBuild) && mounted) {
         DownloadHelper.showModernUpdateDialog(
           context,
           currentVer: ApiService.currentAppVersion,
