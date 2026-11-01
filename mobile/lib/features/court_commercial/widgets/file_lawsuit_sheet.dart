@@ -48,6 +48,26 @@ class _FileLawsuitSheetState extends State<FileLawsuitSheet> {
     super.dispose();
   }
 
+  void _syncTitleAndNotes(String type) {
+    final compLabel = _selectedDefSymbol ?? (_selectedDefName ?? 'Tergugat');
+    if (type == 'DEFAMATION') {
+      _titleCtrl.text = 'Gugatan Pencemaran Nama Baik & Kerugian Reputasi $compLabel';
+      _notesCtrl.text = 'Tergugat sengaja menyebarkan fitnah finansial dan tuduhan palsu yang merusak reputasi pasar saham perseroan. Menuntut ganti rugi pemulihan nama baik. Apabila kas Tergugat tidak mencukupi atau tidak membayar, 100% kepemilikan perseroan Tergugat wajib disita/dialihkan menjadi HAK MILIK Penggugat.';
+    } else if (type == 'DISPUTE') {
+      _titleCtrl.text = 'Gugatan Wanprestasi Akta & Sengketa Kepemilikan Saham $compLabel';
+      _notesCtrl.text = 'Tergugat melanggar klausul kesepakatan notaris dan sengketa kepemilikan saham perseroan. Menuntut pengembalian hak saham portofolio atau pengalihan perseroan.';
+    } else if (type == 'RECONVENTION') {
+      _titleCtrl.text = 'Gugatan Rekonvensi atas Perkara Fiktif & Tidak Terbukti $compLabel';
+      _notesCtrl.text = 'Gugatan tuntutan balik atas perkara gugatan fitnah yang diajukan Tergugat yang telah dinyatakan TIDAK TERBUKTI dan ditolak oleh Pengadilan Niaga PNAF. Menuntut ganti rugi immaterial dan sita aset.';
+    } else if (type == 'BANKRUPTCY') {
+      _titleCtrl.text = 'Permohonan Kepailitan & Eksekusi Sita Debitur $compLabel';
+      _notesCtrl.text = 'Permohonan penetapan kepailitan (PKPU) dan sita eksekusi atas kewajiban utang macet operasional perseroan.';
+    } else {
+      _titleCtrl.text = 'Laporan Pelanggaran Regulasi Bursa & Goreng Saham $compLabel';
+      _notesCtrl.text = 'Laporan resmi kepada Otoritas Pengawas OPFF atas transaksi mencurigakan, manipulasi harga pasar, dan goreng saham.';
+    }
+  }
+
   void _selectCompany(CompanyModel comp) {
     setState(() {
       _selectedDefCompanyId = comp.id;
@@ -56,23 +76,7 @@ class _FileLawsuitSheetState extends State<FileLawsuitSheet> {
       _selectedDefName = comp.name;
       final ownerSuffix = (comp.ownerUsername != null && comp.ownerUsername!.isNotEmpty) ? ' - @${comp.ownerUsername}' : '';
       _defendantCtrl.text = '${comp.name} (${comp.symbol})$ownerSuffix';
-
-      if (_titleCtrl.text.isEmpty ||
-          _titleCtrl.text.startsWith('Gugatan') ||
-          _titleCtrl.text.startsWith('Permohonan') ||
-          _titleCtrl.text.startsWith('Laporan')) {
-        if (_caseType == 'BANKRUPTCY') {
-          _titleCtrl.text = 'Permohonan Kepailitan & Eksekusi Sita Jaminan ${comp.name}';
-        } else if (_caseType == 'DISPUTE') {
-          _titleCtrl.text = 'Gugatan Wanprestasi Akta & Sengketa Saham ${comp.symbol}';
-        } else if (_caseType == 'DEFAMATION') {
-          _titleCtrl.text = 'Gugatan Pencemaran Nama Baik & Kerugian Reputasi ${comp.symbol}';
-        } else if (_caseType == 'RECONVENTION') {
-          _titleCtrl.text = 'Gugatan Rekonvensi atas Perkara Tidak Terbukti ${comp.symbol}';
-        } else {
-          _titleCtrl.text = 'Laporan Pelanggaran Regulasi Bursa & Goreng Saham ${comp.symbol}';
-        }
-      }
+      _syncTitleAndNotes(_caseType);
     });
   }
 
@@ -743,7 +747,12 @@ class _FileLawsuitSheetState extends State<FileLawsuitSheet> {
   Widget _buildTypeTile(String key, String title, String subtitle, Color color) {
     final isSelected = _caseType == key;
     return InkWell(
-      onTap: () => setState(() => _caseType = key),
+      onTap: () {
+        setState(() {
+          _caseType = key;
+          _syncTitleAndNotes(key);
+        });
+      },
       borderRadius: BorderRadius.circular(8),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),

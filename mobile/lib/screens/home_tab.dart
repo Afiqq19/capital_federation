@@ -34,7 +34,8 @@ class _HomeTabState extends State<HomeTab> {
 
   Future<void> _checkInboxCount() async {
     try {
-      final data = await ApiService.getUserInbox();
+      final user = context.read<GameProvider>().user;
+      final data = await ApiService.getUserInbox(userId: user?.id);
       if (mounted) {
         setState(() {
           _inboxUnreadCount = (data['unreadCount'] as num?)?.toInt() ?? 0;
@@ -972,16 +973,56 @@ class _HomeTabState extends State<HomeTab> {
     final bool isEntityIpo = isPrimary ? (user.isIpo || activeEntity['isIpo'] == true || activeEntity['isIpo'] == 1) : (activeEntity['isIpo'] == true || activeEntity['isIpo'] == 1);
     final bool isSeized = activeEntity['isSeized'] == true;
     final String? seizeReason = activeEntity['seizeReason']?.toString();
+    final String reasonUpper = (seizeReason ?? '').toUpperCase();
+
+    final bool isCourtSeizure = reasonUpper.contains('PNAF') ||
+        reasonUpper.contains('PENGADILAN') ||
+        reasonUpper.contains('PUTUSAN') ||
+        reasonUpper.contains('SIDANG') ||
+        reasonUpper.contains('WANPRESTASI') ||
+        reasonUpper.contains('REPUTASI') ||
+        reasonUpper.contains('PENCEMARAN');
+
+    final bool isBankCreditSeizure = reasonUpper.contains('KREDIT') ||
+        reasonUpper.contains('BCF') ||
+        reasonUpper.contains('BANK') ||
+        reasonUpper.contains('PINJAMAN') ||
+        reasonUpper.contains('SINDIKASI') ||
+        reasonUpper.contains('BSK');
+
+    final bool isDeficitBankruptcy = companyBalance <= -50000000.0;
     final bool isCourtCaseOrSeized = isSeized ||
+        isCourtSeizure ||
+        isBankCreditSeizure ||
         (seizeReason != null && seizeReason.isNotEmpty) ||
-        (activeEntity['status'] == 'CRITICAL' && isSeized) ||
-        (activeEntity['status'] == 'BANKRUPT' && (seizeReason != null || isSeized));
-    final bool isPailit = (seizeReason != null && seizeReason.toUpperCase().contains('PAILIT')) || activeEntity['status'] == 'BANKRUPT';
-    final bool isBankrupt = companyBalance <= -50000000.0 || isPailit || isCourtCaseOrSeized;
+        (activeEntity['status'] == 'CRITICAL' && isSeized);
+
+    final bool isPailit = (reasonUpper.contains('PAILIT') && isDeficitBankruptcy) || (activeEntity['status'] == 'BANKRUPT' && isDeficitBankruptcy);
+    final bool isBankrupt = isDeficitBankruptcy || isSeized || isCourtCaseOrSeized || activeEntity['status'] == 'BANKRUPT';
     final bool isDeficitWarning = !isBankrupt && companyBalance < 0;
     final double deficitToleranceRemaining = (50000000.0 + companyBalance).clamp(0.0, 50000000.0);
     final double deficitProgress = (companyBalance.abs() / 50000000.0).clamp(0.0, 1.0);
     final String entityName = isPrimary ? (user.ptName.isNotEmpty ? 'PT ${user.ptName}' : 'PT Utama') : (activeEntity['name'] ?? 'Perusahaan');
+
+    // Tentukan label dan teks penjelasan yang akurat sesuai penyebab riil (Bukan template gaji semata)
+    String bannerTitle = 'PERSEROAN DITUTUP BANGKRUT (DEFISIT)';
+    String bannerSubtitle = 'Batas Defisit Maksimal (-IB 50.000.000) Terlampaui';
+    String balanceHeader = companyBalance < 0 ? 'Defisit Kas Tercatat' : 'Saldo Kas Perseroan (Terkunci)';
+    String explanation = '⚠️ DEFISIT OPERASIONAL: Beban operasional dan gaji perseroan telah melampaui batas toleransi kebangkrutan (-IB 50 Juta). Operasional dan pemotongan otomatis dibekukan agar tidak menumpuk utang. Segera suntikkan modal talangan dari kas pribadi atau ajukan pinjaman ke Bank BCF untuk membangkitkan perusahaan.';
+
+    if (isCourtSeizure) {
+      bannerTitle = 'PERSEROAN DISITA & DIBEKUKAN PNAF';
+      bannerSubtitle = (seizeReason != null && seizeReason.isNotEmpty) ? seizeReason : 'Eksekusi Sanksi Ganti Rugi Putusan Pengadilan PNAF';
+      explanation = '⚖️ SITA EKSEKUSI PENGADILAN PNAF: Perseroan dibekukan berdasarkan amar putusan Majelis Hakim Pengadilan Niaga & Arbitrase Federasi (${seizeReason ?? 'Sanksi Putusan Inkrah'}). Seluruh hak operasional dan lelang bursa ditangguhkan hingga kewajiban perkara dipenuhi atau ditebus.';
+    } else if (isBankCreditSeizure) {
+      bannerTitle = 'PERSEROAN DIBEKUKAN BANK SENTRAL (BCF)';
+      bannerSubtitle = (seizeReason != null && seizeReason.isNotEmpty) ? seizeReason : 'Gagal Bayar Cicilan Kredit Pinjaman Bank Sentral BCF';
+      explanation = '🏦 WANPRESTASI KREDIT BANK: Perseroan dibekukan akibat penunggakan fasilitas kredit pinjaman Bank BCF (${seizeReason ?? 'Tunggakan Fasilitas Kredit'}). Segera ajukan restrukturisasi atau lunasi pinjaman untuk mengaktifkan kembali operasional perseroan.';
+    } else if (isSeized || isCourtCaseOrSeized) {
+      bannerTitle = 'PERSEROAN DIBEKUKAN OTORITAS BURSA & HUKUM';
+      bannerSubtitle = (seizeReason != null && seizeReason.isNotEmpty) ? seizeReason : 'Pembekuan Pengawasan Khusus Komite Federasi';
+      explanation = '🔒 STATUS DIBEKUKAN: Perseroan sedang dalam status pembekuan dan sita otoritas bursa (${seizeReason ?? 'Sanksi Regulasi'}). Segera suntikkan modal talangan dari kas pribadi atau hubungi Kepaniteraan untuk memulihkan status perdagangan.';
+    }
 
     final int rdLevel = (activeEntity['rdLevel'] as num?)?.toInt() ?? user.rdLevel;
     final int marketingLevel = (activeEntity['marketingLevel'] as num?)?.toInt() ?? user.marketingLevel;
@@ -1033,16 +1074,12 @@ class _HomeTabState extends State<HomeTab> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            isCourtCaseOrSeized
-                                ? 'PERSEROAN DIBEKUKAN / DISITA PNAF'
-                                : 'PERSEROAN DITUTUP BANGKRUT (PAILIT)',
+                            bannerTitle,
                             style: const TextStyle(color: Color(0xFFFCA5A5), fontSize: 13, fontWeight: FontWeight.w900, letterSpacing: 0.4),
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            isCourtCaseOrSeized
-                                ? (seizeReason != null && seizeReason.isNotEmpty ? seizeReason : 'Eksekusi Sanksi Ganti Rugi Putusan Pengadilan PNAF')
-                                : 'Batas Defisit Maksimal (-IB 50.000.000) Terlampaui',
+                            bannerSubtitle,
                             style: TextStyle(color: Colors.red.shade200, fontSize: 11, fontWeight: FontWeight.w600),
                           ),
                         ],
@@ -1065,11 +1102,11 @@ class _HomeTabState extends State<HomeTab> {
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('Defisit Kas Tercatat', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5)),
+                          Text(balanceHeader, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5)),
                           const SizedBox(height: 2),
                           Text(
                             CurrencyFormatter.formatFull(companyBalance),
-                            style: const TextStyle(color: Color(0xFFF87171), fontSize: 15, fontWeight: FontWeight.w900),
+                            style: TextStyle(color: companyBalance < 0 ? const Color(0xFFF87171) : const Color(0xFF34D399), fontSize: 15, fontWeight: FontWeight.w900),
                           ),
                         ],
                       ),
@@ -1086,9 +1123,7 @@ class _HomeTabState extends State<HomeTab> {
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  isCourtCaseOrSeized
-                      ? '⚖️ STATUS SITA / KASUS HUKUM: Kas perseroan mengalami defisit akibat eksekusi putusan Pengadilan Niaga PNAF / denda perkara hukum (${seizeReason ?? 'Sanksi Persidangan'}). Operasional perseroan dibekukan oleh Pengadilan. Segera suntikkan modal talangan dari kas pribadi untuk menutupi defisit dan memulihkan perusahaan!'
-                      : '⚠️ DEFISIT OPERASIONAL: Beban operasional dan gaji perseroan telah melampaui batas toleransi kebangkrutan (-IB 50 Juta). Operasional dan pemotongan otomatis dibekukan agar tidak menumpuk utang. Segera suntikkan modal talangan dari kas pribadi atau ajukan pinjaman ke Bank BCF untuk membangkitkan perusahaan.',
+                  explanation,
                   style: const TextStyle(color: Color(0xFFE2E8F0), fontSize: 11, height: 1.4),
                 ),
                 const SizedBox(height: 14),

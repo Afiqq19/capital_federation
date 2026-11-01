@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/game_provider.dart';
 import '../services/api_service.dart';
 import '../features/corporate_deals/screens/corporate_deals_screen.dart';
 import '../features/court_commercial/screens/court_commercial_screen.dart';
@@ -49,7 +51,8 @@ class _UserInboxModalState extends State<UserInboxModal> {
 
   Future<void> _fetchInbox() async {
     setState(() => _isLoading = true);
-    final data = await ApiService.getUserInbox();
+    final user = context.read<GameProvider>().user;
+    final data = await ApiService.getUserInbox(userId: user?.id, category: _selectedCategory);
     if (!mounted) return;
     setState(() {
       _isLoading = false;
@@ -60,7 +63,8 @@ class _UserInboxModalState extends State<UserInboxModal> {
   }
 
   Future<void> _markAllRead() async {
-    final success = await ApiService.markInboxRead();
+    final user = context.read<GameProvider>().user;
+    final success = await ApiService.markInboxRead(userId: user?.id);
     if (success && mounted) {
       setState(() {
         for (var m in _messages) {

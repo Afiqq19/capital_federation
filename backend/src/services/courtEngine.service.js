@@ -1523,7 +1523,7 @@ class CourtJudgeBotService {
         ? await query.get('SELECT * FROM companies WHERE id = ?', [c.plaintiff_company_id])
         : await query.get('SELECT * FROM companies WHERE owner_id = ? LIMIT 1', [c.plaintiff_user_id]);
 
-      const hasDetailedFacts = (c.notes && c.notes.length > 25) || (c.target_asset_description && c.target_asset_description.length > 20);
+      const hasDetailedFacts = (c.notes && c.notes.length >= 25) || (c.target_asset_description && c.target_asset_description.length >= 20);
 
       let isDefamationProven = false;
       let rejectReason = '';
@@ -1532,22 +1532,20 @@ class CourtJudgeBotService {
         // Terbukti ada rekam jejak perkara fitnah / fiktif sebelumnya yang telah ditolak Pengadilan PNAF
         isDefamationProven = true;
       } else if (plComp && (plComp.uma_flag === 1 || Number(plComp.price_change_pct || 0) <= -12)) {
-        // Terbukti terjadi anjlok pasar signifikan / suspensi reputasi akibat rumor Tergugat
-        isDefamationProven = true;
-      } else if (c.defendant_present === 0) {
-        // Tergugat mangkir dari persidangan dan tidak memberikan bantahan hukum
+        // Terbukti terjadi anjlok pasar signifikan / suspensi reputasi akibat manuver Tergugat
         isDefamationProven = true;
       } else if (!hasDetailedFacts) {
+        // Hakim Bot Keras: Tanpa uraian fakta hukum yang memadai, gugatan langsung DITOLAK!
         isDefamationProven = false;
-        rejectReason = 'Penggugat tidak menyertakan kronologi fakta materiil, data kerugian, atau alat bukti otentik.';
+        rejectReason = 'Penggugat tidak menyertakan kronologi fakta materiil, rincian kerugian riil, maupun alat bukti otentik.';
       } else {
-        // Pengadilan memeriksa bukti objektif dari kedua belah pihak
+        // Hakim Bot menguji pembuktian materiil secara ketat dan objektif
         const roll = Math.random();
-        if (roll < 0.40) {
+        if (roll < 0.25) {
           isDefamationProven = true;
         } else {
           isDefamationProven = false;
-          rejectReason = 'Setelah menguji log transaksi dan fakta persidangan, Tergugat tidak terbukti menyebarkan fitnah atau merugikan reputasi korporasi secara melawan hukum.';
+          rejectReason = 'Setelah menguji log pembuktian persidangan dan rekam jejak bursa, Tergugat TIDAK TERBUKTI menyebarkan fitnah atau merugikan reputasi perseroan Penggugat secara melawan hukum.';
         }
       }
 
@@ -1555,13 +1553,13 @@ class CourtJudgeBotService {
         verdictStatus = 'VERDICT_APPROVED';
         verdictType = 'APPROVED_PLAINTIFF_WIN';
         customAwardedAmount = Math.min(rawClaim || 50000000, 500000000);
-        verdictNotes = `✅ GUGATAN PENCEMARAN NAMA BAIK DIKABULKAN (APPROVED): ${BOT_JUDGE_NAME} memeriksa alat bukti persidangan dan menyatakan Tergugat (${c.defendant_name}) TERBUKTI mencemarkan nama baik perseroan Penggugat (${c.plaintiff_name}). Menghukum Tergugat membayar ganti rugi sebesar IB ${customAwardedAmount.toLocaleString('id-ID')}. Apabila kas Tergugat tidak mencukupi, berlaku klausul sita eksekusi hak milik perseroan!`;
+        verdictNotes = `✅ GUGATAN PENCEMARAN NAMA BAIK DIKABULKAN (APPROVED): ${BOT_JUDGE_NAME} memeriksa alat bukti persidangan secara seksama dan menyatakan Tergugat (${c.defendant_name}) TERBUKTI BERSALAH mencemarkan nama baik perseroan Penggugat (${c.plaintiff_name}). Menghukum Tergugat membayar ganti rugi sebesar IB ${customAwardedAmount.toLocaleString('id-ID')}. Apabila kas Tergugat tidak mencukupi, Pengadilan mengeksekusi SITA JAMINAN dan mengalihkan perseroan Tergugat menjadi HAK MILIK Penggugat!`;
       } else {
         verdictStatus = 'VERDICT_REJECTED';
         verdictType = 'GUGUR_DISMISSED';
         const finePl = Math.max(10000000, Math.min(100000000, Math.round(rawClaim * 0.10)));
         customAwardedAmount = 0;
-        verdictNotes = `❌ GUGATAN PENCEMARAN NAMA BAIK DITOLAK: ${BOT_JUDGE_NAME} memeriksa fakta hukum persidangan. ${rejectReason} Gugatan Penggugat dinyatakan TIDAK TERBUKTI. Menghukum Penggugat membayar sanksi denda perkara fiktif sebesar IB ${finePl.toLocaleString('id-ID')} kepada Tergugat.`;
+        verdictNotes = `❌ GUGATAN PENCEMARAN NAMA BAIK DITOLAK: ${BOT_JUDGE_NAME} memeriksa fakta hukum persidangan. ${rejectReason} Tuduhan Penggugat dinyatakan TIDAK TERBUKTI dan tidak berdasar. Menghukum Penggugat membayar sanksi biaya perkara dan kompensasi fitnah sebesar IB ${finePl.toLocaleString('id-ID')} kepada Tergugat.`;
       }
     } else if (c.case_type === 'RECONVENTION') {
       // PEMERIKSAAN KETAT GUGATAN REKONVENSI (TUNTUTAN BALIK)
@@ -1597,16 +1595,16 @@ class CourtJudgeBotService {
           }
         }
 
-        if (c.defendant_present === 0) {
-          verdictStatus = 'VERDICT_APPROVED';
-          verdictType = 'VERSTEK_PLAINTIFF_WIN';
-        } else if (!hasShareRelationship && rawClaim > 5000000000) {
-          // Tuntutan saham miliaran tanpa ada bukti akta dan bukan pemegang saham -> DITOLAK KERAS!
+        if (!hasShareRelationship) {
+          // Hakim Bot Keras: Tanpa bukti akta kesepakatan dan bukan pemegang saham sah -> DITOLAK KERAS!
           verdictStatus = 'VERDICT_REJECTED';
           verdictType = 'GUGUR_DISMISSED';
           const defamationFine = Math.max(10000000, Math.min(100000000, Math.round(rawClaim * 0.10)));
           customAwardedAmount = 0;
-          verdictNotes = `❌ SENGKETA SAHAM DITOLAK: ${BOT_JUDGE_NAME} memeriksa buku pemegang saham perseroan. Penggugat tidak memiliki bukti Akta Notaris maupun catatan kepemilikan saham di Brankas PNAF. Penggugat dihukum denda perkara fiktif IB ${defamationFine.toLocaleString('id-ID')}.`;
+          verdictNotes = `❌ SENGKETA SAHAM DITOLAK: ${BOT_JUDGE_NAME} memeriksa buku pemegang saham perseroan. Penggugat tidak memiliki bukti Akta Notaris maupun catatan kepemilikan saham di Brankas PNAF. Gugatan dinyatakan tidak berdasar hukum dan Penggugat dihukum denda perkara fiktif IB ${defamationFine.toLocaleString('id-ID')} kepada Tergugat.`;
+        } else if (c.defendant_present === 0) {
+          verdictStatus = 'VERDICT_APPROVED';
+          verdictType = 'VERSTEK_PLAINTIFF_WIN';
         } else {
           // Ada sengketa proporsional, uji pembuktian
           const roll = Math.random();

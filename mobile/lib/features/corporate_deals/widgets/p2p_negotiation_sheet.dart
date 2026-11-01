@@ -23,10 +23,12 @@ class P2PNegotiationSheet {
     }
 
     final double currentPrice = (entity['currentPrice'] as num?)?.toDouble() ?? 2500.0;
-    const int totalShares = 10000000;
+    final int totalShares = (entity['totalShares'] as num?)?.toInt() ?? 10000000;
     double pctToSell = currentOwnership >= 20.0 ? 20.0 : (currentOwnership >= 10.0 ? 10.0 : currentOwnership);
     String selectedBuyerType = 'P2P'; // 'P2P' atau 'GLOBAL'
     String selectedBuyerId = '';
+    double negotiatedPrice = currentPrice;
+    final TextEditingController priceCtrl = TextEditingController(text: currentPrice.round().toString());
 
     List<dynamic> candidates = [];
     try {
@@ -51,7 +53,7 @@ class P2PNegotiationSheet {
         builder: (context, setModalState) {
           final int sharesSold = (totalShares * (pctToSell / 100.0)).round();
           final int lotsSold = (sharesSold / 100).round();
-          final double grossProceeds = sharesSold * currentPrice;
+          final double grossProceeds = sharesSold * negotiatedPrice;
           final double fee = grossProceeds * 0.001; // 0.1% bea bursa
           final double netProceeds = grossProceeds - fee;
           final double remainingPct = (currentOwnership - pctToSell).clamp(0.0, 100.0);
@@ -346,6 +348,116 @@ class P2PNegotiationSheet {
                   ),
                   const SizedBox(height: 14),
 
+                  // Setting Harga Negosiasi per Lembar
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Harga Jual Nego per Lembar:',
+                        style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        '@ IB ${CurrencyFormatter.formatNumber(negotiatedPrice)} / lbr',
+                        style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 12, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF070B14),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.6)),
+                    ),
+                    child: TextField(
+                      controller: priceCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: false),
+                      style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
+                      decoration: InputDecoration(
+                        prefixText: 'IB ',
+                        prefixStyle: const TextStyle(color: Color(0xFF38BDF8), fontSize: 13, fontWeight: FontWeight.bold),
+                        border: InputBorder.none,
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                        suffixIcon: IconButton(
+                          icon: const Icon(Icons.refresh_rounded, size: 16, color: Color(0xFF64748B)),
+                          tooltip: 'Reset ke Harga Pasar',
+                          onPressed: () {
+                            setModalState(() {
+                              negotiatedPrice = currentPrice;
+                              priceCtrl.text = currentPrice.round().toString();
+                            });
+                          },
+                        ),
+                      ),
+                      onChanged: (val) {
+                        final parsed = double.tryParse(val.replaceAll('.', '').replaceAll(',', ''));
+                        if (parsed != null && parsed > 0) {
+                          setModalState(() {
+                            negotiatedPrice = parsed;
+                          });
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      ActionChip(
+                        label: Text('Pasar: @ IB ${currentPrice.round()}'),
+                        backgroundColor: (negotiatedPrice - currentPrice).abs() < 1 ? const Color(0xFF38BDF8).withValues(alpha: 0.25) : const Color(0xFF070B14),
+                        side: BorderSide(color: (negotiatedPrice - currentPrice).abs() < 1 ? const Color(0xFF38BDF8) : const Color(0xFF1E293B)),
+                        labelStyle: const TextStyle(color: Color(0xFF38BDF8), fontSize: 9.5, fontWeight: FontWeight.bold),
+                        onPressed: () {
+                          setModalState(() {
+                            negotiatedPrice = currentPrice;
+                            priceCtrl.text = currentPrice.round().toString();
+                          });
+                        },
+                      ),
+                      ActionChip(
+                        label: Text('Premium 2x (@ IB ${(currentPrice * 2).round()})'),
+                        backgroundColor: const Color(0xFF070B14),
+                        side: const BorderSide(color: Color(0xFF1E293B)),
+                        labelStyle: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 9.5),
+                        onPressed: () {
+                          setModalState(() {
+                            negotiatedPrice = (currentPrice * 2).roundToDouble();
+                            priceCtrl.text = negotiatedPrice.round().toString();
+                          });
+                        },
+                      ),
+                      ActionChip(
+                        label: Text('Valuasi 5x (@ IB ${(currentPrice * 5).round()})'),
+                        backgroundColor: const Color(0xFF070B14),
+                        side: const BorderSide(color: Color(0xFF1E293B)),
+                        labelStyle: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 9.5),
+                        onPressed: () {
+                          setModalState(() {
+                            negotiatedPrice = (currentPrice * 5).roundToDouble();
+                            priceCtrl.text = negotiatedPrice.round().toString();
+                          });
+                        },
+                      ),
+                      ActionChip(
+                        label: Text('Konglomerat 10x (@ IB ${(currentPrice * 10).round()})'),
+                        backgroundColor: const Color(0xFF070B14),
+                        side: const BorderSide(color: Color(0xFFF59E0B)),
+                        labelStyle: const TextStyle(color: Color(0xFFF59E0B), fontSize: 9.5, fontWeight: FontWeight.bold),
+                        onPressed: () {
+                          setModalState(() {
+                            negotiatedPrice = (currentPrice * 10).roundToDouble();
+                            priceCtrl.text = negotiatedPrice.round().toString();
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+
                   // Card Penerimaan Uang Tunai
                   Container(
                     padding: const EdgeInsets.all(12),
@@ -363,7 +475,7 @@ class P2PNegotiationSheet {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             const Text('TOTAL DANA CAIR PENJUALAN', style: TextStyle(color: Color(0xFF34D399), fontSize: 10, fontWeight: FontWeight.w900)),
-                            Text('@ IB ${currentPrice.toStringAsFixed(0)} / lbr', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10)),
+                            Text('@ IB ${CurrencyFormatter.formatNumber(negotiatedPrice)} / lbr', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10, fontFamily: 'monospace')),
                           ],
                         ),
                         const SizedBox(height: 4),
@@ -404,7 +516,7 @@ class P2PNegotiationSheet {
                           pctToSell: pctToSell,
                           sharesSold: sharesSold,
                           lotsSold: lotsSold,
-                          pricePerShare: currentPrice,
+                          pricePerShare: negotiatedPrice,
                           grossProceeds: grossProceeds,
                           netProceeds: netProceeds,
                         );

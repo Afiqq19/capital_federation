@@ -2374,7 +2374,7 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                   final isBuy = type == 'BUY';
                   final double price = ((t['price'] as num?)?.toDouble() ?? c.currentPrice);
                   final int lots = ((t['lots'] as num?)?.toInt() ?? 1);
-                  final String username = t['username']?.toString() ?? (isBuy ? 'YP (Mirae)' : 'XL (Stockbit)');
+                  final String username = t['username']?.toString() ?? (isBuy ? 'YP (Yodha Pratama)' : 'XL (X-Capital)');
                   final double lotBarRatio = (lots / maxLot).clamp(0.05, 1.0);
 
                   return Container(
@@ -2469,19 +2469,19 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
     final isBullish = c.priceChangePct >= 0;
 
     final topBuyers = [
-      {'code': 'YP', 'name': 'Mirae Asset', 'lot': (baseVol * 0.28).round(), 'avg': (ref * (isBullish ? 1.004 : 0.998)).round()},
-      {'code': 'CC', 'name': 'Mandiri Sekuritas', 'lot': (baseVol * 0.22).round(), 'avg': (ref * (isBullish ? 1.002 : 0.996)).round()},
-      {'code': 'AK', 'name': 'UBS Sekuritas', 'lot': (baseVol * 0.18).round(), 'avg': (ref * (isBullish ? 1.006 : 1.000)).round()},
-      {'code': 'PD', 'name': 'Indo Premier', 'lot': (baseVol * 0.14).round(), 'avg': (ref * (isBullish ? 1.001 : 0.995)).round()},
-      {'code': 'BK', 'name': 'J.P. Morgan', 'lot': (baseVol * 0.10).round(), 'avg': (ref * (isBullish ? 1.008 : 1.002)).round()},
+      {'code': 'YP', 'name': 'Yodha Pratama Sekuritas', 'lot': (baseVol * 0.28).round(), 'avg': (ref * (isBullish ? 1.004 : 0.998)).round()},
+      {'code': 'CC', 'name': 'Capital Cipta Sekuritas', 'lot': (baseVol * 0.22).round(), 'avg': (ref * (isBullish ? 1.002 : 0.996)).round()},
+      {'code': 'AK', 'name': 'Artha Kencana Sekuritas', 'lot': (baseVol * 0.18).round(), 'avg': (ref * (isBullish ? 1.006 : 1.000)).round()},
+      {'code': 'PD', 'name': 'Prima Dana Sekuritas', 'lot': (baseVol * 0.14).round(), 'avg': (ref * (isBullish ? 1.001 : 0.995)).round()},
+      {'code': 'BK', 'name': 'Batavia Kustodian Sekuritas', 'lot': (baseVol * 0.10).round(), 'avg': (ref * (isBullish ? 1.008 : 1.002)).round()},
     ];
 
     final topSellers = [
-      {'code': 'XL', 'name': 'Stockbit Sekuritas', 'lot': (baseVol * (isBullish ? 0.24 : 0.30)).round(), 'avg': (ref * (isBullish ? 1.002 : 0.994)).round()},
-      {'code': 'NI', 'name': 'BNI Sekuritas', 'lot': (baseVol * (isBullish ? 0.20 : 0.25)).round(), 'avg': (ref * (isBullish ? 1.000 : 0.992)).round()},
-      {'code': 'DR', 'name': 'RHB Sekuritas', 'lot': (baseVol * 0.16).round(), 'avg': (ref * (isBullish ? 0.998 : 0.990)).round()},
-      {'code': 'SQ', 'name': 'BCA Sekuritas', 'lot': (baseVol * 0.13).round(), 'avg': (ref * (isBullish ? 1.003 : 0.995)).round()},
-      {'code': 'XC', 'name': 'Ajaib Sekuritas', 'lot': (baseVol * 0.11).round(), 'avg': (ref * (isBullish ? 0.997 : 0.989)).round()},
+      {'code': 'XL', 'name': 'X-Capital Sekuritas', 'lot': (baseVol * (isBullish ? 0.24 : 0.30)).round(), 'avg': (ref * (isBullish ? 1.002 : 0.994)).round()},
+      {'code': 'NI', 'name': 'Nusantara Investama', 'lot': (baseVol * (isBullish ? 0.20 : 0.25)).round(), 'avg': (ref * (isBullish ? 1.000 : 0.992)).round()},
+      {'code': 'DR', 'name': 'Delta Raya Sekuritas', 'lot': (baseVol * 0.16).round(), 'avg': (ref * (isBullish ? 0.998 : 0.990)).round()},
+      {'code': 'SQ', 'name': 'Surya Qapital Sekuritas', 'lot': (baseVol * 0.13).round(), 'avg': (ref * (isBullish ? 1.003 : 0.995)).round()},
+      {'code': 'XC', 'name': 'X-Trade Central Sekuritas', 'lot': (baseVol * 0.11).round(), 'avg': (ref * (isBullish ? 0.997 : 0.989)).round()},
     ];
 
     final int totalBuyLot = topBuyers.fold(0, (s, b) => s + (b['lot'] as int));

@@ -441,7 +441,7 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
 });
 
 // Helper untuk resolve userId baik dari JWT Authorization header ATAU dari query/body/header x-user-id
-function resolveInboxUserId(req) {
+async function resolveInboxUserId(req) {
   let userId = null;
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
@@ -453,13 +453,19 @@ function resolveInboxUserId(req) {
   if (!userId) {
     userId = req.query?.userId || req.headers['x-user-id'] || req.body?.userId;
   }
-  return userId ? String(userId).trim() : null;
+  if (userId) {
+    const raw = String(userId).trim();
+    const matched = await query.get('SELECT id FROM users WHERE id = ? OR username = ? LIMIT 1', [raw, raw]);
+    if (matched) return matched.id;
+    return raw;
+  }
+  return null;
 }
 
 // 1.5 Pusat Pesan & Inbox Notifikasi Pengguna (P2P, Sidang PNAF, Akuisisi M&A)
 app.get('/api/user/inbox', async (req, res) => {
   try {
-    const userId = resolveInboxUserId(req);
+    const userId = await resolveInboxUserId(req);
     if (!userId) {
       return res.status(400).json({ error: 'User ID tidak ditemukan' });
     }
@@ -510,7 +516,7 @@ app.get('/api/user/inbox', async (req, res) => {
 
 app.post('/api/user/inbox/read', async (req, res) => {
   try {
-    const userId = resolveInboxUserId(req);
+    const userId = await resolveInboxUserId(req);
     if (!userId) {
       return res.status(400).json({ error: 'User ID tidak ditemukan' });
     }
@@ -528,7 +534,7 @@ app.post('/api/user/inbox/read', async (req, res) => {
 
 app.delete('/api/user/inbox/:id', async (req, res) => {
   try {
-    const userId = resolveInboxUserId(req);
+    const userId = await resolveInboxUserId(req);
     if (!userId) {
       return res.status(400).json({ error: 'User ID tidak ditemukan' });
     }
@@ -3198,6 +3204,12 @@ app.get('/api/user/conglomerate/:userId', async (req, res) => {
         founderPct = Math.min(100.0, founderPct + buybackPct);
       }
 
+      let effectivePrimaryStatus = primaryComp.status || 'HEALTHY';
+      if (effectivePrimaryStatus === 'BANKRUPT' && syncedBalance > -50000000 && primaryComp.is_seized !== 1) {
+        effectivePrimaryStatus = 'HEALTHY';
+        await query.run("UPDATE companies SET status = 'HEALTHY' WHERE id = ?", [primaryComp.id]);
+      }
+
       list.push({
         id: 'primary',
         companyDbId: primaryComp.id,
@@ -3219,12 +3231,14 @@ app.get('/api/user/conglomerate/:userId', async (req, res) => {
         ptLevel: syncedPtLvl,
         fundamentalScore: syncedFund,
         isIpo,
+        totalShares: primaryComp.total_shares || 10000000,
+        basePrice: primaryComp.base_price || 2500.0,
         currentPrice: primaryComp.current_price || 2500.0,
         description: primaryComp.description || `${officialPtName} beroperasi di sektor ${primaryComp.sector || user.sector}.`,
         ownershipPct: parseFloat(founderPct.toFixed(1)),
         founderSharesSold: founderSold,
         isSeized: primaryComp.is_seized === 1,
-        status: primaryComp.status || 'HEALTHY',
+        status: effectivePrimaryStatus,
         seizeReason: primaryComp.seize_reason || null,
         seizedBy: primaryComp.seized_by || null,
         isUma: primaryComp.uma_flag === 1,
@@ -3294,13 +3308,15 @@ app.get('/api/user/conglomerate/:userId', async (req, res) => {
         ptLevel: a.pt_level || a.operational_level || 1,
         fundamentalScore: a.fundamental_score || 80,
         isIpo: a.is_ipo === 1,
-        currentPrice: a.current_price,
+        totalShares: a.total_shares || 10000000,
+        basePrice: a.base_price || a.current_price || 2500.0,
+        currentPrice: a.current_price || a.base_price || 2500.0,
         description: a.description || (isSubsidiary ? `Anak Perusahaan resmi sektor ${a.sector}.` : `Emiten hasil akuisisi konglomerasi di sektor ${a.sector}.`),
         lotsOwned: a.lots_owned,
         ownershipPct: Math.min(100.0, Math.max(0.0, parseFloat((a.calculated_ownership_pct || 100.0).toFixed(1)))),
         founderSharesSold: a.founder_shares_sold || 0,
         isSeized: a.is_seized === 1,
-        status: a.status || 'HEALTHY',
+        status: (a.status === 'BANKRUPT' && (a.company_balance_ib || 0) > -50000000 && a.is_seized !== 1) ? 'HEALTHY' : (a.status || 'HEALTHY'),
         seizeReason: a.seize_reason,
         seizedBy: a.seized_by,
         isUma: a.uma_flag === 1,
@@ -3729,17 +3745,17 @@ app.get('/api/market/running-trade', async (req, res) => {
       const comp = await query.get('SELECT * FROM companies WHERE symbol = ?', [symbolFilter]);
       if (comp) {
         const brokers = [
-          { code: 'YP', name: 'Mirae Asset Sekuritas' },
-          { code: 'PD', name: 'Indo Premier Sekuritas' },
-          { code: 'CC', name: 'Mandiri Sekuritas' },
-          { code: 'AK', name: 'UBS Sekuritas Indonesia' },
-          { code: 'BK', name: 'J.P. Morgan Sekuritas' },
-          { code: 'NI', name: 'BNI Sekuritas' },
-          { code: 'XL', name: 'Stockbit Sekuritas' },
-          { code: 'SQ', name: 'BCA Sekuritas' },
-          { code: 'DR', name: 'RHB Sekuritas' },
-          { code: 'YU', name: 'CGS International' },
-          { code: 'XC', name: 'Ajaib Sekuritas Asia' },
+          { code: 'YP', name: 'Yodha Pratama Sekuritas' },
+          { code: 'PD', name: 'Prima Dana Sekuritas' },
+          { code: 'CC', name: 'Capital Cipta Sekuritas' },
+          { code: 'AK', name: 'Artha Kencana Sekuritas' },
+          { code: 'BK', name: 'Batavia Kustodian Sekuritas' },
+          { code: 'NI', name: 'Nusantara Investama Sekuritas' },
+          { code: 'XL', name: 'X-Capital Sekuritas' },
+          { code: 'SQ', name: 'Surya Qapital Sekuritas' },
+          { code: 'DR', name: 'Delta Raya Sekuritas' },
+          { code: 'YU', name: 'Yudha Utama Sekuritas' },
+          { code: 'XC', name: 'X-Trade Central Sekuritas' },
         ];
         const nowD = Date.now();
         const baseP = comp.current_price || 2500;
@@ -7894,18 +7910,18 @@ const bundledPublicApkPath = path.join(__dirname, '../public/downloads/Capital-F
 const directPublicApkPath = path.join(__dirname, '../public/downloads/capital-federation.apk');
 const localBuiltApkPath = path.join(__dirname, '../../mobile/build/app/outputs/flutter-apk/app-release.apk');
 
-const LATEST_RELEASE_NOTES_V198 = 'v1.9.8 (Build 36): Kotak Masuk & Notifikasi PNAF Terintegrasi Penuh (Surat Panggilan Sidang, Putusan Inkrah, & Pesan Resmi Otoritas), Perbaikan Autentikasi Inbox, dan Sinkronisasi Notifikasi Sita Perseroan.';
+const LATEST_RELEASE_NOTES_V199 = 'v1.9.9 (Build 37): Fitur Negosiasi Harga Saham P2P Kustom (Bebas Tentukan Valuasi Miliaran IB), Pengetatan Majelis Hakim Bot PNAF (Pemeriksaan Ketat Bukti Saham & Pencemaran Nama Baik), 100% Sekuritas Fiksi Federasi, Sinkronisasi Otomatis Judul Kategori Gugatan, serta Penjelasan Dinamis Pembekuan Kasus Hukum & Kredit BCF.';
 
 async function getApkSettingsMap() {
   const defaults = {
-    apk_version: '1.9.8',
-    apk_build_number: '36',
+    apk_version: '1.9.9',
+    apk_build_number: '37',
     apk_min_android: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
     apk_file_size_mb: '56.9 MB',
-    apk_release_notes: LATEST_RELEASE_NOTES_V198,
+    apk_release_notes: LATEST_RELEASE_NOTES_V199,
     apk_external_url: '',
-    apk_download_count: '420',
-    apk_sha256: 'cf283306af32c61313d745e723c00309a7712333690d01c6a3eed0611326e268',
+    apk_download_count: '435',
+    apk_sha256: '6aef08ce3a6bad2b12c06b93de737aa858bc8048a87be8501633b82130e910b5',
     apk_updated_at: new Date().toISOString(),
   };
   try {
@@ -7915,12 +7931,12 @@ async function getApkSettingsMap() {
         defaults[r.key] = String(r.value);
       }
     }
-    if (parseInt(defaults.apk_build_number || '0', 10) < 36 || defaults.apk_sha256 !== 'cf283306af32c61313d745e723c00309a7712333690d01c6a3eed0611326e268') {
-      defaults.apk_version = '1.9.8';
-      defaults.apk_build_number = '36';
+    if (parseInt(defaults.apk_build_number || '0', 10) < 37 || defaults.apk_sha256 !== '6aef08ce3a6bad2b12c06b93de737aa858bc8048a87be8501633b82130e910b5') {
+      defaults.apk_version = '1.9.9';
+      defaults.apk_build_number = '37';
       defaults.apk_file_size_mb = '56.9 MB';
-      defaults.apk_sha256 = 'cf283306af32c61313d745e723c00309a7712333690d01c6a3eed0611326e268';
-      defaults.apk_release_notes = LATEST_RELEASE_NOTES_V198;
+      defaults.apk_sha256 = '6aef08ce3a6bad2b12c06b93de737aa858bc8048a87be8501633b82130e910b5';
+      defaults.apk_release_notes = LATEST_RELEASE_NOTES_V199;
       defaults.apk_updated_at = new Date().toISOString();
       // Persist directly to central_bank_settings so /api/settings, /api/admin/settings & /api/admin/overview match 100%!
       const keysToSync = ['apk_version', 'apk_build_number', 'apk_file_size_mb', 'apk_sha256', 'apk_release_notes', 'apk_min_android', 'apk_updated_at'];
