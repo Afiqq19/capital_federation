@@ -32,6 +32,7 @@ import {
   X,
   Check,
   ShieldAlert,
+  ShieldCheck,
 } from 'lucide-react';
 
 export default function CourtOversightPage() {
@@ -65,6 +66,10 @@ export default function CourtOversightPage() {
   const [newTitle, setNewTitle] = useState('');
   const [newCaseType, setNewCaseType] = useState('BANKRUPTCY');
   const [newPlaintiff, setNewPlaintiff] = useState('Bank Sentral Indigo Federasi (BIF)');
+  const [selectedPlaintiffComp, setSelectedPlaintiffComp] = useState(null);
+  const [selectedPlaintiffUser, setSelectedPlaintiffUser] = useState(null);
+  const [plaintiffSearchQuery, setPlaintiffSearchQuery] = useState('');
+  const [showPlaintiffDropdown, setShowPlaintiffDropdown] = useState(false);
   const [newDefendant, setNewDefendant] = useState('');
   const [selectedDefComp, setSelectedDefComp] = useState(null);
   const [selectedDefUser, setSelectedDefUser] = useState(null);
@@ -76,6 +81,42 @@ export default function CourtOversightPage() {
   const [newCourtRoom, setNewCourtRoom] = useState('Ruang Sidang Utama Kartika PNAF');
   const [newTargetAsset, setNewTargetAsset] = useState('Saham Portofolio, Dividen, dan Rekening Konglomerat');
   const [submittingNewCase, setSubmittingNewCase] = useState(false);
+
+  const handleSelectPlaintiffCompany = (comp) => {
+    setSelectedPlaintiffComp(comp);
+    setSelectedPlaintiffUser(null);
+    const ownerLabel = comp.owner_username ? ` - @${comp.owner_username}` : '';
+    const plName = `${comp.name} (${comp.symbol})${ownerLabel}`;
+    setNewPlaintiff(plName);
+    if (!newTitle || newTitle.startsWith('Gugatan') || newTitle.startsWith('Sengketa') || newTitle.startsWith('Laporan') || newTitle.startsWith('Permohonan')) {
+      if (newCaseType === 'DEFAMATION') {
+        setNewTitle(`Gugatan Pencemaran Nama Baik & Kerugian Reputasi Saham ${comp.symbol}`);
+      } else if (newCaseType === 'RECONVENTION') {
+        setNewTitle(`Gugatan Rekonvensi Pembelaan & Pemulihan Nama Baik atas ${comp.name} (${comp.symbol})`);
+      } else if (newCaseType === 'DISPUTE') {
+        setNewTitle(`Sengketa Perlindungan Aset & Akta Perseroan ${comp.name} (${comp.symbol})`);
+      }
+    }
+    setShowPlaintiffDropdown(false);
+    setPlaintiffSearchQuery('');
+  };
+
+  const handleSelectPlaintiffUser = (u) => {
+    setSelectedPlaintiffUser(u);
+    setSelectedPlaintiffComp(null);
+    const ptLabel = u.pt_name ? ` (${u.pt_name})` : '';
+    const plName = `@${u.username}${ptLabel}`;
+    setNewPlaintiff(plName);
+    if (!newTitle || newTitle.startsWith('Gugatan') || newTitle.startsWith('Sengketa') || newTitle.startsWith('Laporan') || newTitle.startsWith('Permohonan')) {
+      if (newCaseType === 'DEFAMATION') {
+        setNewTitle(`Gugatan Pencemaran Nama Baik atas Tuduhan Palsu terhadap @${u.username}`);
+      } else if (newCaseType === 'RECONVENTION') {
+        setNewTitle(`Gugatan Rekonvensi & Tuntutan Kerugian Perkara Tidak Terbukti atas @${u.username}`);
+      }
+    }
+    setShowPlaintiffDropdown(false);
+    setPlaintiffSearchQuery('');
+  };
 
   const handleSelectCompany = (comp) => {
     setSelectedDefComp(comp);
@@ -233,6 +274,8 @@ export default function CourtOversightPage() {
         title: newTitle,
         caseType: newCaseType,
         plaintiffName: newPlaintiff,
+        plaintiffCompanyId: selectedPlaintiffComp?.id || null,
+        plaintiffUserId: selectedPlaintiffComp?.owner_id || selectedPlaintiffUser?.id || null,
         defendantName: newDefendant,
         defendantCompanyId: selectedDefComp?.id || null,
         defendantUserId: selectedDefComp?.owner_id || selectedDefUser?.id || null,
@@ -247,6 +290,8 @@ export default function CourtOversightPage() {
       setNewDefendant('');
       setSelectedDefComp(null);
       setSelectedDefUser(null);
+      setSelectedPlaintiffComp(null);
+      setSelectedPlaintiffUser(null);
       await fetchCasesAndStatus(true);
     } catch (err) {
       alert('Gagal mendaftarkan perkara: ' + err.message);
@@ -295,6 +340,30 @@ export default function CourtOversightPage() {
 
     return matchesSearch && matchesType && matchesStatus;
   });
+
+  const filteredCompaniesForPlaintiff = (companies || [])
+    .filter((c) => {
+      if (!plaintiffSearchQuery) return true;
+      const q = plaintiffSearchQuery.toLowerCase();
+      return (
+        (c.name && c.name.toLowerCase().includes(q)) ||
+        (c.symbol && c.symbol.toLowerCase().includes(q)) ||
+        (c.owner_username && c.owner_username.toLowerCase().includes(q)) ||
+        (c.sector && c.sector.toLowerCase().includes(q))
+      );
+    })
+    .slice(0, 15);
+
+  const filteredUsersForPlaintiff = (users || [])
+    .filter((u) => {
+      if (!plaintiffSearchQuery) return true;
+      const q = plaintiffSearchQuery.toLowerCase();
+      return (
+        (u.username && u.username.toLowerCase().includes(q)) ||
+        (u.pt_name && u.pt_name.toLowerCase().includes(q))
+      );
+    })
+    .slice(0, 8);
 
   const filteredCompaniesForDef = (companies || [])
     .filter((c) => {
@@ -794,13 +863,122 @@ export default function CourtOversightPage() {
                   required
                 />
               </FormField>
+              {/* Quick Template Pills */}
+              <div className="flex flex-wrap gap-1.5 mt-1.5">
+                {newCaseType === 'DEFAMATION' ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setNewTitle(
+                          `Gugatan Pencemaran Nama Baik & Kerugian Reputasi Korporasi ${
+                            selectedPlaintiffComp ? selectedPlaintiffComp.symbol : ''
+                          }`.trim()
+                        )
+                      }
+                      className="text-[10px] px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-sky-300 hover:text-white hover:border-sky-500/50 transition-colors"
+                    >
+                      🛡️ Pencemaran Nama Baik & Reputasi
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setNewTitle('Gugatan Ganti Rugi atas Berita Bohong & Kejatuhan Kapitalisasi Pasar Saham')
+                      }
+                      className="text-[10px] px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-300 hover:text-white hover:border-sky-500/50 transition-colors"
+                    >
+                      📉 Fitnah & Kerugian Market Cap
+                    </button>
+                  </>
+                ) : newCaseType === 'RECONVENTION' ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setNewTitle(
+                          `Gugatan Balasan Rekonvensi: Tuntutan Kerugian atas Perkara Tidak Terbukti / Fiktif ${
+                            selectedPlaintiffComp ? selectedPlaintiffComp.symbol : ''
+                          }`.trim()
+                        )
+                      }
+                      className="text-[10px] px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-amber-300 hover:text-white hover:border-amber-500/50 transition-colors"
+                    >
+                      ⚔️ Rekonvensi (Perkara Tidak Terbukti)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setNewTitle('Permohonan Rehabilitasi Korporasi & Ganti Rugi Biaya Perkara Fiktif')
+                      }
+                      className="text-[10px] px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-300 hover:text-white hover:border-amber-500/50 transition-colors"
+                    >
+                      🏛️ Rehabilitasi & Ganti Rugi Immaterial
+                    </button>
+                  </>
+                ) : newCaseType === 'BANKRUPTCY' ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setNewTitle('Gugatan Kepailitan atas Gagal Bayar Kredit BIF')}
+                      className="text-[10px] px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-rose-300 hover:text-white hover:border-rose-500/50 transition-colors"
+                    >
+                      ⚖️ Kepailitan Gagal Bayar Kredit BIF
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNewTitle('Permohonan PKPU & Moratorium Utang Operasional')}
+                      className="text-[10px] px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-300 hover:text-white hover:border-rose-500/50 transition-colors"
+                    >
+                      💼 Permohonan PKPU & Moratorium
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setNewTitle('Sengketa Kepemilikan Saham & Wanprestasi Perjanjian Notaris')}
+                      className="text-[10px] px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-amber-300 hover:text-white hover:border-amber-500/50 transition-colors"
+                    >
+                      📜 Sengketa Saham & Akta
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNewTitle('Laporan Dugaan Manipulasi Pasar Bursa OPFF')}
+                      className="text-[10px] px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-300 hover:text-white hover:border-amber-500/50 transition-colors"
+                    >
+                      🚨 Pelanggaran Regulasi Bursa
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
             <div className="md:col-span-5">
               <FormField label="Jenis / Kategori Perkara">
-                <Select value={newCaseType} onChange={(e) => setNewCaseType(e.target.value)}>
+                <Select
+                  value={newCaseType}
+                  onChange={(e) => {
+                    const ct = e.target.value;
+                    setNewCaseType(ct);
+                    if (ct === 'DEFAMATION') {
+                      setNewTitle(
+                        `Gugatan Pencemaran Nama Baik & Kerugian Reputasi Korporasi ${
+                          selectedPlaintiffComp ? selectedPlaintiffComp.symbol : ''
+                        }`.trim()
+                      );
+                    } else if (ct === 'RECONVENTION') {
+                      setNewTitle(
+                        `Gugatan Balasan Rekonvensi: Tuntutan Kerugian atas Perkara Tidak Terbukti ${
+                          selectedPlaintiffComp ? selectedPlaintiffComp.symbol : ''
+                        }`.trim()
+                      );
+                    }
+                  }}
+                >
                   <option value="BANKRUPTCY">⚖️ Kepailitan & PKPU (Sita Debitur)</option>
                   <option value="DISPUTE">📜 Sengketa Akta & Saham</option>
                   <option value="REGULATORY">🚨 Pelanggaran Regulasi Bursa</option>
+                  <option value="DEFAMATION">🛡️ Pencemaran Nama Baik & Kerugian Reputasi</option>
+                  <option value="RECONVENTION">⚔️ Rekonvensi / Perkara Tidak Terbukti</option>
                 </Select>
               </FormField>
             </div>
@@ -809,16 +987,128 @@ export default function CourtOversightPage() {
           {/* Section 2: Para Pihak yang Bersengketa (Penggugat vs Tergugat) */}
           <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 space-y-3">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Kolom Kiri: Pihak Penggugat */}
+              {/* Kolom Kiri: Pihak Penggugat (Bisa Pilih Emiten yang Ingin Dibela) */}
               <div>
-                <FormField label="Pihak Penggugat (Pengaju Gugatan)">
-                  <Input
-                    value={newPlaintiff}
-                    onChange={(e) => setNewPlaintiff(e.target.value)}
-                    placeholder="Contoh: Bank Sentral Indigo Federasi (BIF)"
-                    required
-                  />
-                </FormField>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="label mb-0">Pihak Penggugat (Pengaju / Klien yang Dibela)</label>
+                  <span className="text-[10px] text-sky-400 font-bold bg-sky-500/10 px-1.5 py-0.5 rounded border border-sky-500/20">
+                    360+ Emiten
+                  </span>
+                </div>
+                <div className="relative">
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Input
+                        value={newPlaintiff}
+                        onChange={(e) => {
+                          setNewPlaintiff(e.target.value);
+                          setPlaintiffSearchQuery(e.target.value);
+                          setShowPlaintiffDropdown(true);
+                        }}
+                        onFocus={() => setShowPlaintiffDropdown(true)}
+                        placeholder="Ketik kode (ARPD, BALN) atau nama PT / Penggugat..."
+                        required
+                      />
+                      {newPlaintiff && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNewPlaintiff('');
+                            setSelectedPlaintiffComp(null);
+                            setSelectedPlaintiffUser(null);
+                          }}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                        >
+                          <X size={14} />
+                        </button>
+                      )}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowPlaintiffDropdown(!showPlaintiffDropdown)}
+                      icon={Search}
+                    >
+                      Cari PT
+                    </Button>
+                  </div>
+
+                  {/* Autocomplete Dropdown List Penggugat */}
+                  {showPlaintiffDropdown && (
+                    <div className="absolute z-50 left-0 right-0 mt-1 max-h-56 overflow-y-auto bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-2 space-y-1 backdrop-blur-md">
+                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 py-1 flex items-center justify-between">
+                        <span>Pilih Emiten atau Pemain yang Ingin Dibela</span>
+                        <button
+                          type="button"
+                          onClick={() => setShowPlaintiffDropdown(false)}
+                          className="text-slate-400 hover:text-white"
+                        >
+                          Tutup [X]
+                        </button>
+                      </div>
+
+                      {filteredCompaniesForPlaintiff.length === 0 && filteredUsersForPlaintiff.length === 0 && (
+                        <div className="p-3 text-center text-xs text-slate-500">
+                          Tidak ada emiten atau pemain yang cocok dengan "{plaintiffSearchQuery}"
+                        </div>
+                      )}
+
+                      {filteredCompaniesForPlaintiff.map((comp) => (
+                        <div
+                          key={comp.id}
+                          onClick={() => handleSelectPlaintiffCompany(comp)}
+                          className="flex items-center justify-between p-2 hover:bg-slate-800/80 rounded-lg cursor-pointer transition-colors border border-transparent hover:border-slate-700"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-xs font-bold text-sky-400 bg-sky-500/10 px-1.5 py-0.5 rounded border border-sky-500/20">
+                              {comp.symbol}
+                            </span>
+                            <div>
+                              <div className="text-xs font-semibold text-slate-200">{comp.name}</div>
+                              <div className="text-[10px] text-slate-400">
+                                @{comp.owner_username || 'Publik'} • {comp.sector}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-mono text-xs font-bold text-emerald-400">
+                              IB {Number(comp.current_price || 0).toLocaleString('id-ID')}
+                            </div>
+                            <span className="text-[9px] text-sky-400 font-semibold">Pilih sbg Klien</span>
+                          </div>
+                        </div>
+                      ))}
+
+                      {filteredUsersForPlaintiff.length > 0 && (
+                        <>
+                          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 pt-2 pb-1 border-t border-slate-800">
+                            Konglomerat Pemain
+                          </div>
+                          {filteredUsersForPlaintiff.map((u) => (
+                            <div
+                              key={u.id}
+                              onClick={() => handleSelectPlaintiffUser(u)}
+                              className="flex items-center justify-between p-2 hover:bg-slate-800/80 rounded-lg cursor-pointer transition-colors"
+                            >
+                              <div>
+                                <span className="font-bold text-xs text-sky-400">@{u.username}</span>
+                                {u.pt_name && (
+                                  <span className="text-xs text-slate-300 ml-1.5 font-medium">({u.pt_name})</span>
+                                )}
+                              </div>
+                              <div className="text-right text-[10px] text-slate-400 font-mono">
+                                Kas: IB {Number(u.balance_ib || 0).toLocaleString('id-ID')}
+                              </div>
+                            </div>
+                          ))}
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Quick Presets Lembaga / Kas Negara */}
                 <div className="grid grid-cols-2 gap-1.5 mt-2">
                   {[
                     { label: '🏛️ Bank Sentral BIF', val: 'Bank Sentral Indigo Federasi (BIF)' },
@@ -829,10 +1119,14 @@ export default function CourtOversightPage() {
                     <button
                       key={preset.label}
                       type="button"
-                      onClick={() => setNewPlaintiff(preset.val)}
+                      onClick={() => {
+                        setSelectedPlaintiffComp(null);
+                        setSelectedPlaintiffUser(null);
+                        setNewPlaintiff(preset.val);
+                      }}
                       className={`px-2 py-1 rounded-lg text-[10px] font-semibold border text-left truncate transition-colors ${
                         newPlaintiff === preset.val
-                          ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-sm'
+                          ? 'bg-sky-500/20 text-sky-300 border-sky-500/40 shadow-sm'
                           : 'bg-slate-900/90 text-slate-400 border-slate-800 hover:border-slate-700 hover:text-slate-200'
                       }`}
                     >
@@ -840,6 +1134,22 @@ export default function CourtOversightPage() {
                     </button>
                   ))}
                 </div>
+
+                {/* Card Emiten Klien yang terpilih */}
+                {selectedPlaintiffComp && (
+                  <div className="mt-2 p-2 rounded-lg bg-sky-500/10 border border-sky-500/30 flex items-start gap-2">
+                    <ShieldCheck className="text-sky-400 mt-0.5 shrink-0" size={14} />
+                    <div className="text-[11px] leading-tight flex-1">
+                      <span className="font-bold text-sky-300">
+                        {selectedPlaintiffComp.name} ({selectedPlaintiffComp.symbol})
+                      </span>
+                      <span className="text-slate-400"> • @{selectedPlaintiffComp.owner_username || 'Publik'}</span>
+                      <p className="text-[10px] text-sky-200/90 mt-0.5">
+                        🛡️ Pembelaan & Pemulihan: Tuntutan ganti rugi pencemaran nama baik atau gugatan balik atas perkara tidak terbukti.
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Kolom Kanan: Pihak Tergugat */}

@@ -553,6 +553,7 @@ async function initDb() {
 
   // Court Cases: Live Room & Presence Tracking
   await safeAddColumn('court_cases', 'plaintiff_user_id TEXT');
+  await safeAddColumn('court_cases', 'plaintiff_company_id TEXT');
   await safeAddColumn('court_cases', 'hearing_time TEXT DEFAULT "10:00 WIB"');
   await safeAddColumn('court_cases', 'plaintiff_present INTEGER DEFAULT 0');
   await safeAddColumn('court_cases', 'defendant_present INTEGER DEFAULT 0');

@@ -89,6 +89,7 @@ function formatCourtCase(c, messages = undefined) {
     caseType: c.case_type || 'DISPUTE',
     plaintiffName: c.plaintiff_name || 'Penggugat',
     plaintiffUserId: c.plaintiff_user_id || null,
+    plaintiffCompanyId: c.plaintiff_company_id || null,
     defendantName: c.defendant_name || 'Tergugat',
     defendantUserId: c.defendant_user_id || null,
     defendantCompanyId: c.defendant_company_id || null,
@@ -384,6 +385,13 @@ async function executeCourtVerdict(
   const alreadyDelivered = c.room_status === 'VERDICT_DELIVERED' && previouslyAwarded > 0;
 
   let plaintiffId = c.plaintiff_user_id;
+  if (!plaintiffId && c.plaintiff_company_id) {
+    const matchedComp = await query.get('SELECT owner_id FROM companies WHERE id = ?', [c.plaintiff_company_id]);
+    if (matchedComp && matchedComp.owner_id) {
+      plaintiffId = matchedComp.owner_id;
+      await query.run('UPDATE court_cases SET plaintiff_user_id = ? WHERE id = ?', [plaintiffId, caseId]);
+    }
+  }
   if (!plaintiffId && c.plaintiff_name) {
     const rawUsername = c.plaintiff_name.split('(')[0].trim();
     const matchedPl = await query.get('SELECT id FROM users WHERE LOWER(username) = LOWER(?)', [rawUsername]);
@@ -820,6 +828,16 @@ async function executeCourtVerdict(
         );
       }
     }
+    if ((c.case_type === 'DEFAMATION' || c.case_type === 'RECONVENTION') && finalStatus === 'VERDICT_APPROVED') {
+      // Pemulihan nama baik emiten & pembatalan status bermasalah / UMA jika gugatan pembelaan dikabulkan
+      const plCompId = c.plaintiff_company_id || (plaintiffId ? (await query.get('SELECT id FROM companies WHERE owner_id = ? LIMIT 1', [plaintiffId]))?.id : null);
+      if (plCompId) {
+        await query.run(
+          "UPDATE companies SET uma_flag = 0, uma_reason = NULL, suspended_at = NULL, suspend_until = NULL, suspend_reason = NULL, is_seized = 0, is_auction_ready = 0, status = 'HEALTHY' WHERE id = ?",
+          [plCompId]
+        );
+      }
+    }
   }
 
   const nowIso = new Date().toISOString();
@@ -1176,6 +1194,10 @@ class CourtJudgeBotService {
           defenseText = `Yang Mulia, Biro Hukum ${c.defendant_name} hadir dan menyerahkan rekapitulasi baki kredit serta mendukung opsi restrukturisasi yang sehat.`;
         } else if (c.case_type === 'REGULATORY') {
           defenseText = `Yang Mulia, Kuasa Hukum ${c.defendant_name} hadir menyerahkan log aktivitas perdagangan bursa untuk diperiksa secara objektif.`;
+        } else if (c.case_type === 'DEFAMATION') {
+          defenseText = `Yang Mulia Majelis Hakim, Kuasa Hukum ${c.defendant_name} hadir dan membantah tuduhan mencemarkan nama baik perseroan Penggugat (${c.plaintiff_name}). Kami siap melakukan mediasi damai atau klarifikasi publik.`;
+        } else if (c.case_type === 'RECONVENTION') {
+          defenseText = `Yang Mulia Majelis Hakim, Kuasa Hukum ${c.defendant_name} hadir memberikan tanggapan atas gugatan balik rekonvensi dan menyerahkan putusan objektif kepada Majelis Hakim.`;
         } else if (linkedDeed) {
           const isDeedFulfilled = linkedDeed.status === 'COMPLETED' || String(linkedDeed.status || '').startsWith('LUNAS');
           if (isDeedFulfilled) {
@@ -1302,6 +1324,16 @@ class CourtJudgeBotService {
         customAwardedAmount = Math.min(rawClaim || 25000000, 50000000);
         verdictNotes = `✅ LAPORAN PENGAWASAN BURSA DIKABULKAN (APPROVED): ${BOT_JUDGE_NAME} mengesahkan temuan kepatuhan bursa terhadap ${c.defendant_name} dan mencairkan insentif pelapor sebesar IB ${customAwardedAmount.toLocaleString('id-ID')}.`;
       }
+    } else if (c.case_type === 'DEFAMATION') {
+      verdictStatus = 'VERDICT_APPROVED';
+      verdictType = 'APPROVED_PLAINTIFF_WIN';
+      customAwardedAmount = Math.min(rawClaim || 50000000, 250000000);
+      verdictNotes = `✅ GUGATAN PENCEMARAN NAMA BAIK DIKABULKAN (APPROVED): ${BOT_JUDGE_NAME} menyatakan tuduhan terhadap ${c.plaintiff_name} TIDAK TERBUKTI dan merugikan reputasi saham. Memerintahkan Tergugat (${c.defendant_name}) membayar ganti rugi pemulihan reputasi sebesar IB ${customAwardedAmount.toLocaleString('id-ID')} kepada Penggugat serta merehabilitasi nama baik perseroan.`;
+    } else if (c.case_type === 'RECONVENTION') {
+      verdictStatus = 'VERDICT_APPROVED';
+      verdictType = 'APPROVED_PLAINTIFF_WIN';
+      customAwardedAmount = Math.min(rawClaim || 50000000, 250000000);
+      verdictNotes = `✅ GUGATAN BALASAN RECONVENTION DIKABULKAN (APPROVED): ${BOT_JUDGE_NAME} menetapkan bahwa perkara yang dialamatkan kepada ${c.plaintiff_name} adalah TIDAK BERDASAR & TIDAK TERBUKTI. Memerintahkan Tergugat (${c.defendant_name}) membayar kompensasi ganti rugi immaterial & biaya perkara sebesar IB ${customAwardedAmount.toLocaleString('id-ID')} kepada Penggugat.`;
     } else {
       // DISPUTE (Sengketa Saham / Wanprestasi Akta)
       if (!linkedDeed && rawClaim > 50000000000) {

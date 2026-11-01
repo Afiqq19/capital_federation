@@ -2479,6 +2479,7 @@ app.post('/api/court/file-case', async (req, res) => {
     const {
       plaintiffName,
       plaintiffUserId,
+      plaintiffCompanyId,
       defendantName,
       defendantUserId,
       defendantCompanyId,
@@ -2496,9 +2497,33 @@ app.post('/api/court/file-case', async (req, res) => {
       return res.status(400).json({ error: 'Data penggugat, tergugat, dan pokok perkara wajib diisi' });
     }
 
+    // Auto-resolve plaintiff_user_id & plaintiff_company_id jika belum diisi
+    let resolvedPlUserId = plaintiffUserId || null;
+    let resolvedPlCompId = plaintiffCompanyId || null;
+    const cleanPl = String(plaintiffName).trim();
+    if (!resolvedPlUserId && cleanPl) {
+      const matchedUser = await query.get(
+        'SELECT id FROM users WHERE LOWER(username) = LOWER(?) OR LOWER(pt_name) = LOWER(?) LIMIT 1',
+        [cleanPl, cleanPl]
+      );
+      if (matchedUser) resolvedPlUserId = matchedUser.id;
+    }
+    if (!resolvedPlCompId && cleanPl) {
+      const matchedComp = await query.get(
+        'SELECT id, owner_id FROM companies WHERE LOWER(symbol) = LOWER(?) OR LOWER(name) LIKE LOWER(?) LIMIT 1',
+        [cleanPl, `%${cleanPl}%`]
+      );
+      if (matchedComp) {
+        resolvedPlCompId = matchedComp.id;
+        if (!resolvedPlUserId && matchedComp.owner_id) {
+          resolvedPlUserId = matchedComp.owner_id;
+        }
+      }
+    }
+
     // Biaya pendaftaran perkara IB 250.000 jika diajukan oleh user pemain
-    if (plaintiffUserId) {
-      const plUser = await query.get('SELECT * FROM users WHERE id = ?', [plaintiffUserId]);
+    if (resolvedPlUserId) {
+      const plUser = await query.get('SELECT * FROM users WHERE id = ?', [resolvedPlUserId]);
       if (plUser) {
         const courtFee = 250000;
         if (plUser.balance_ib < courtFee) {
@@ -2548,7 +2573,12 @@ app.post('/api/court/file-case', async (req, res) => {
       }
     }
 
-    const typeCode = caseType === 'BANKRUPTCY' ? 'Pailit' : (caseType === 'DISPUTE' ? 'Sengketa' : 'Bursa');
+    const typeCode =
+      caseType === 'BANKRUPTCY' ? 'Pailit'
+      : caseType === 'DISPUTE' ? 'Sengketa'
+      : caseType === 'DEFAMATION' ? 'Reputasi'
+      : caseType === 'RECONVENTION' ? 'Rekonvensi'
+      : 'Bursa';
     const countRow = await query.get('SELECT COUNT(*) as count FROM court_cases');
     let caseSeq = (countRow?.count || 0) + 1;
     let caseNumber = '';
@@ -2568,16 +2598,32 @@ app.post('/api/court/file-case', async (req, res) => {
 
     await query.run(
       `INSERT INTO court_cases (
-        id, case_number, case_type, title, plaintiff_name, plaintiff_user_id,
+        id, case_number, case_type, title, plaintiff_name, plaintiff_user_id, plaintiff_company_id,
         defendant_name, defendant_user_id, defendant_company_id, claim_amount_ib,
         court_hearing_date, hearing_time, court_room_name, target_asset_description,
         status, verdict_notes, plaintiff_present, room_status, bot_stage, bot_next_action_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'IN_TRIAL', ?, ?, 'WAITING_PRESENCE', 0, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'IN_TRIAL', ?, ?, 'WAITING_PRESENCE', 0, ?)`,
       [
         caseId,
         caseNumber,
         caseType || 'DISPUTE',
         title,
+        plaintiffName,
+        resolvedPlUserId,
+        resolvedPlCompId,
+        defendantName,
+        resolvedDefUserId,
+        resolvedDefCompId,
+        Number(claimAmountIb) || 0.0,
+        hearingSchedule,
+        timeVal,
+        roomName,
+        targetAsset,
+        notes || 'Berkas perkara telah diterima Panitera PNAF. Menunggu pemeriksaan Majelis Hakim.',
+        resolvedPlUserId ? 1 : 0,
+        nextBotAt,
+      ]
+    );
         plaintiffName,
         plaintiffUserId || null,
         defendantName,
