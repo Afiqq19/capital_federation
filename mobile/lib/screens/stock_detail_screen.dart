@@ -8,6 +8,7 @@ import '../services/socket_service.dart';
 import '../utils/formatters.dart';
 import '../widgets/trading_modal.dart';
 import '../widgets/takeover_modal_sheet.dart';
+import '../features/corporate_deals/widgets/p2p_negotiation_sheet.dart';
 
 class StockDetailScreen extends StatefulWidget {
   final CompanyModel company;
@@ -2745,6 +2746,13 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
     final topShareholder = shareholders.isNotEmpty ? shareholders.first : null;
     final topPct = (topShareholder?['percentage'] as num?)?.toDouble() ?? 51.0;
     final bool hasMajority = topPct >= 50.0;
+    final user = provider.user;
+    final bool isCompanyOwner = user != null && (
+      (c.ownerId != null && c.ownerId == user.id) ||
+      (c.ownerUsername != null && c.ownerUsername == user.username) ||
+      (user.ptName.isNotEmpty && (c.name.toLowerCase() == user.ptName.toLowerCase() || c.name.toLowerCase().contains(user.ptName.toLowerCase()))) ||
+      (user.ptSymbol.isNotEmpty && c.symbol.toUpperCase() == user.ptSymbol.toUpperCase())
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -3006,50 +3014,121 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
         }),
         const SizedBox(height: 10),
 
-        // 3. Card Panduan Akuisisi / M&A Tender Offer
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1E1B4B).withValues(alpha: 0.4),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: const Color(0xFF6366F1).withValues(alpha: 0.35)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Row(
-                children: [
-                  Icon(Icons.shield_outlined, color: Color(0xFFA5B4FC), size: 16),
-                  SizedBox(width: 6),
-                  Text(
-                    'Regulasi Hak Pengendali & RUPS (Statuta IPMC)',
-                    style: TextStyle(color: Color(0xFFA5B4FC), fontSize: 11, fontWeight: FontWeight.bold),
-                  ),
-                ],
+        // 3. Card Panduan Akuisisi / Status Pengendali Sah
+        if (isCompanyOwner) ...[
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF064E3B), Color(0xFF0F172A)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
-              const SizedBox(height: 4),
-              const Text(
-                'Investor yang memiliki >= 51.0% saham memiliki hak pengendali penuh atas perseroan, berhak menetapkan pembagian dividen, dan memegang kendali korporasi. Untuk mengambil alih saham pendiri ini, Anda dapat mengajukan Tender Offer di Bursa Negosiasi (P2P).',
-                style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 10.5, height: 1.35),
-              ),
-              const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF4F46E5),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  ),
-                  icon: const Icon(Icons.handshake_rounded, size: 16),
-                  label: const Text('AKUISISI PERSEROAN', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, letterSpacing: 0.3)),
-                  onPressed: () => showTakeoverModalSheet(context, c),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFF10B981), width: 1.2),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.verified_user_rounded, color: Color(0xFF34D399), size: 18),
+                    ),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'PENGENDALI TERVERIFIKASI (KONSORSIUM ANDA)',
+                        style: TextStyle(color: Color(0xFF34D399), fontSize: 11, fontWeight: FontWeight.w900),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
+                const SizedBox(height: 6),
+                Text(
+                  'Perseroan ${c.name} (${c.symbol}) berada di bawah hak kepemilikan dan kendali langsung akun Anda (@${user.username}). Anda memegang hak suara pengendali penuh di RUPS.',
+                  style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 10.5, height: 1.35),
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFFFBBF24),
+                      side: const BorderSide(color: Color(0xFFF59E0B)),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    icon: const Icon(Icons.storefront_rounded, size: 16),
+                    label: const Text('JUAL / DIVESTASI SAHAM DI BURSA NEGOSIASI (P2P)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                    onPressed: () {
+                      final entityMap = {
+                        'id': c.id,
+                        'name': c.name,
+                        'symbol': c.symbol,
+                        'sector': c.sector,
+                        'currentPrice': c.currentPrice,
+                        'totalShares': c.totalShares,
+                        'isIpo': c.isIpo,
+                        'companyBalance': user.companyBalanceIb,
+                      };
+                      P2PNegotiationSheet.show(context, entityMap);
+                    },
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
+        ] else ...[
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E1B4B).withValues(alpha: 0.4),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFF6366F1).withValues(alpha: 0.35)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.shield_outlined, color: Color(0xFFA5B4FC), size: 16),
+                    SizedBox(width: 6),
+                    Text(
+                      'Regulasi Hak Pengendali & RUPS (Statuta IPMC)',
+                      style: TextStyle(color: Color(0xFFA5B4FC), fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Investor yang memiliki >= 51.0% saham memiliki hak pengendali penuh atas perseroan, berhak menetapkan pembagian dividen, dan memegang kendali korporasi. Untuk mengambil alih saham pendiri ini, Anda dapat mengajukan Tender Offer di Bursa Negosiasi (P2P).',
+                  style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 10.5, height: 1.35),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF4F46E5),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    icon: const Icon(Icons.handshake_rounded, size: 16),
+                    label: const Text('AKUISISI PERSEROAN', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, letterSpacing: 0.3)),
+                    onPressed: () => showTakeoverModalSheet(context, c),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ],
     );
   }

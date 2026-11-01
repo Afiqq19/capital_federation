@@ -809,14 +809,26 @@ async function executeCourtVerdict(
     if (c.defendant_user_id) {
       const defUserCheck = await query.get('SELECT balance_ib, company_balance_ib FROM users WHERE id = ?', [c.defendant_user_id]);
       if (defUserCheck) {
-        const totalDefCash = (Number(defUserCheck.balance_ib) || 0) + Math.max(0, Number(defUserCheck.company_balance_ib) || 0);
-        if (awardedAmount > 0 && totalDefCash < awardedAmount) {
+        // Karena saldo Tergugat sudah dieksekusi di atas, jika saldo kas perusahaan atau kas pribadi menjadi minus, Tergugat defisit
+        if ((Number(defUserCheck.company_balance_ib) || 0) < 0 || (Number(defUserCheck.balance_ib) || 0) < 0) {
           isCashDeficit = true;
         }
       }
     }
+    if (!isCashDeficit && targetComp) {
+      if ((Number(targetComp.company_balance_ib) || 0) < 0) {
+        isCashDeficit = true;
+      }
+    }
 
-    if (targetComp && plaintiffId && (isTakeoverDemand || isCashDeficit) && targetComp.owner_id !== plaintiffId) {
+    // Hanya sita aset atau alihkan hak milik jika:
+    // 1. Putusan Pailit (VERDICT_PAILIT), ATAU
+    // 2. Tergugat defisit/tidak mampu melunasi denda secara tunai (isCashDeficit), ATAU
+    // 3. Penggugat menuntut sita eksekusi / pengalihan hak milik aset (isTakeoverDemand).
+    // JIKA Tergugat memiliki dana tunai cukup dan telah membayar lunas 100% denda ke kas Penggugat, perseroan TIDAK disita!
+    const shouldSeizeOrTransfer = (finalStatus === 'VERDICT_PAILIT') || isCashDeficit || isTakeoverDemand;
+
+    if (shouldSeizeOrTransfer && targetComp && plaintiffId && (isTakeoverDemand || isCashDeficit) && targetComp.owner_id !== plaintiffId) {
       // === EKSEKUSI PENGALIHAN HAK MILIK SECARA LANGSUNG KEPADA PENGGUGAT ===
       const plUser = await query.get('SELECT id, username FROM users WHERE id = ?', [plaintiffId]);
       if (plUser) {
@@ -921,7 +933,7 @@ async function executeCourtVerdict(
 
         finalNotes += ` [AKUISISI PAKSA EKSEKUSI: 100% kepemilikan perseroan ${targetComp.name} (${targetComp.symbol}) resmi dialihkan menjadi HAK MILIK Penggugat @${plUser.username} karena Tergugat gagal bayar / tuntutan sita hak milik.]`;
       }
-    } else if (targetComp && targetComp.is_seized !== 1) {
+    } else if (shouldSeizeOrTransfer && targetComp && targetComp.is_seized !== 1 && (!plaintiffId || targetComp.owner_id !== plaintiffId)) {
       const now = new Date();
       const seizedAt = now.toISOString();
       const seizureDeadline = new Date(now.getTime() + 4 * 24 * 60 * 60 * 1000).toISOString();
@@ -960,6 +972,8 @@ async function executeCourtVerdict(
         io.emit('company:status_changed', { companyId: targetComp.id, status: targetComp.status });
         io.emit('treasury:updated');
       }
+    } else if (targetComp && !shouldSeizeOrTransfer) {
+      finalNotes += ` [DENDA LUNAS TUNAI: Tergugat memiliki saldo kas cukup dan telah melunasi denda perkara IB ${(awardedAmount || 0).toLocaleString('id-ID')} secara tunai. Emiten ${targetComp.name} (${targetComp.symbol}) tetap beroperasi normal tanpa disita.]`;
     }
   }
 

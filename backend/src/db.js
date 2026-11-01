@@ -1430,6 +1430,33 @@ async function healRealPlayerCompanies() {
 
     // 6. Tetapkan VIP resmi untuk akun utama Bapak (msyafiq19)
     await query.run(`UPDATE users SET role = 'VIP' WHERE username = 'msyafiq19'`);
+
+    // 7. Auto-Heal Status Perusahaan & User: Pulihkan emiten yang memiliki Saldo Kas Positif (> 0)
+    // Mengatasi kasus emiten seperti ABSA yang kasnya surplus miliaran/triliunan tetapi masih tertinggal flag 'Insolvensi'
+    await query.run(`
+      UPDATE companies 
+      SET is_seized = 0, 
+          is_auction_ready = 0, 
+          seize_reason = NULL, 
+          seized_by = NULL,
+          seized_at = NULL,
+          seizure_deadline = NULL,
+          status = 'HEALTHY' 
+      WHERE company_balance_ib > 0 
+        AND (status = 'BANKRUPT' OR is_seized = 1) 
+        AND (
+          seize_reason LIKE '%Insolvensi%' 
+          OR seize_reason LIKE '%Likuiditas%' 
+          OR seize_reason LIKE '%Defisit%' 
+          OR seize_reason IS NULL
+        )
+    `);
+
+    await query.run(`
+      UPDATE users 
+      SET pt_status = 'HEALTHY' 
+      WHERE company_balance_ib > 0 AND pt_status = 'BANKRUPT'
+    `);
   } catch (healErr) {
     console.error('Auto-healing error (non-fatal):', healErr.message);
   }

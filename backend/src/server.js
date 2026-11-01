@@ -2505,7 +2505,20 @@ app.post('/api/company/negotiation/deal', async (req, res) => {
       // Jika pembeli memiliki > 50%, ini adalah AKUISISI SAH YANG DISEPAKATI!
       if (newBuyerPct > 50.0 && comp.owner_id !== buyer.id) {
         isTakeover = true;
-        await query.run('UPDATE companies SET owner_id = ?, is_acquired = 1 WHERE id = ?', [buyer.id, targetCompId]);
+        await query.run(`
+          UPDATE companies 
+          SET owner_id = ?, 
+              is_acquired = 1, 
+              status = 'HEALTHY', 
+              is_seized = 0, 
+              is_auction_ready = 0, 
+              seize_reason = NULL, 
+              seized_by = NULL, 
+              seized_at = NULL, 
+              seizure_deadline = NULL 
+          WHERE id = ?`,
+          [buyer.id, targetCompId]
+        );
       }
     } else {
       // Global Investors / Secondary Offering: Tambahkan ke circulating shares
@@ -5516,7 +5529,12 @@ async function executeApprovedAcquisition({
           dividend_rate = 0.05,
           fundamental_score = CASE WHEN fundamental_score < 78 THEN 82.0 ELSE fundamental_score END,
           uma_flag = 0,
-          is_seized = 0
+          is_seized = 0,
+          is_auction_ready = 0,
+          seize_reason = NULL,
+          seized_by = NULL,
+          seized_at = NULL,
+          seizure_deadline = NULL
       WHERE id = ?
     `, [userId, buyerUser.username, companyId]);
   } else {
@@ -5527,7 +5545,12 @@ async function executeApprovedAcquisition({
           dividend_rate = 0.05,
           fundamental_score = CASE WHEN fundamental_score < 75 THEN 80.0 ELSE fundamental_score END,
           uma_flag = 0,
-          is_seized = 0
+          is_seized = 0,
+          is_auction_ready = 0,
+          seize_reason = NULL,
+          seized_by = NULL,
+          seized_at = NULL,
+          seizure_deadline = NULL
       WHERE id = ?
     `, [companyId]);
   }
@@ -7314,11 +7337,12 @@ app.get('/api/admin/companies', async (req, res) => {
                WHEN c.is_acquired = 1 THEN 'AKUISISI'
                ELSE 'FOUNDER'
              END as ownership_category,
-             COALESCE(sh.percentage, 100.0) as founder_pct,
+             COALESCE(MAX(sh.percentage), 100.0) as founder_pct,
              (c.current_price * c.total_shares) as market_cap
       FROM companies c
       LEFT JOIN users u ON c.owner_id = u.id
       LEFT JOIN company_shareholders sh ON c.id = sh.company_id AND sh.holder_type = 'FOUNDER'
+      GROUP BY c.id
       ORDER BY market_cap DESC
     `);
     res.json(list);
@@ -8043,18 +8067,18 @@ const bundledPublicApkPath = path.join(__dirname, '../public/downloads/Capital-F
 const directPublicApkPath = path.join(__dirname, '../public/downloads/capital-federation.apk');
 const localBuiltApkPath = path.join(__dirname, '../../mobile/build/app/outputs/flutter-apk/app-release.apk');
 
-const LATEST_RELEASE_NOTES_V199 = 'v1.9.9 (Build 42): Perbaikan Tuntas Ketuk Palu Putusan Sidang PNAF, Sinkronisasi Nama Founder/Owner Emiten Asli & Realistis (Bebas @Bot/Publik), Panduan Edukasi 4 Amar Putusan Sidang (Approved, PKPU, Pailit, Tolak), serta Filter Pencarian Perusahaan Cerdas.';
+const LATEST_RELEASE_NOTES_V199 = 'v1.9.9 (Build 43): Pemulihan Aset & Bebas Denda Sitaan bagi Pemenang Sidang Penggugat (100% Gratis), Auto-Heal Kas Perseroan Positif (ABSA dll), Proteksi Self-Takeover Perusahaan Sendiri di Cap Table & Insider, Eliminasi Duplikasi Emiten di Web Admin, serta Eksekusi Denda Tunai Tanpa Sita.';
 
 async function getApkSettingsMap() {
   const defaults = {
     apk_version: '1.9.9',
-    apk_build_number: '42',
+    apk_build_number: '43',
     apk_min_android: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
     apk_file_size_mb: '57.1 MB',
     apk_release_notes: LATEST_RELEASE_NOTES_V199,
     apk_external_url: '',
-    apk_download_count: '468',
-    apk_sha256: '21e789b337886983d4ad3106cda5b799e4531830b894c92bcbc4309fd6496a09',
+    apk_download_count: '512',
+    apk_sha256: '7d88d7c7869edb8e282fcd28f461451429e1cc57dac20ca2daaf02ccd3ff9cdf',
     apk_updated_at: new Date().toISOString(),
   };
   try {
@@ -8064,11 +8088,11 @@ async function getApkSettingsMap() {
         defaults[r.key] = String(r.value);
       }
     }
-    if (parseInt(defaults.apk_build_number || '0', 10) < 42 || defaults.apk_sha256 !== '21e789b337886983d4ad3106cda5b799e4531830b894c92bcbc4309fd6496a09') {
+    if (parseInt(defaults.apk_build_number || '0', 10) < 43 || defaults.apk_sha256 !== '7d88d7c7869edb8e282fcd28f461451429e1cc57dac20ca2daaf02ccd3ff9cdf') {
       defaults.apk_version = '1.9.9';
-      defaults.apk_build_number = '42';
+      defaults.apk_build_number = '43';
       defaults.apk_file_size_mb = '57.1 MB';
-      defaults.apk_sha256 = '21e789b337886983d4ad3106cda5b799e4531830b894c92bcbc4309fd6496a09';
+      defaults.apk_sha256 = '7d88d7c7869edb8e282fcd28f461451429e1cc57dac20ca2daaf02ccd3ff9cdf';
       defaults.apk_release_notes = LATEST_RELEASE_NOTES_V199;
       defaults.apk_updated_at = new Date().toISOString();
       // Persist directly to central_bank_settings so /api/settings, /api/admin/settings & /api/admin/overview match 100%!

@@ -1017,14 +1017,16 @@ class _HomeTabState extends State<HomeTab> {
         reasonUpper.contains('BSK');
 
     final bool isDeficitBankruptcy = companyBalance <= -50000000.0;
-    final bool isCourtCaseOrSeized = isSeized ||
+    final bool isStaleInsolvency = companyBalance > 0 &&
+        (reasonUpper.contains('INSOLVENSI') || reasonUpper.contains('LIKUIDITAS') || reasonUpper.contains('DEFISIT'));
+
+    final bool isCourtCaseOrSeized = (isSeized ||
         isCourtSeizure ||
         isBankCreditSeizure ||
-        (seizeReason != null && seizeReason.isNotEmpty) ||
-        (activeEntity['status'] == 'CRITICAL' && isSeized);
+        (seizeReason != null && seizeReason.isNotEmpty && !isStaleInsolvency) ||
+        (activeEntity['status'] == 'CRITICAL' && isSeized)) && !isStaleInsolvency;
 
-    final bool isPailit = (reasonUpper.contains('PAILIT') && isDeficitBankruptcy) || (activeEntity['status'] == 'BANKRUPT' && isDeficitBankruptcy);
-    final bool isBankrupt = isDeficitBankruptcy || isSeized || isCourtCaseOrSeized || activeEntity['status'] == 'BANKRUPT';
+    final bool isBankrupt = isDeficitBankruptcy || (isCourtCaseOrSeized && (isCourtSeizure || isBankCreditSeizure || isSeized)) || (activeEntity['status'] == 'BANKRUPT' && isDeficitBankruptcy);
     final bool isDeficitWarning = !isBankrupt && companyBalance < 0;
     final double deficitToleranceRemaining = (50000000.0 + companyBalance).clamp(0.0, 50000000.0);
     final double deficitProgress = (companyBalance.abs() / 50000000.0).clamp(0.0, 1.0);
@@ -2735,26 +2737,31 @@ class _HomeTabState extends State<HomeTab> {
               );
             }
 
-            final double pnafFine = (data['pnafSanctionFine'] as num?)?.toDouble() ?? 100000000.0;
+            final String modalPlaintiff = data['plaintiffName']?.toString() ?? 'Komite Pengawas Bursa OPFF';
+            final String modalCaseNo = data['caseNumber']?.toString() ?? '037.9703/Pdt.Sus-Bursa/2026/PNAF';
+            final String modalTitle = data['caseTitle']?.toString() ?? 'Laporan Dugaan Manipulasi Pasar Bursa';
+            final bool isWinner = data['isOwnerPlaintiffWinner'] == true ||
+                (user.username.isNotEmpty && modalPlaintiff.toLowerCase().contains(user.username.toLowerCase())) ||
+                (user.ptName.isNotEmpty && modalPlaintiff.toLowerCase().contains(user.ptName.toLowerCase()));
+
+            final double rawPnafFine = (data['pnafSanctionFine'] as num?)?.toDouble() ?? 100000000.0;
+            final double pnafFine = isWinner ? 0.0 : rawPnafFine;
             final double bankPrincipal = (data['bankLoanPrincipal'] as num?)?.toDouble() ?? 0.0;
             final double bankInterest = (data['bankLoanInterest'] as num?)?.toDouble() ?? 0.0;
             final double totalBankDebt = (data['totalBankDebt'] as num?)?.toDouble() ?? (bankPrincipal + bankInterest);
-            final double totalCost = (data['totalRedemptionCost'] as num?)?.toDouble() ?? (pnafFine + totalBankDebt);
-            final bool canAfford = user.balanceIb >= totalCost;
-            final String modalCaseNo = data['caseNumber']?.toString() ?? '037.9703/Pdt.Sus-Bursa/2026/PNAF';
-            final String modalPlaintiff = data['plaintiffName']?.toString() ?? 'Komite Pengawas Bursa OPFF';
-            final String modalTitle = data['caseTitle']?.toString() ?? 'Laporan Dugaan Manipulasi Pasar Bursa';
+            final double totalCost = isWinner ? totalBankDebt : ((data['totalRedemptionCost'] as num?)?.toDouble() ?? (pnafFine + totalBankDebt));
+            final bool canAfford = isWinner ? true : (user.balanceIb >= totalCost);
+            bool isSubmitting = false;
 
             return StatefulBuilder(
               builder: (ctx, setModalState) {
-                bool isSubmitting = false;
 
                 return Container(
                   padding: const EdgeInsets.all(20),
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF0B1120),
-                    borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-                    border: Border(top: BorderSide(color: Color(0xFFEF4444), width: 1.5)),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0B1120),
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                    border: Border(top: BorderSide(color: isWinner ? const Color(0xFF10B981) : const Color(0xFFEF4444), width: 1.5)),
                   ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -2765,19 +2772,19 @@ class _HomeTabState extends State<HomeTab> {
                           Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFEF4444).withValues(alpha: 0.2),
+                              color: (isWinner ? const Color(0xFF10B981) : const Color(0xFFEF4444)).withValues(alpha: 0.2),
                               borderRadius: BorderRadius.circular(10),
                             ),
-                            child: const Icon(Icons.lock_open_rounded, color: Color(0xFFF87171), size: 22),
+                            child: Icon(isWinner ? Icons.verified_user_rounded : Icons.lock_open_rounded, color: isWinner ? const Color(0xFF34D399) : const Color(0xFFF87171), size: 22),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text(
-                                  'TEBUS PERUSAHAAN SITAAN',
-                                  style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w900),
+                                Text(
+                                  isWinner ? 'PULIHKAN ASET PERKARA (PEMENANG)' : 'TEBUS PERUSAHAAN SITAAN',
+                                  style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w900),
                                 ),
                                 Text(
                                   entityName,
@@ -2793,6 +2800,29 @@ class _HomeTabState extends State<HomeTab> {
                         ],
                       ),
                       const SizedBox(height: 16),
+                      if (isWinner) ...[
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF065F46).withValues(alpha: 0.35),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFF10B981), width: 1.2),
+                          ),
+                          child: const Row(
+                            children: [
+                              Icon(Icons.workspace_premium_rounded, color: Color(0xFF34D399), size: 20),
+                              SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'HAK EKSEKUSI PEMENANG GUGATAN: Anda adalah Penggugat yang memenangkan perkara ini! Amar putusan denda sidang dibebankan kepada Tergugat, BUKAN kepada Anda. Pemulihan aset ini 100% Bebas Biaya Denda Sidang (GRATIS).',
+                                  style: TextStyle(color: Color(0xFFA7F3D0), fontSize: 11, fontWeight: FontWeight.bold, height: 1.35),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
 
                       // Card Duduk Perkara & Amar Putusan Sidang
                       Container(
@@ -2857,7 +2887,10 @@ class _HomeTabState extends State<HomeTab> {
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 const Text('⚖️ Amar Putusan Sidang (Denda/Ganti Rugi)', style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 11.5)),
-                                Text(CurrencyFormatter.formatFull(pnafFine), style: const TextStyle(color: Color(0xFFFBBF24), fontSize: 12, fontWeight: FontWeight.bold)),
+                                Text(
+                                  isWinner ? 'IB 0 (Bebas - Pemenang Gugatan)' : CurrencyFormatter.formatFull(pnafFine),
+                                  style: TextStyle(color: isWinner ? const Color(0xFF34D399) : const Color(0xFFFBBF24), fontSize: 12, fontWeight: FontWeight.bold),
+                                ),
                               ],
                             ),
                             const SizedBox(height: 8),
@@ -2957,7 +2990,11 @@ class _HomeTabState extends State<HomeTab> {
                             ),
                             icon: const Icon(Icons.check_circle_rounded, size: 18),
                             label: Text(
-                              isSubmitting ? 'MEMPROSES PENEBUSAN...' : 'LUNASI & CABUT SITA SEKARANG (${CurrencyFormatter.formatCompact(totalCost)})',
+                              isSubmitting
+                                  ? 'MEMPROSES PEMULIHAN...'
+                                  : (isWinner
+                                      ? (totalCost == 0 ? 'PULIHKAN & CABUT SITA SEKARANG (GRATIS)' : 'PULIHKAN & LUNASI UTANG BANK (${CurrencyFormatter.formatCompact(totalCost)})')
+                                      : 'LUNASI & CABUT SITA SEKARANG (${CurrencyFormatter.formatCompact(totalCost)})'),
                               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
                             ),
                             onPressed: isSubmitting

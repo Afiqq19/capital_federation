@@ -457,9 +457,20 @@ module.exports = function(io) {
       const totalShares = comp.total_shares || 10000000;
       const isMajorityTransfer = pctToBuy >= 50.0 || (sharesTransferred / totalShares) >= 0.50;
       if (isMajorityTransfer) {
-        // Alihkan kepemilikan pengendali (owner_id) ke pembeli
+        // Alihkan kepemilikan pengendali (owner_id) ke pembeli & pulihkan status perseroan di bawah manajemen baru
         await query.run(
-          'UPDATE companies SET owner_id = ?, founder_name = ?, is_acquired = 1 WHERE id = ?',
+          `UPDATE companies 
+           SET owner_id = ?, 
+               founder_name = ?, 
+               is_acquired = 1, 
+               status = 'HEALTHY', 
+               is_seized = 0, 
+               is_auction_ready = 0, 
+               seize_reason = NULL, 
+               seized_by = NULL, 
+               seized_at = NULL, 
+               seizure_deadline = NULL 
+           WHERE id = ?`,
           [buyer.id, buyer.username, comp.id]
         );
 

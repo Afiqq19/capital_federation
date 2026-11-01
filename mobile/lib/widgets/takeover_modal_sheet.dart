@@ -29,6 +29,13 @@ void showTakeoverModalSheet(
   final personalBal = user?.balanceIb ?? 0.0;
   final companyBal = user?.companyBalanceIb ?? 0.0;
 
+  final bool isSelfTakeover = user != null && (
+    (company.ownerId != null && company.ownerId == user.id) ||
+    (company.ownerUsername != null && company.ownerUsername == user.username) ||
+    (user.ptName.isNotEmpty && company.name.toLowerCase() == user.ptName.toLowerCase()) ||
+    (user.ptSymbol.isNotEmpty && company.symbol.toUpperCase() == user.ptSymbol.toUpperCase())
+  );
+
   if (personalBal < (totalValuation * 0.51 * 0.70) && companyBal >= (totalValuation * 0.51 * 0.70)) {
     paymentSource = 'COMPANY';
   }
@@ -171,6 +178,29 @@ void showTakeoverModalSheet(
                     ],
                   ),
                 ),
+                if (isSelfTakeover) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF7F1D1D).withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFEF4444)),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.warning_amber_rounded, color: Color(0xFFF87171), size: 20),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'PERINGATAN: Anda sudah menjadi Pemilik Pengendali perseroan ini. Anda tidak dapat mengakuisisi perusahaan milik sendiri. Gunakan menu Penjualan Saham untuk melepas kepemilikan.',
+                            style: TextStyle(color: Color(0xFFFCA5A5), fontSize: 10.5, height: 1.3),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 16),
 
                 // Opsi Penawaran (Discount / Premium)
@@ -331,6 +361,29 @@ void showTakeoverModalSheet(
                     ],
                   ),
                 ),
+                if (isSelfTakeover) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF7F1D1D).withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFEF4444)),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.warning_amber_rounded, color: Color(0xFFF87171), size: 20),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'PERINGATAN: Anda sudah menjadi Pemilik Pengendali perseroan ini. Anda tidak dapat mengakuisisi perusahaan milik sendiri. Gunakan menu Penjualan Saham untuk melepas kepemilikan.',
+                            style: TextStyle(color: Color(0xFFFCA5A5), fontSize: 10.5, height: 1.3),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 16),
 
                 // Tombol Submit
@@ -338,7 +391,7 @@ void showTakeoverModalSheet(
                   width: double.infinity,
                   height: 44,
                   child: ElevatedButton.icon(
-                    onPressed: (!canAfford || isSubmitting)
+                    onPressed: (!canAfford || isSubmitting || isSelfTakeover)
                         ? null
                         : () async {
                             setSheetState(() => isSubmitting = true);
@@ -376,15 +429,17 @@ void showTakeoverModalSheet(
                             }
                           },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: canAfford ? const Color(0xFFF59E0B) : const Color(0xFF334155),
+                      backgroundColor: (canAfford && !isSelfTakeover) ? const Color(0xFFF59E0B) : const Color(0xFF334155),
                       foregroundColor: const Color(0xFF451A03),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
                     icon: isSubmitting
                         ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
-                        : const Icon(Icons.verified_rounded, size: 18),
+                        : Icon(isSelfTakeover ? Icons.block_rounded : Icons.verified_rounded, size: 18),
                     label: Text(
-                      isSubmitting ? 'MEMPROSES KONTRAK NOTARIAT...' : 'AJUKAN PERSETUJUAN PENDIRI & AKUISISI',
+                      isSelfTakeover
+                          ? 'ANDA ADALAH PEMILIK PERSEROAN INI'
+                          : (isSubmitting ? 'MEMPROSES KONTRAK NOTARIAT...' : 'AJUKAN PERSETUJUAN PENDIRI & AKUISISI'),
                       style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
                     ),
                   ),
