@@ -7799,7 +7799,7 @@ async function getApkSettingsMap() {
     apk_release_notes: LATEST_RELEASE_NOTES_V197,
     apk_external_url: '',
     apk_download_count: '385',
-    apk_sha256: '5b252ad32572f7de25a93f67da37f6a6c53a9a47350878a0dcb2ed6736f9423e',
+    apk_sha256: '3ca031d34fdcf8dfc97a6de28f0fd38051c3342a9d75f4793a3377a9b2b69687',
     apk_updated_at: new Date().toISOString(),
   };
   try {
@@ -7809,11 +7809,11 @@ async function getApkSettingsMap() {
         defaults[r.key] = String(r.value);
       }
     }
-    if (parseInt(defaults.apk_build_number || '0', 10) < 35) {
+    if (parseInt(defaults.apk_build_number || '0', 10) < 35 || defaults.apk_sha256 !== '3ca031d34fdcf8dfc97a6de28f0fd38051c3342a9d75f4793a3377a9b2b69687') {
       defaults.apk_version = '1.9.7';
       defaults.apk_build_number = '35';
       defaults.apk_file_size_mb = '56.9 MB';
-      defaults.apk_sha256 = '5b252ad32572f7de25a93f67da37f6a6c53a9a47350878a0dcb2ed6736f9423e';
+      defaults.apk_sha256 = '3ca031d34fdcf8dfc97a6de28f0fd38051c3342a9d75f4793a3377a9b2b69687';
       defaults.apk_release_notes = LATEST_RELEASE_NOTES_V197;
       defaults.apk_updated_at = new Date().toISOString();
       // Persist directly to central_bank_settings so /api/settings, /api/admin/settings & /api/admin/overview match 100%!

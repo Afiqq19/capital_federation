@@ -962,8 +962,12 @@ class _HomeTabState extends State<HomeTab> {
     final bool isEntityIpo = isPrimary ? (user.isIpo || activeEntity['isIpo'] == true || activeEntity['isIpo'] == 1) : (activeEntity['isIpo'] == true || activeEntity['isIpo'] == 1);
     final bool isSeized = activeEntity['isSeized'] == true;
     final String? seizeReason = activeEntity['seizeReason']?.toString();
+    final bool isCourtCaseOrSeized = isSeized ||
+        (seizeReason != null && seizeReason.isNotEmpty) ||
+        (activeEntity['status'] == 'CRITICAL' && isSeized) ||
+        (activeEntity['status'] == 'BANKRUPT' && (seizeReason != null || isSeized));
     final bool isPailit = (seizeReason != null && seizeReason.toUpperCase().contains('PAILIT')) || activeEntity['status'] == 'BANKRUPT';
-    final bool isBankrupt = companyBalance <= -50000000.0 || isPailit;
+    final bool isBankrupt = companyBalance <= -50000000.0 || isPailit || isCourtCaseOrSeized;
     final bool isDeficitWarning = !isBankrupt && companyBalance < 0;
     final double deficitToleranceRemaining = (50000000.0 + companyBalance).clamp(0.0, 50000000.0);
     final double deficitProgress = (companyBalance.abs() / 50000000.0).clamp(0.0, 1.0);
@@ -1018,13 +1022,17 @@ class _HomeTabState extends State<HomeTab> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'PERSEROAN DITUTUP BANGKRUT (PAILIT)',
-                            style: TextStyle(color: Color(0xFFFCA5A5), fontSize: 13, fontWeight: FontWeight.w900, letterSpacing: 0.4),
+                          Text(
+                            isCourtCaseOrSeized
+                                ? 'PERSEROAN DIBEKUKAN / DISITA PNAF'
+                                : 'PERSEROAN DITUTUP BANGKRUT (PAILIT)',
+                            style: const TextStyle(color: Color(0xFFFCA5A5), fontSize: 13, fontWeight: FontWeight.w900, letterSpacing: 0.4),
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            'Batas Defisit Maksimal (-IB 50.000.000) Terlampaui',
+                            isCourtCaseOrSeized
+                                ? (seizeReason != null && seizeReason.isNotEmpty ? seizeReason : 'Eksekusi Sanksi Ganti Rugi Putusan Pengadilan PNAF')
+                                : 'Batas Defisit Maksimal (-IB 50.000.000) Terlampaui',
                             style: TextStyle(color: Colors.red.shade200, fontSize: 11, fontWeight: FontWeight.w600),
                           ),
                         ],
@@ -1067,9 +1075,11 @@ class _HomeTabState extends State<HomeTab> {
                   ),
                 ),
                 const SizedBox(height: 10),
-                const Text(
-                  '⚠️ Beban operasional dan gaji telah menumpuk hingga batas toleransi kebangkrutan. Operasional dan pemotongan otomatis dibekukan agar tidak menumpuk utang. Segera suntikkan modal talangan dari kas pribadi atau ajukan pinjaman ke Bank BCF untuk membangkitkan perusahaan.',
-                  style: TextStyle(color: Color(0xFFE2E8F0), fontSize: 11, height: 1.4),
+                Text(
+                  isCourtCaseOrSeized
+                      ? '⚖️ STATUS SITA / KASUS HUKUM: Kas perseroan mengalami defisit akibat eksekusi putusan Pengadilan Niaga PNAF / denda perkara hukum (${seizeReason ?? 'Sanksi Persidangan'}). Operasional perseroan dibekukan oleh Pengadilan. Segera suntikkan modal talangan dari kas pribadi untuk menutupi defisit dan memulihkan perusahaan!'
+                      : '⚠️ DEFISIT OPERASIONAL: Beban operasional dan gaji perseroan telah melampaui batas toleransi kebangkrutan (-IB 50 Juta). Operasional dan pemotongan otomatis dibekukan agar tidak menumpuk utang. Segera suntikkan modal talangan dari kas pribadi atau ajukan pinjaman ke Bank BCF untuk membangkitkan perusahaan.',
+                  style: const TextStyle(color: Color(0xFFE2E8F0), fontSize: 11, height: 1.4),
                 ),
                 const SizedBox(height: 14),
                 Row(

@@ -85,21 +85,67 @@ export default function CourtOversightPage() {
   const [executionClauseType, setExecutionClauseType] = useState('TAKEOVER_PLAINTIFF');
   const [submittingNewCase, setSubmittingNewCase] = useState(false);
 
+  const syncTitleAndDescription = (type, plComp = selectedPlaintiffComp, defComp = selectedDefComp) => {
+    const plLabel = plComp ? plComp.symbol : '';
+    const defLabel = defComp ? `${defComp.name} (${defComp.symbol})` : '';
+
+    if (type === 'DEFAMATION') {
+      const targetLabel = defLabel ? `terhadap ${defLabel}` : (plLabel ? `Korporasi ${plLabel}` : '');
+      setNewTitle(`Gugatan Pencemaran Nama Baik & Kerugian Reputasi ${targetLabel}`.trim());
+      setNewCaseDescription(
+        `Tergugat dengan sengaja menyebarkan fitnah, tuduhan palsu, dan pencemaran nama baik yang merusak reputasi pasar saham ${
+          plComp ? plComp.name : 'Penggugat'
+        }. Menuntut pemulihan nama baik dan denda ganti rugi. Apabila kas Tergugat tidak mencukupi atau tidak membayar, 100% kepemilikan perseroan Tergugat wajib dieksekusi dan dialihkan menjadi HAK MILIK Penggugat.`
+      );
+      setExecutionClauseType('TAKEOVER_PLAINTIFF');
+      setNewTargetAsset(
+        `100% Saham & Hak Milik Perseroan ${
+          defComp ? defComp.name : 'Tergugat'
+        } Dialihkan Jadi Milik Penggugat jika Duit Kurang`
+      );
+    } else if (type === 'RECONVENTION') {
+      const targetLabel = defLabel ? `terhadap ${defLabel}` : (plLabel ? `Korporasi ${plLabel}` : '');
+      setNewTitle(`Gugatan Rekonvensi atas Perkara Tidak Terbukti & Tuduhan Fiktif ${targetLabel}`.trim());
+      setNewCaseDescription(
+        `Gugatan Rekonvensi (Tuntutan Balik): Gugatan dan tuduhan yang diajukan oleh Tergugat dalam perkara sebelumnya dinyatakan TIDAK TERBUKTI dan fiktif. Menuntut kompensasi immateriil serta pengalihan hak milik perseroan Tergugat jika denda tidak dibayar.`
+      );
+      setExecutionClauseType('TAKEOVER_PLAINTIFF');
+      setNewTargetAsset(
+        `100% Saham & Hak Milik Perseroan ${
+          defComp ? defComp.name : 'Tergugat'
+        } Dialihkan Jadi Milik Penggugat jika Duit Kurang`
+      );
+    } else if (type === 'DISPUTE') {
+      setNewTitle(`Sengketa Kepemilikan Saham & Wanprestasi Akta ${defLabel ? `atas ${defLabel}` : ''}`.trim());
+      setNewCaseDescription(
+        `Tergugat melanggar kesepakatan akta pendirian perseroan. Menuntut pengembalian status kepemilikan saham perseroan kepada Penggugat.`
+      );
+      setExecutionClauseType('TAKEOVER_PLAINTIFF');
+      setNewTargetAsset(`Pengembalian Kepemilikan 100% Saham Perseroan ${defComp ? defComp.name : 'Tergugat'}`);
+    } else if (type === 'BANKRUPTCY') {
+      setNewTitle(`Gugatan Kepailitan & Eksekusi Sita Jaminan ${defLabel ? `atas ${defLabel}` : 'atas Gagal Bayar Kredit BIF'}`.trim());
+      setNewCaseDescription(
+        'Tergugat telah gagal bayar (wanprestasi) atas fasilitas pembiayaan yang jatuh tempo. Menuntut pelunasan pokok plus denda bunga atau sita eksekusi seluruh aset perseroan ke Balai Lelang BCF.'
+      );
+      setExecutionClauseType('AUCTION_BCF');
+      setNewTargetAsset(`Saham Portofolio & Kas Perseroan ${defComp ? defComp.name : 'Tergugat'} Disita ke Lelang BCF`);
+    } else {
+      setNewTitle(`Laporan Dugaan Manipulasi Pasar Bursa & Goreng Saham ${defLabel ? defLabel : ''}`.trim());
+      setNewCaseDescription(
+        `Laporan investigasi dugaan transaksi semu, goreng saham, atau manipulasi orderbook bursa yang merugikan investor pasar modal.`
+      );
+      setExecutionClauseType('AUCTION_BCF');
+      setNewTargetAsset(`Saham Portofolio & Kas Perseroan ${defComp ? defComp.name : 'Tergugat'} Disita ke Lelang BCF`);
+    }
+  };
+
   const handleSelectPlaintiffCompany = (comp) => {
     setSelectedPlaintiffComp(comp);
     setSelectedPlaintiffUser(null);
     const ownerLabel = comp.owner_username ? ` - @${comp.owner_username}` : '';
     const plName = `${comp.name} (${comp.symbol})${ownerLabel}`;
     setNewPlaintiff(plName);
-    if (!newTitle || newTitle.startsWith('Gugatan') || newTitle.startsWith('Sengketa') || newTitle.startsWith('Laporan') || newTitle.startsWith('Permohonan')) {
-      if (newCaseType === 'DEFAMATION') {
-        setNewTitle(`Gugatan Pencemaran Nama Baik & Kerugian Reputasi Saham ${comp.symbol}`);
-      } else if (newCaseType === 'RECONVENTION') {
-        setNewTitle(`Gugatan Rekonvensi Pembelaan & Pemulihan Nama Baik atas ${comp.name} (${comp.symbol})`);
-      } else if (newCaseType === 'DISPUTE') {
-        setNewTitle(`Sengketa Perlindungan Aset & Akta Perseroan ${comp.name} (${comp.symbol})`);
-      }
-    }
+    syncTitleAndDescription(newCaseType, comp, selectedDefComp);
     setShowPlaintiffDropdown(false);
     setPlaintiffSearchQuery('');
   };
@@ -110,13 +156,7 @@ export default function CourtOversightPage() {
     const ptLabel = u.pt_name ? ` (${u.pt_name})` : '';
     const plName = `@${u.username}${ptLabel}`;
     setNewPlaintiff(plName);
-    if (!newTitle || newTitle.startsWith('Gugatan') || newTitle.startsWith('Sengketa') || newTitle.startsWith('Laporan') || newTitle.startsWith('Permohonan')) {
-      if (newCaseType === 'DEFAMATION') {
-        setNewTitle(`Gugatan Pencemaran Nama Baik atas Tuduhan Palsu terhadap @${u.username}`);
-      } else if (newCaseType === 'RECONVENTION') {
-        setNewTitle(`Gugatan Rekonvensi & Tuntutan Kerugian Perkara Tidak Terbukti atas @${u.username}`);
-      }
-    }
+    syncTitleAndDescription(newCaseType, null, selectedDefComp);
     setShowPlaintiffDropdown(false);
     setPlaintiffSearchQuery('');
   };
@@ -127,24 +167,7 @@ export default function CourtOversightPage() {
     const ownerLabel = comp.owner_username ? ` - @${comp.owner_username}` : '';
     const defName = `${comp.name} (${comp.symbol})${ownerLabel}`;
     setNewDefendant(defName);
-    if (executionClauseType === 'TAKEOVER_PLAINTIFF') {
-      setNewTargetAsset(`Ambil Alih Kepemilikan & Seluruh Saham Perseroan ${comp.name} (${comp.symbol}) Menjadi HAK MILIK Penggugat jika kas tidak mencukupi`);
-    } else {
-      setNewTargetAsset(`Saham Portofolio & Kas Perseroan ${comp.name} (${comp.symbol})`);
-    }
-    if (!newTitle || newTitle.startsWith('Gugatan') || newTitle.startsWith('Sengketa') || newTitle.startsWith('Laporan') || newTitle.startsWith('Permohonan')) {
-      if (newCaseType === 'BANKRUPTCY') {
-        setNewTitle(`Gugatan Kepailitan & Eksekusi Sita Jaminan atas ${comp.name} (${comp.symbol})`);
-      } else if (newCaseType === 'DISPUTE') {
-        setNewTitle(`Sengketa Kepemilikan Saham & Wanprestasi Akta atas ${comp.symbol}`);
-      } else if (newCaseType === 'DEFAMATION') {
-        setNewTitle(`Gugatan Pencemaran Nama Baik & Kerugian Reputasi terhadap ${comp.name} (${comp.symbol})`);
-      } else if (newCaseType === 'RECONVENTION') {
-        setNewTitle(`Gugatan Balasan Rekonvensi atas Perkara Fiktif ${comp.name} (${comp.symbol})`);
-      } else {
-        setNewTitle(`Laporan Dugaan Manipulasi Pasar Bursa & Goreng Saham ${comp.symbol}`);
-      }
-    }
+    syncTitleAndDescription(newCaseType, selectedPlaintiffComp, comp);
     setShowDefDropdown(false);
     setDefSearchQuery('');
   };
@@ -878,19 +901,7 @@ export default function CourtOversightPage() {
                 type="button"
                 onClick={() => {
                   setNewCaseType('DEFAMATION');
-                  setExecutionClauseType('TAKEOVER_PLAINTIFF');
-                  const compLabel = selectedPlaintiffComp ? selectedPlaintiffComp.symbol : '';
-                  setNewTitle(`Gugatan Pencemaran Nama Baik & Kerugian Reputasi Korporasi ${compLabel}`.trim());
-                  setNewCaseDescription(
-                    `Tergugat dengan sengaja menyebarkan fitnah, tuduhan palsu, dan pencemaran nama baik yang merusak reputasi pasar saham ${
-                      selectedPlaintiffComp ? selectedPlaintiffComp.name : 'Penggugat'
-                    }. Menuntut pemulihan nama baik dan denda ganti rugi. Apabila kas Tergugat tidak mencukupi atau tidak membayar, 100% kepemilikan perseroan Tergugat wajib dieksekusi dan dialihkan menjadi HAK MILIK Penggugat.`
-                  );
-                  setNewTargetAsset(
-                    `100% Saham & Hak Milik Perseroan ${
-                      selectedDefComp ? selectedDefComp.name : 'Tergugat'
-                    } Dialihkan Jadi Milik Penggugat jika Duit Kurang`
-                  );
+                  syncTitleAndDescription('DEFAMATION');
                 }}
                 className={`p-2 rounded-lg text-left text-xs font-bold border transition-all ${
                   newCaseType === 'DEFAMATION'
@@ -910,17 +921,7 @@ export default function CourtOversightPage() {
                 type="button"
                 onClick={() => {
                   setNewCaseType('RECONVENTION');
-                  setExecutionClauseType('TAKEOVER_PLAINTIFF');
-                  const compLabel = selectedPlaintiffComp ? selectedPlaintiffComp.symbol : '';
-                  setNewTitle(`Gugatan Rekonvensi atas Perkara Tidak Terbukti & Tuduhan Fiktif ${compLabel}`.trim());
-                  setNewCaseDescription(
-                    `Gugatan Rekonvensi (Tuntutan Balik): Gugatan dan tuduhan yang diajukan oleh Tergugat dalam perkara sebelumnya dinyatakan TIDAK TERBUKTI dan fiktif. Menuntut kompensasi immateriil serta pengalihan hak milik perseroan Tergugat jika denda tidak dibayar.`
-                  );
-                  setNewTargetAsset(
-                    `100% Saham & Hak Milik Perseroan ${
-                      selectedDefComp ? selectedDefComp.name : 'Tergugat'
-                    } Dialihkan Jadi Milik Penggugat jika Duit Kurang`
-                  );
+                  syncTitleAndDescription('RECONVENTION');
                 }}
                 className={`p-2 rounded-lg text-left text-xs font-bold border transition-all ${
                   newCaseType === 'RECONVENTION'
@@ -940,12 +941,7 @@ export default function CourtOversightPage() {
                 type="button"
                 onClick={() => {
                   setNewCaseType('BANKRUPTCY');
-                  setExecutionClauseType('AUCTION_BCF');
-                  setNewTitle('Gugatan Kepailitan atas Gagal Bayar Kredit BIF');
-                  setNewCaseDescription(
-                    'Tergugat telah gagal bayar (wanprestasi) atas fasilitas pembiayaan yang jatuh tempo. Menuntut pelunasan pokok plus denda bunga atau sita eksekusi seluruh aset perseroan ke Balai Lelang BCF.'
-                  );
-                  setNewTargetAsset(`Saham Portofolio & Kas Perseroan ${selectedDefComp ? selectedDefComp.name : 'Tergugat'} Disita ke Lelang BCF`);
+                  syncTitleAndDescription('BANKRUPTCY');
                 }}
                 className={`p-2 rounded-lg text-left text-xs font-bold border transition-all ${
                   newCaseType === 'BANKRUPTCY'
@@ -965,12 +961,7 @@ export default function CourtOversightPage() {
                 type="button"
                 onClick={() => {
                   setNewCaseType('DISPUTE');
-                  setExecutionClauseType('TAKEOVER_PLAINTIFF');
-                  setNewTitle('Sengketa Kepemilikan Saham & Wanprestasi Perjanjian Notaris');
-                  setNewCaseDescription(
-                    'Tergugat melanggar kesepakatan akta pendirian perseroan. Menuntut pengembalian status kepemilikan saham perseroan kepada Penggugat.'
-                  );
-                  setNewTargetAsset(`Pengembalian Kepemilikan 100% Saham Perseroan ${selectedDefComp ? selectedDefComp.name : 'Tergugat'}`);
+                  syncTitleAndDescription('DISPUTE');
                 }}
                 className={`p-2 rounded-lg text-left text-xs font-bold border transition-all ${
                   newCaseType === 'DISPUTE'
@@ -1095,19 +1086,7 @@ export default function CourtOversightPage() {
                   onChange={(e) => {
                     const ct = e.target.value;
                     setNewCaseType(ct);
-                    if (ct === 'DEFAMATION') {
-                      setNewTitle(
-                        `Gugatan Pencemaran Nama Baik & Kerugian Reputasi Korporasi ${
-                          selectedPlaintiffComp ? selectedPlaintiffComp.symbol : ''
-                        }`.trim()
-                      );
-                    } else if (ct === 'RECONVENTION') {
-                      setNewTitle(
-                        `Gugatan Balasan Rekonvensi: Tuntutan Kerugian atas Perkara Tidak Terbukti ${
-                          selectedPlaintiffComp ? selectedPlaintiffComp.symbol : ''
-                        }`.trim()
-                      );
-                    }
+                    syncTitleAndDescription(ct);
                   }}
                 >
                   <option value="BANKRUPTCY">⚖️ Kepailitan & PKPU (Sita Debitur)</option>

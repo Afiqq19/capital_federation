@@ -629,9 +629,11 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                             Text(
                               isOwner
                                   ? (c.seizeReason != null && c.seizeReason!.isNotEmpty
-                                      ? 'Alasan: ${c.seizeReason}\n⚠️ Peringatan Jatuh Tempo: Anda diberikan batas masa tenggang 4 hari (96 jam) sejak tanggal jatuh tempo kredit perbankan. Jika tidak dilunasi sebelum masa tenggang habis, hak kepemilikan perseroan gugur dan perseroan resmi dilelang ke publik oleh Balai Lelang Negara PNAF!'
-                                      : 'Eksekusi putusan wanprestasi PNAF & kredit macet perbankan BCF. Anda memiliki masa tenggang 4 hari (96 jam) untuk melunasi sanksi dan pinjaman sebelum perseroan siap dilelang ke publik.')
-                                  : 'Perseroan sedang disita oleh Negara & Pengadilan Niaga PNAF karena gagal bayar kredit perbankan pendiri. Portofolio saham investor publik tetap aman di kustodian bursa dan TIDAK dikenakan denda apapun. Perdagangan saham dibekukan menunggu penebusan oleh founder atau pelaksanaan lelang terbuka.',
+                                      ? '📌 Alasan Sita: ${c.seizeReason}\n⚠️ Peringatan Eksekusi PNAF: Anda diberikan masa tenggang 4 hari (96 jam) sejak penetapan putusan untuk melunasi sanksi/ganti rugi. Jika kewajiban tidak dilunasi sebelum masa tenggang habis, hak kepemilikan perseroan gugur dan perseroan resmi dialihkan atau dilelang ke publik oleh Balai Lelang Negara PNAF!'
+                                      : 'Eksekusi putusan Pengadilan Niaga PNAF. Anda memiliki masa tenggang 4 hari (96 jam) untuk melunasi kewajiban perkara sebelum perseroan dialihkan atau dilelang ke publik.')
+                                  : (c.seizeReason != null && c.seizeReason!.isNotEmpty
+                                      ? 'Perseroan sedang disita oleh Negara & Pengadilan Niaga PNAF.\n📌 Alasan Sita: ${c.seizeReason}\nPortofolio saham investor publik tetap aman di kustodian bursa dan TIDAK dikenakan denda apapun. Perdagangan saham dibekukan menunggu penyelesaian kewajiban hukum atau pelaksanaan eksekusi putusan lelang.'
+                                      : 'Perseroan sedang disita oleh Negara & Pengadilan Niaga PNAF berdasarkan penetapan putusan pengadilan. Portofolio saham investor publik tetap aman di kustodian bursa dan TIDAK dikenakan denda apapun. Perdagangan saham dibekukan menunggu kepatuhan hukum persidangan.'),
                               style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 10.5, height: 1.4),
                             ),
                             if (isOwner) ...[
