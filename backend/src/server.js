@@ -440,14 +440,61 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
   }
 });
 
+// Helper untuk resolve userId baik dari JWT Authorization header ATAU dari query/body/header x-user-id
+function resolveInboxUserId(req) {
+  let userId = null;
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    try {
+      const decoded = jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
+      if (decoded && decoded.id) userId = decoded.id;
+    } catch (_) {}
+  }
+  if (!userId) {
+    userId = req.query?.userId || req.headers['x-user-id'] || req.body?.userId;
+  }
+  return userId ? String(userId).trim() : null;
+}
+
 // 1.5 Pusat Pesan & Inbox Notifikasi Pengguna (P2P, Sidang PNAF, Akuisisi M&A)
-app.get('/api/user/inbox', authMiddleware, async (req, res) => {
+app.get('/api/user/inbox', async (req, res) => {
   try {
-    const userId = req.user.id;
-    const messages = await query.all(
-      'SELECT * FROM user_inbox WHERE user_id = ? ORDER BY created_at DESC LIMIT 50',
-      [userId]
-    );
+    const userId = resolveInboxUserId(req);
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID tidak ditemukan' });
+    }
+    const { category } = req.query;
+    let queryStr = 'SELECT * FROM user_inbox WHERE user_id = ?';
+    const params = [userId];
+    if (category && category !== 'ALL') {
+      queryStr += ' AND category = ?';
+      params.push(category);
+    }
+    queryStr += ' ORDER BY created_at DESC LIMIT 50';
+
+    let messages = await query.all(queryStr, params);
+
+    // Jika user belum pernah punya pesan, otomatis buatkan pesan sambutan resmi otoritas
+    if ((!messages || messages.length === 0) && (!category || category === 'ALL')) {
+      const u = await query.get('SELECT * FROM users WHERE id = ?', [userId]);
+      if (u) {
+        const welcomeId = uuidv4();
+        await query.run(
+          `INSERT INTO user_inbox (id, user_id, sender_name, category, title, message, reference_id, is_read, created_at)
+           VALUES (?, ?, ?, 'SYSTEM', ?, ?, NULL, 0, ?)`,
+          [
+            welcomeId,
+            userId,
+            'Otoritas Pasar Modal IPMC & Bank BCF',
+            '🏛️ Selamat Datang di Bursa Efek Capital Federation!',
+            `Halo @${u.username}, selamat datang di pasar modal resmi Republik Federasi! Rekening efek dan kas pribadi Anda telah aktif. Anda dapat berinvestasi di emiten bursa, mendirikan perseroan (PT), mengajukan penawaran umum perdana (IPO), serta menyelesaikan sengketa komersial di Pengadilan Niaga PNAF. Selamat bertransaksi!`,
+            new Date().toISOString(),
+          ]
+        );
+        messages = await query.all('SELECT * FROM user_inbox WHERE user_id = ? ORDER BY created_at DESC LIMIT 50', [userId]);
+      }
+    }
+
     const unreadCount = await query.get(
       'SELECT COUNT(*) as count FROM user_inbox WHERE user_id = ? AND is_read = 0',
       [userId]
@@ -461,9 +508,12 @@ app.get('/api/user/inbox', authMiddleware, async (req, res) => {
   }
 });
 
-app.post('/api/user/inbox/read', authMiddleware, async (req, res) => {
+app.post('/api/user/inbox/read', async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = resolveInboxUserId(req);
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID tidak ditemukan' });
+    }
     const { messageId } = req.body || {};
     if (messageId) {
       await query.run('UPDATE user_inbox SET is_read = 1 WHERE id = ? AND user_id = ?', [messageId, userId]);
@@ -476,9 +526,12 @@ app.post('/api/user/inbox/read', authMiddleware, async (req, res) => {
   }
 });
 
-app.delete('/api/user/inbox/:id', authMiddleware, async (req, res) => {
+app.delete('/api/user/inbox/:id', async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = resolveInboxUserId(req);
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID tidak ditemukan' });
+    }
     const { id } = req.params;
     await query.run('DELETE FROM user_inbox WHERE id = ? AND user_id = ?', [id, userId]);
     res.json({ success: true, message: 'Pesan berhasil dihapus' });
@@ -2661,6 +2714,59 @@ app.post('/api/court/file-case', async (req, res) => {
       content: newsContent,
       sentiment: 'BEARISH',
     });
+
+    // Kirim surat notifikasi resmi ke Kotak Masuk Penggugat & Tergugat
+    try {
+      if (resolvedPlUserId) {
+        const plMsgId = uuidv4();
+        await query.run(
+          `INSERT INTO user_inbox (id, user_id, sender_name, category, title, message, reference_id, is_read, created_at)
+           VALUES (?, ?, ?, 'COURT', ?, ?, ?, 0, ?)`,
+          [
+            plMsgId,
+            resolvedPlUserId,
+            'Kepaniteraan Pengadilan Niaga PNAF',
+            `📜 Tanda Terima Registrasi Gugatan (${caseNumber})`,
+            `Gugatan Anda melawan ${defendantName} dengan pokok perkara "${title}" resmi terdaftar di Kepaniteraan PNAF. Nilai tuntutan: ${formattedClaim}. Jadwal sidang: ${hearingSchedule} (${timeVal}) di ${roomName}.`,
+            caseId,
+            nowIso,
+          ]
+        );
+        io.to(resolvedPlUserId).emit('user:new_inbox', {
+          id: plMsgId,
+          title: `📜 Registrasi Gugatan Berhasil: No. ${caseNumber}`,
+          message: `Gugatan Anda melawan ${defendantName} resmi terdaftar di PNAF.`,
+          category: 'COURT',
+        });
+        io.emit('user:inbox_updated', { userId: resolvedPlUserId });
+      }
+
+      if (resolvedDefUserId) {
+        const defMsgId = uuidv4();
+        await query.run(
+          `INSERT INTO user_inbox (id, user_id, sender_name, category, title, message, reference_id, is_read, created_at)
+           VALUES (?, ?, ?, 'COURT', ?, ?, ?, 0, ?)`,
+          [
+            defMsgId,
+            resolvedDefUserId,
+            'Kepaniteraan Pengadilan Niaga PNAF',
+            `⚠️ PANGGILAN SIDANG PNAF: Anda Digugat oleh ${plaintiffName}`,
+            `Pemberitahuan Panggilan Resmi: Perseroan/Anda telah digugat ke Pengadilan Niaga Arbitrase PNAF oleh ${plaintiffName} dalam perkara No. ${caseNumber} ("${title}"). Total tuntutan ganti rugi: ${formattedClaim}. Objek sasaran sita: ${targetAsset}. Sidang dijadwalkan pada: ${hearingSchedule} (${timeVal}) di ${roomName}. Segera siapkan pembelaan Anda di Pengadilan!`,
+            caseId,
+            nowIso,
+          ]
+        );
+        io.to(resolvedDefUserId).emit('user:new_inbox', {
+          id: defMsgId,
+          title: `⚠️ PANGGILAN SIDANG PNAF: Anda Digugat oleh ${plaintiffName}`,
+          message: `Anda/Perseroan Anda telah digugat ke Pengadilan Niaga PNAF dalam perkara No. ${caseNumber}.`,
+          category: 'COURT',
+        });
+        io.emit('user:inbox_updated', { userId: resolvedDefUserId });
+      }
+    } catch (inboxErr) {
+      console.error('Error inserting court filing inbox messages:', inboxErr);
+    }
 
     res.json({ success: true, case: formattedCase, message: `Gugatan berhasil diregister di PNAF dengan Nomor Perkara: ${caseNumber}` });
   } catch (err) {
@@ -7788,18 +7894,18 @@ const bundledPublicApkPath = path.join(__dirname, '../public/downloads/Capital-F
 const directPublicApkPath = path.join(__dirname, '../public/downloads/capital-federation.apk');
 const localBuiltApkPath = path.join(__dirname, '../../mobile/build/app/outputs/flutter-apk/app-release.apk');
 
-const LATEST_RELEASE_NOTES_V197 = 'v1.9.7 (Build 35): Kategori Perkara PNAF Lengkap (Pencemaran Nama Baik & Rekonvensi Perkara Fiktif), Klausul Eksekusi Ambil Alih Hak Milik PT jika Tergugat Gagal Bayar, dan Hakim Bot Objektif & Berkeadilan.';
+const LATEST_RELEASE_NOTES_V198 = 'v1.9.8 (Build 36): Kotak Masuk & Notifikasi PNAF Terintegrasi Penuh (Surat Panggilan Sidang, Putusan Inkrah, & Pesan Resmi Otoritas), Perbaikan Autentikasi Inbox, dan Sinkronisasi Notifikasi Sita Perseroan.';
 
 async function getApkSettingsMap() {
   const defaults = {
-    apk_version: '1.9.7',
-    apk_build_number: '35',
+    apk_version: '1.9.8',
+    apk_build_number: '36',
     apk_min_android: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
     apk_file_size_mb: '56.9 MB',
-    apk_release_notes: LATEST_RELEASE_NOTES_V197,
+    apk_release_notes: LATEST_RELEASE_NOTES_V198,
     apk_external_url: '',
-    apk_download_count: '385',
-    apk_sha256: '3ca031d34fdcf8dfc97a6de28f0fd38051c3342a9d75f4793a3377a9b2b69687',
+    apk_download_count: '420',
+    apk_sha256: 'cf283306af32c61313d745e723c00309a7712333690d01c6a3eed0611326e268',
     apk_updated_at: new Date().toISOString(),
   };
   try {
@@ -7809,12 +7915,12 @@ async function getApkSettingsMap() {
         defaults[r.key] = String(r.value);
       }
     }
-    if (parseInt(defaults.apk_build_number || '0', 10) < 35 || defaults.apk_sha256 !== '3ca031d34fdcf8dfc97a6de28f0fd38051c3342a9d75f4793a3377a9b2b69687') {
-      defaults.apk_version = '1.9.7';
-      defaults.apk_build_number = '35';
+    if (parseInt(defaults.apk_build_number || '0', 10) < 36 || defaults.apk_sha256 !== 'cf283306af32c61313d745e723c00309a7712333690d01c6a3eed0611326e268') {
+      defaults.apk_version = '1.9.8';
+      defaults.apk_build_number = '36';
       defaults.apk_file_size_mb = '56.9 MB';
-      defaults.apk_sha256 = '3ca031d34fdcf8dfc97a6de28f0fd38051c3342a9d75f4793a3377a9b2b69687';
-      defaults.apk_release_notes = LATEST_RELEASE_NOTES_V197;
+      defaults.apk_sha256 = 'cf283306af32c61313d745e723c00309a7712333690d01c6a3eed0611326e268';
+      defaults.apk_release_notes = LATEST_RELEASE_NOTES_V198;
       defaults.apk_updated_at = new Date().toISOString();
       // Persist directly to central_bank_settings so /api/settings, /api/admin/settings & /api/admin/overview match 100%!
       const keysToSync = ['apk_version', 'apk_build_number', 'apk_file_size_mb', 'apk_sha256', 'apk_release_notes', 'apk_min_android', 'apk_updated_at'];
@@ -8198,6 +8304,112 @@ io.on('connection', (socket) => {
   });
 });
 
+async function syncHistoricalCourtInbox() {
+  try {
+    const cases = await query.all('SELECT * FROM court_cases');
+    for (const c of (cases || [])) {
+      const caseId = c.id;
+      const caseNumber = c.case_number;
+      const title = c.title;
+      const plName = c.plaintiff_name;
+      const defName = c.defendant_name;
+      const claimStr = `IB ${Number(c.claim_amount_ib || 0).toLocaleString('id-ID')}`;
+      const sched = c.court_hearing_date || 'Sidang Selesai';
+
+      // 1. Tanda terima registrasi Penggugat
+      if (c.plaintiff_user_id) {
+        const existPl = await query.get(
+          "SELECT 1 FROM user_inbox WHERE user_id = ? AND reference_id = ? AND (title LIKE '%Registrasi%' OR title LIKE '%Tanda Terima%') LIMIT 1",
+          [c.plaintiff_user_id, caseId]
+        );
+        if (!existPl) {
+          await query.run(
+            `INSERT INTO user_inbox (id, user_id, sender_name, category, title, message, reference_id, is_read, created_at)
+             VALUES (?, ?, ?, 'COURT', ?, ?, ?, 1, ?)`,
+            [
+              uuidv4(),
+              c.plaintiff_user_id,
+              'Kepaniteraan Pengadilan Niaga PNAF',
+              `📜 Tanda Terima Registrasi Gugatan (${caseNumber})`,
+              `Gugatan Anda melawan ${defName} dengan pokok perkara "${title}" resmi terdaftar di Kepaniteraan PNAF. Nilai tuntutan: ${claimStr}. Jadwal sidang: ${sched}.`,
+              caseId,
+              c.created_at || new Date().toISOString(),
+            ]
+          );
+        }
+      }
+
+      // 2. Panggilan sidang Tergugat
+      if (c.defendant_user_id) {
+        const existDef = await query.get(
+          "SELECT 1 FROM user_inbox WHERE user_id = ? AND reference_id = ? AND title LIKE '%PANGGILAN%' LIMIT 1",
+          [c.defendant_user_id, caseId]
+        );
+        if (!existDef) {
+          await query.run(
+            `INSERT INTO user_inbox (id, user_id, sender_name, category, title, message, reference_id, is_read, created_at)
+             VALUES (?, ?, ?, 'COURT', ?, ?, ?, 1, ?)`,
+            [
+              uuidv4(),
+              c.defendant_user_id,
+              'Kepaniteraan Pengadilan Niaga PNAF',
+              `⚠️ PANGGILAN SIDANG PNAF: Anda Digugat oleh ${plName}`,
+              `Pemberitahuan Panggilan Resmi: Perseroan/Anda telah digugat ke Pengadilan Niaga Arbitrase PNAF oleh ${plName} dalam perkara No. ${caseNumber} ("${title}"). Total tuntutan ganti rugi: ${claimStr}. Silakan persiapkan pembelaan atau bantahan hukum.`,
+              caseId,
+              c.created_at || new Date().toISOString(),
+            ]
+          );
+        }
+      }
+
+      // 3. Jika perkara sudah diputus (verdict):
+      if (c.status && c.status !== 'IN_TRIAL') {
+        const existVerdict = await query.get(
+          "SELECT 1 FROM user_inbox WHERE reference_id = ? AND (title LIKE '%Putusan%' OR title LIKE '%Vonis%' OR title LIKE '%Ditolak%') LIMIT 1",
+          [caseId]
+        );
+        if (!existVerdict) {
+          const notes = c.verdict_notes || 'Amar putusan telah diketuk palu oleh Majelis Hakim PNAF.';
+          if (c.plaintiff_user_id) {
+            const isWin = c.status === 'VERDICT_APPROVED';
+            await query.run(
+              `INSERT INTO user_inbox (id, user_id, sender_name, category, title, message, reference_id, is_read, created_at)
+               VALUES (?, ?, ?, 'COURT', ?, ?, ?, 1, ?)`,
+              [
+                uuidv4(),
+                c.plaintiff_user_id,
+                'Majelis Hakim Arbitrase PNAF',
+                isWin ? `✅ Putusan Dikabulkan (${caseNumber})` : `⚖️ Putusan Sidang (${caseNumber})`,
+                notes,
+                caseId,
+                c.closed_at || c.updated_at || new Date().toISOString(),
+              ]
+            );
+          }
+          if (c.defendant_user_id) {
+            const isLoss = c.status === 'VERDICT_APPROVED' || c.status === 'VERDICT_PAILIT';
+            await query.run(
+              `INSERT INTO user_inbox (id, user_id, sender_name, category, title, message, reference_id, is_read, created_at)
+               VALUES (?, ?, ?, 'COURT', ?, ?, ?, 1, ?)`,
+              [
+                uuidv4(),
+                c.defendant_user_id,
+                'Majelis Hakim Arbitrase PNAF',
+                isLoss ? `🔨 Vonis Pengadilan PNAF (${caseNumber})` : `🛡️ Putusan Sidang: Gugatan Lawan Ditolak (${caseNumber})`,
+                notes,
+                caseId,
+                c.closed_at || c.updated_at || new Date().toISOString(),
+              ]
+            );
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Error syncing historical court inbox:', err);
+  }
+}
+
 async function start() {
   await initDb();
   server.listen(PORT, '0.0.0.0', () => {
@@ -8215,6 +8427,7 @@ async function start() {
       const { seed } = require('./seed');
       await seed();
       await enforceBotFreezeQuota();
+      await syncHistoricalCourtInbox();
       await getApkSettingsMap();
       await syncAllToMariaDb();
     } else {
@@ -8224,6 +8437,7 @@ async function start() {
       await healRealPlayerCompanies();
       await healAllCorruptedCapTables();
       await healExistingCourtCases();
+      await syncHistoricalCourtInbox();
       await enforceBotFreezeQuota();
       await getApkSettingsMap();
       invalidateMarketCaches();

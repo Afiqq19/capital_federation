@@ -211,6 +211,33 @@ async function appendCourtChat(io, { caseId, senderName, senderRole, senderUserI
   return formatted;
 }
 
+async function dispatchInboxNotification(io, { userId, senderName, category, title, message, referenceId }) {
+  if (!userId) return;
+  try {
+    const id = uuidv4();
+    const nowIso = new Date().toISOString();
+    await query.run(
+      `INSERT INTO user_inbox (id, user_id, sender_name, category, title, message, reference_id, is_read, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+      [id, userId, senderName || 'Majelis Hakim Arbitrase PNAF', category || 'COURT', title, message, referenceId || null, nowIso]
+    );
+    if (io) {
+      io.to(userId).emit('user:new_inbox', {
+        id,
+        senderName: senderName || 'Majelis Hakim Arbitrase PNAF',
+        category: category || 'COURT',
+        title,
+        message,
+        referenceId,
+        created_at: nowIso,
+      });
+      io.emit('user:inbox_updated', { userId });
+    }
+  } catch (err) {
+    console.error('Error dispatching inbox notification:', err);
+  }
+}
+
 /**
  * Satu pintu eksekusi Ketuk Palu Putusan Pengadilan Niaga Federasi (PNAF)
  * Dipakai oleh:
@@ -473,41 +500,78 @@ async function executeCourtVerdict(
           notes: `Ganti rugi pencemaran nama baik dari ${c.plaintiff_name} setelah gugatan ditolak.`,
         });
 
-        try {
-          await query.run(
-            `INSERT INTO user_inbox (id, user_id, sender_name, category, title, message, reference_id, is_read, created_at)
-             VALUES (?, ?, ?, 'COURT', ?, ?, ?, 0, ?)`,
-            [
-              uuidv4(),
-              plUser.id,
-              'Majelis Hakim Arbitrase PNAF',
-              `⚖️ Gugatan Ditolak: Denda Pencemaran Nama Baik (${c.case_number})`,
-              `Majelis Hakim PNAF menolak seluruh gugatan Anda terhadap ${c.defendant_name} karena tidak memiliki bukti hukum sah. Anda dijatuhi sanksi ganti rugi pencemaran nama baik sebesar IB ${defamationFine.toLocaleString('id-ID')} yang telah didebit dan diserahkan kepada Tergugat.`,
-              caseId,
-              new Date().toISOString(),
-            ]
-          );
+        await dispatchInboxNotification(io, {
+          userId: plUser.id,
+          senderName: 'Majelis Hakim Arbitrase PNAF',
+          category: 'COURT',
+          title: `⚖️ Gugatan Ditolak: Denda Pencemaran Nama Baik (${c.case_number})`,
+          message: `Majelis Hakim PNAF menolak seluruh gugatan Anda terhadap ${c.defendant_name} karena tidak memiliki bukti hukum sah. Anda dijatuhi sanksi ganti rugi pencemaran nama baik sebesar IB ${defamationFine.toLocaleString('id-ID')} yang telah didebit dan diserahkan kepada Tergugat.`,
+          referenceId: caseId,
+        });
 
-          await query.run(
-            `INSERT INTO user_inbox (id, user_id, sender_name, category, title, message, reference_id, is_read, created_at)
-             VALUES (?, ?, ?, 'COURT', ?, ?, ?, 0, ?)`,
-            [
-              uuidv4(),
-              defUser.id,
-              'Majelis Hakim Arbitrase PNAF',
-              `🛡️ Gugatan Ditolak: Nama Baik Dipulihkan (${c.case_number})`,
-              `Kabar baik! Majelis Hakim PNAF menolak gugatan ${c.plaintiff_name} terhadap Anda. Nama baik Anda dipulihkan dan kompensasi ganti rugi pencemaran nama baik sebesar IB ${defamationFine.toLocaleString('id-ID')} telah disetorkan ke saldo Anda!`,
-              caseId,
-              new Date().toISOString(),
-            ]
-          );
-        } catch (_) {}
+        await dispatchInboxNotification(io, {
+          userId: defUser.id,
+          senderName: 'Majelis Hakim Arbitrase PNAF',
+          category: 'COURT',
+          title: `🛡️ Gugatan Ditolak: Nama Baik Dipulihkan (${c.case_number})`,
+          message: `Kabar baik! Majelis Hakim PNAF menolak gugatan ${c.plaintiff_name} terhadap Anda. Nama baik Anda dipulihkan dan kompensasi ganti rugi pencemaran nama baik sebesar IB ${defamationFine.toLocaleString('id-ID')} telah disetorkan ke saldo Anda!`,
+          referenceId: caseId,
+        });
 
         if (io) {
           io.emit('user:balance_updated', { userId: plUser.id, newBalance: newPlBal });
           io.emit('user:balance_updated', { userId: defUser.id, newBalance: newDefBal });
         }
       }
+    }
+
+    // Jika belum terkirim pesan notifikasi (misal karena denda tidak berlaku / non-pemain):
+    const alreadyNotified = await query.get('SELECT 1 FROM user_inbox WHERE reference_id = ? LIMIT 1', [caseId]);
+    if (!alreadyNotified) {
+      if (plaintiffId) {
+        await dispatchInboxNotification(io, {
+          userId: plaintiffId,
+          senderName: 'Majelis Hakim Arbitrase PNAF',
+          category: 'COURT',
+          title: `⚖️ Putusan Sidang: Gugatan Ditolak (${c.case_number})`,
+          message: `Majelis Hakim PNAF memutuskan MENOLAK seluruh gugatan Anda terhadap ${c.defendant_name}. Amar Putusan: ${finalNotes}`,
+          referenceId: caseId,
+        });
+      }
+      if (c.defendant_user_id) {
+        await dispatchInboxNotification(io, {
+          userId: c.defendant_user_id,
+          senderName: 'Majelis Hakim Arbitrase PNAF',
+          category: 'COURT',
+          title: `🛡️ Putusan Sidang: Gugatan Lawan Ditolak (${c.case_number})`,
+          message: `Kabar baik! Majelis Hakim PNAF menolak seluruh gugatan yang diajukan oleh ${c.plaintiff_name}. Perseroan dan rekening Anda dinyatakan bebas dari segala tuntutan perkara ini.`,
+          referenceId: caseId,
+        });
+      }
+    }
+  }
+
+  // NOTIFIKASI RESTUKTURISASI / PERDAMAIAN PKPU
+  if (finalStatus === 'VERDICT_PKPU' && !alreadyDelivered) {
+    if (plaintiffId) {
+      await dispatchInboxNotification(io, {
+        userId: plaintiffId,
+        senderName: 'Majelis Hakim Arbitrase PNAF',
+        category: 'COURT',
+        title: `🤝 Putusan PKPU & Perdamaian Disahkan (${c.case_number})`,
+        message: `Majelis Hakim PNAF telah mengesahkan permohonan perdamaian/moratorium PKPU antara Anda dan ${c.defendant_name}. Amar Putusan: ${finalNotes}`,
+        referenceId: caseId,
+      });
+    }
+    if (c.defendant_user_id) {
+      await dispatchInboxNotification(io, {
+        userId: c.defendant_user_id,
+        senderName: 'Majelis Hakim Arbitrase PNAF',
+        category: 'COURT',
+        title: `🤝 Putusan PKPU & Moratorium Utang Disahkan (${c.case_number})`,
+        message: `Majelis Hakim PNAF telah mengesahkan moratorium restrukturisasi utang PKPU perseroan Anda. Kewajiban utang disesuaikan dengan amar putusan pengadilan.`,
+        referenceId: caseId,
+      });
     }
   }
 
@@ -527,21 +591,14 @@ async function executeCourtVerdict(
           balanceAfter: newPlBalance,
           notes: finalNotes,
         });
-        try {
-          await query.run(
-            `INSERT INTO user_inbox (id, user_id, sender_name, category, title, message, reference_id, is_read, created_at)
-             VALUES (?, ?, ?, 'COURT', ?, ?, ?, 0, ?)`,
-            [
-              uuidv4(),
-              plUser.id,
-              'Majelis Hakim Arbitrase PNAF',
-              `✅ Putusan Dikabulkan: Kompensasi IB ${awardedAmount.toLocaleString('id-ID')} (${c.case_number})`,
-              `Majelis Hakim PNAF mengabulkan gugatan Anda terhadap ${c.defendant_name}. Dana ganti rugi sebesar IB ${awardedAmount.toLocaleString('id-ID')} telah disetorkan ke Kas Rekening Anda.`,
-              caseId,
-              new Date().toISOString(),
-            ]
-          );
-        } catch (_) {}
+        await dispatchInboxNotification(io, {
+          userId: plUser.id,
+          senderName: 'Majelis Hakim Arbitrase PNAF',
+          category: 'COURT',
+          title: `✅ Putusan Dikabulkan: Kompensasi IB ${awardedAmount.toLocaleString('id-ID')} (${c.case_number})`,
+          message: `Majelis Hakim PNAF mengabulkan gugatan Anda terhadap ${c.defendant_name}. Dana ganti rugi sebesar IB ${awardedAmount.toLocaleString('id-ID')} telah disetorkan ke Kas Rekening Anda.`,
+          referenceId: caseId,
+        });
         if (io) {
           io.emit('user:balance_updated', { userId: plUser.id, newBalance: newPlBalance });
         }
@@ -616,21 +673,14 @@ async function executeCourtVerdict(
           });
         }
 
-        try {
-          await query.run(
-            `INSERT INTO user_inbox (id, user_id, sender_name, category, title, message, reference_id, is_read, created_at)
-             VALUES (?, ?, ?, 'COURT', ?, ?, ?, 0, ?)`,
-            [
-              uuidv4(),
-              defUser.id,
-              'Majelis Hakim Arbitrase PNAF',
-              `🔨 Vonis Pengadilan PNAF (${c.case_number})`,
-              `Majelis Hakim PNAF menjatuhkan putusan bersalah atas perkara ${c.case_number}. Dana ganti rugi sebesar IB ${awardedAmount.toLocaleString('id-ID')} telah dieksekusi dari kas Anda.`,
-              caseId,
-              new Date().toISOString(),
-            ]
-          );
-        } catch (_) {}
+        await dispatchInboxNotification(io, {
+          userId: defUser.id,
+          senderName: 'Majelis Hakim Arbitrase PNAF',
+          category: 'COURT',
+          title: `🔨 Vonis Pengadilan PNAF (${c.case_number})`,
+          message: `Majelis Hakim PNAF menjatuhkan putusan bersalah atas perkara ${c.case_number}. Dana ganti rugi sebesar IB ${awardedAmount.toLocaleString('id-ID')} telah dieksekusi dari kas Anda.`,
+          referenceId: caseId,
+        });
 
         if (io) {
           io.emit('user:balance_updated', { userId: defUser.id, newBalance: newDefPersonal });
@@ -717,33 +767,23 @@ async function executeCourtVerdict(
             );
           }
 
-          await query.run(
-            `INSERT INTO user_inbox (id, user_id, sender_name, category, title, message, reference_id, is_read, created_at)
-             VALUES (?, ?, ?, 'COURT', ?, ?, ?, 0, ?)`,
-            [
-              uuidv4(),
-              plaintiffId,
-              'Majelis Hakim Arbitrase PNAF',
-              `📈 Pemulihan Saham Berhasil: ${pctToRecover}% ${targetComp.name}`,
-              `Putusan inkrah Perkara No. ${c.case_number} membatalkan pengalihan sepihak oleh ${c.defendant_name}. Sebanyak ${pctToRecover}% saham (${sharesToRecover.toLocaleString('id-ID')} lbr / ${lotsToRecover} lot) resmi dikembalikan ke portofolio Anda!`,
-              caseId,
-              new Date().toISOString(),
-            ]
-          );
+          await dispatchInboxNotification(io, {
+            userId: plaintiffId,
+            senderName: 'Majelis Hakim Arbitrase PNAF',
+            category: 'COURT',
+            title: `📈 Pemulihan Saham Berhasil: ${pctToRecover}% ${targetComp.name}`,
+            message: `Putusan inkrah Perkara No. ${c.case_number} membatalkan pengalihan sepihak oleh ${c.defendant_name}. Sebanyak ${pctToRecover}% saham (${sharesToRecover.toLocaleString('id-ID')} lbr / ${lotsToRecover} lot) resmi dikembalikan ke portofolio Anda!`,
+            referenceId: caseId,
+          });
 
-          await query.run(
-            `INSERT INTO user_inbox (id, user_id, sender_name, category, title, message, reference_id, is_read, created_at)
-             VALUES (?, ?, ?, 'COURT', ?, ?, ?, 0, ?)`,
-            [
-              uuidv4(),
-              c.defendant_user_id,
-              'Majelis Hakim Arbitrase PNAF',
-              `⚖️ Eksekusi Pengembalian Saham: ${pctToRecover}% ${targetComp.name}`,
-              `Berdasarkan amar putusan Perkara No. ${c.case_number}, kepemilikan ${pctToRecover}% saham ${targetComp.name} Anda resmi dibatalkan dan dikembalikan kepada ${c.plaintiff_name}.`,
-              caseId,
-              new Date().toISOString(),
-            ]
-          );
+          await dispatchInboxNotification(io, {
+            userId: c.defendant_user_id,
+            senderName: 'Majelis Hakim Arbitrase PNAF',
+            category: 'COURT',
+            title: `⚖️ Eksekusi Pengembalian Saham: ${pctToRecover}% ${targetComp.name}`,
+            message: `Berdasarkan amar putusan Perkara No. ${c.case_number}, kepemilikan ${pctToRecover}% saham ${targetComp.name} Anda resmi dibatalkan dan dikembalikan kepada ${c.plaintiff_name}.`,
+            referenceId: caseId,
+          });
 
           finalNotes += ` [EKSEKUSI SAHAM: Memerintahkan pengembalian ${pctToRecover}% saham ${targetComp.name} (${targetComp.symbol}) dari Tergugat kepada Penggugat.]`;
         }
@@ -849,35 +889,25 @@ async function executeCourtVerdict(
         }
 
         // 4. Kirim Surat Putusan ke Kotak Pesan Penggugat
-        await query.run(
-          `INSERT INTO user_inbox (id, user_id, sender_name, category, title, message, reference_id, is_read, created_at)
-           VALUES (?, ?, ?, 'COURT', ?, ?, ?, 0, ?)`,
-          [
-            uuidv4(),
-            plUser.id,
-            'Majelis Hakim Arbitrase PNAF',
-            `👑 Hak Milik Beralih: Anda Resmi Menguasai 100% ${targetComp.name}!`,
-            `Amar Putusan Inkrah No. ${c.case_number} telah dieksekusi! Karena Tergugat (${c.defendant_name}) terbukti bersalah dan ${isCashDeficit ? 'kasnya tidak mencukupi untuk membayar ganti rugi' : 'sesuai klausul sita hak milik'}, seluruh 100% kepemilikan dan saham perseroan ${targetComp.name} (${targetComp.symbol}) resmi DIALIHKAN menjadi HAK MILIK ANDA!`,
-            caseId,
-            new Date().toISOString(),
-          ]
-        );
+        await dispatchInboxNotification(io, {
+          userId: plUser.id,
+          senderName: 'Majelis Hakim Arbitrase PNAF',
+          category: 'COURT',
+          title: `👑 Hak Milik Beralih: Anda Resmi Menguasai 100% ${targetComp.name}!`,
+          message: `Amar Putusan Inkrah No. ${c.case_number} telah dieksekusi! Karena Tergugat (${c.defendant_name}) terbukti bersalah dan ${isCashDeficit ? 'kasnya tidak mencukupi untuk membayar ganti rugi' : 'sesuai klausul sita hak milik'}, seluruh 100% kepemilikan dan saham perseroan ${targetComp.name} (${targetComp.symbol}) resmi DIALIHKAN menjadi HAK MILIK ANDA!`,
+          referenceId: caseId,
+        });
 
         // 5. Kirim Surat Eksekusi ke Kotak Pesan Tergugat
         if (prevOwnerId) {
-          await query.run(
-            `INSERT INTO user_inbox (id, user_id, sender_name, category, title, message, reference_id, is_read, created_at)
-             VALUES (?, ?, ?, 'COURT', ?, ?, ?, 0, ?)`,
-            [
-              uuidv4(),
-              prevOwnerId,
-              'Majelis Hakim Arbitrase PNAF',
-              `⚖️ Sita Eksekusi Kepemilikan: PT. ${targetComp.name} Dialihkan ke Penggugat`,
-              `Majelis Hakim PNAF mengeksekusi amar putusan No. ${c.case_number}. Karena ${isCashDeficit ? 'saldo kas Anda tidak mencukupi pelunasan ganti rugi' : 'klausul sita eksekusi hak milik'}, 100% kepemilikan perseroan ${targetComp.name} (${targetComp.symbol}) telah dicabut dan resmi diserahkan menjadi hak milik @${plUser.username}.`,
-              caseId,
-              new Date().toISOString(),
-            ]
-          );
+          await dispatchInboxNotification(io, {
+            userId: prevOwnerId,
+            senderName: 'Majelis Hakim Arbitrase PNAF',
+            category: 'COURT',
+            title: `⚖️ Sita Eksekusi Kepemilikan: PT. ${targetComp.name} Dialihkan ke Penggugat`,
+            message: `Majelis Hakim PNAF mengeksekusi amar putusan No. ${c.case_number}. Karena ${isCashDeficit ? 'saldo kas Anda tidak mencukupi pelunasan ganti rugi' : 'klausul sita eksekusi hak milik'}, 100% kepemilikan perseroan ${targetComp.name} (${targetComp.symbol}) telah dicabut dan resmi diserahkan menjadi hak milik @${plUser.username}.`,
+            referenceId: caseId,
+          });
         }
 
         // 6. Siarkan Breaking News ke Ticker Pasar

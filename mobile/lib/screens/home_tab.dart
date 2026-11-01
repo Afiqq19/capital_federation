@@ -16,6 +16,7 @@ import 'cash_flow_ledger_screen.dart';
 import '../widgets/sovereign_bonds_modal.dart';
 import '../widgets/government_tenders_modal.dart';
 import '../widgets/user_inbox_modal.dart';
+import '../services/socket_service.dart';
 import 'profile_screen.dart';
 
 class HomeTab extends StatefulWidget {
@@ -60,10 +61,19 @@ class _HomeTabState extends State<HomeTab> {
   @override
   void initState() {
     super.initState();
+    SocketService.onInboxUpdated = _checkInboxCount;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<GameProvider>().fetchConglomerate();
       _checkInboxCount();
     });
+  }
+
+  @override
+  void dispose() {
+    if (SocketService.onInboxUpdated == _checkInboxCount) {
+      SocketService.onInboxUpdated = null;
+    }
+    super.dispose();
   }
 
   @override

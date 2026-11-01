@@ -6,6 +6,7 @@ import 'notification_service.dart';
 class SocketService {
   static socket_io.Socket? socket;
   static Function(dynamic)? onOrderMatched;
+  static VoidCallback? onInboxUpdated;
 
   static void init({
     required Function(List<dynamic>) onMarketTicker,
@@ -112,6 +113,24 @@ class SocketService {
             channelId: 'pnaf_court_channel',
           );
         }
+      });
+
+      socket!.on('user:new_inbox', (data) {
+        if (data != null) {
+          final title = data['title']?.toString() ?? 'Pemberitahuan Baru';
+          final msg = data['message']?.toString() ?? 'Anda menerima pesan resmi di Kotak Masuk.';
+          NotificationService.showNotification(
+            id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+            title: title,
+            body: msg,
+            channelId: 'pnaf_court_channel',
+          );
+          onInboxUpdated?.call();
+        }
+      });
+
+      socket!.on('user:inbox_updated', (data) {
+        onInboxUpdated?.call();
       });
 
       socket!.on('chat:message', (data) {

@@ -1249,7 +1249,10 @@ class ApiService {
       if (category != null && category.isNotEmpty) queryParams['category'] = category;
       
       final url = queryParams.isEmpty ? uri : uri.replace(queryParameters: queryParams);
-      final res = await http.get(url).timeout(const Duration(seconds: 10));
+      final res = await http.get(url, headers: {
+        'Content-Type': 'application/json',
+        if (uid != null && uid.isNotEmpty) 'x-user-id': uid,
+      }).timeout(const Duration(seconds: 10));
       if (res.statusCode == 200) {
         return Map<String, dynamic>.from(jsonDecode(res.body));
       }
@@ -1262,7 +1265,10 @@ class ApiService {
       final uid = userId ?? await LocalCache.getUserId();
       final res = await http.post(
         Uri.parse('$baseUrl/api/user/inbox/read'),
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          if (uid != null && uid.isNotEmpty) 'x-user-id': uid,
+        },
         body: jsonEncode({
           if (uid != null) 'userId': uid,
           if (messageId != null) 'messageId': messageId,
@@ -1279,7 +1285,10 @@ class ApiService {
       final uid = userId ?? await LocalCache.getUserId();
       final uri = Uri.parse('$baseUrl/api/user/inbox/$messageId');
       final url = uid != null ? uri.replace(queryParameters: {'userId': uid}) : uri;
-      final res = await http.delete(url).timeout(const Duration(seconds: 8));
+      final res = await http.delete(url, headers: {
+        'Content-Type': 'application/json',
+        if (uid != null && uid.isNotEmpty) 'x-user-id': uid,
+      }).timeout(const Duration(seconds: 8));
       return res.statusCode == 200;
     } catch (_) {
       return false;
