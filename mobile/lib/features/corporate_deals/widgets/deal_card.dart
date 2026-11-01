@@ -44,38 +44,65 @@ class DealCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: deal.targetType == 'P2P'
-                      ? const Color(0xFFF59E0B).withValues(alpha: 0.15)
-                      : const Color(0xFF38BDF8).withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(
-                    color: deal.targetType == 'P2P'
-                        ? const Color(0xFFF59E0B).withValues(alpha: 0.5)
-                        : const Color(0xFF38BDF8).withValues(alpha: 0.5),
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      deal.targetType == 'P2P' ? Icons.handshake_rounded : Icons.public_rounded,
-                      size: 11,
-                      color: deal.targetType == 'P2P' ? const Color(0xFFF59E0B) : const Color(0xFF38BDF8),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: deal.targetType == 'P2P'
+                          ? const Color(0xFFF59E0B).withValues(alpha: 0.15)
+                          : const Color(0xFF38BDF8).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: deal.targetType == 'P2P'
+                            ? const Color(0xFFF59E0B).withValues(alpha: 0.5)
+                            : const Color(0xFF38BDF8).withValues(alpha: 0.5),
+                      ),
                     ),
-                    const SizedBox(width: 4),
-                    Text(
-                      deal.targetType == 'P2P' ? 'TAWARAN P2P TERTUTUP' : 'PENAWARAN TERBUKA GLOBAL',
-                      style: TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w900,
-                        color: deal.targetType == 'P2P' ? const Color(0xFFF59E0B) : const Color(0xFF38BDF8),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          deal.targetType == 'P2P' ? Icons.handshake_rounded : Icons.public_rounded,
+                          size: 11,
+                          color: deal.targetType == 'P2P' ? const Color(0xFFF59E0B) : const Color(0xFF38BDF8),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          deal.targetType == 'P2P' ? 'TAWARAN P2P TERTUTUP' : 'PENAWARAN TERBUKA GLOBAL',
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w900,
+                            color: deal.targetType == 'P2P' ? const Color(0xFFF59E0B) : const Color(0xFF38BDF8),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (isMyOwnDeal) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF59E0B).withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(5),
+                        border: Border.all(color: const Color(0xFFF59E0B), width: 0.8),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.workspace_premium_rounded, size: 10, color: Color(0xFFF59E0B)),
+                          SizedBox(width: 3),
+                          Text(
+                            'PENAWARAN ANDA',
+                            style: TextStyle(color: Color(0xFFF59E0B), fontSize: 8.5, fontWeight: FontWeight.w900),
+                          ),
+                        ],
                       ),
                     ),
                   ],
-                ),
+                ],
               ),
               Text(
                 (tryParseServerTime(deal.createdAt)?.toString().substring(0, 10) ?? ''),
@@ -212,26 +239,101 @@ class DealCard extends StatelessWidget {
                 ),
               ],
             ),
+          ] else if (isMyOwnDeal) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              margin: const EdgeInsets.only(bottom: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F172A),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.3)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.radar_rounded, size: 14, color: Color(0xFF10B981)),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '🟢 Sedang Tayang di Bursa Efek • Menunggu Minat Bot & Investor',
+                      style: TextStyle(color: Color(0xFFE2E8F0), fontSize: 10.5, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(
+              width: double.infinity,
+              height: 38,
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.cancel_rounded, size: 14),
+                label: const Text(
+                  '❌ TARIK / BATALKAN PENAWARAN',
+                  style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold),
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFFEF4444),
+                  side: const BorderSide(color: Color(0xFFEF4444), width: 1.2),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                onPressed: () async {
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      backgroundColor: const Color(0xFF0F172A),
+                      title: const Text('Tarik Penawaran Saham?', style: TextStyle(color: Colors.white, fontSize: 15)),
+                      content: Text(
+                        'Apakah Anda yakin ingin menarik paket ${deal.percentageRemaining.toStringAsFixed(1)}% saham ${deal.companyName} dari bursa? Saham akan kembali aman di portofolio Anda.',
+                        style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                      ),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFEF4444)),
+                          onPressed: () => Navigator.pop(ctx, true),
+                          child: const Text('Ya, Tarik Penawaran', style: TextStyle(color: Colors.white)),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirmed == true) {
+                    final res = await DealsService.cancelDeal(dealId: deal.id, userId: currentUserId);
+                    if (context.mounted) {
+                      if (res['error'] != null) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('❌ Gagal: ${res['error']}'), backgroundColor: Colors.red),
+                        );
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('✅ ${res['message'] ?? 'Penawaran saham berhasil ditarik'}'),
+                            backgroundColor: const Color(0xFF10B981),
+                          ),
+                        );
+                        onRefresh();
+                      }
+                    }
+                  }
+                },
+              ),
+            ),
           ] else ...[
             SizedBox(
               width: double.infinity,
               height: 40,
               child: ElevatedButton.icon(
                 icon: const Icon(Icons.shopping_cart_checkout_rounded, size: 15),
-                label: Text(
-                  isMyOwnDeal ? 'LELANG SAHAM ANDA SEDANG BERJALAN' : '🛒 BELI SAHAM ',
-                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                label: const Text(
+                  '🛒 BELI SAHAM (PARSIAL / PENUH)',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: isMyOwnDeal ? const Color(0xFF475569) : const Color(0xFF10B981),
+                  backgroundColor: const Color(0xFF10B981),
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-                onPressed: isMyOwnDeal
-                    ? null
-                    : () {
-                        PartialBuySheet.show(context, deal, onRefresh);
-                      },
+                onPressed: () {
+                  PartialBuySheet.show(context, deal, onRefresh);
+                },
               ),
             ),
           ],

@@ -115,6 +115,26 @@ class DealsService {
     }
   }
 
+  // Batalkan / Tarik penawaran saham milik sendiri dari pasar global atau P2P
+  static Future<Map<String, dynamic>> cancelDeal({
+    required String dealId,
+    required String userId,
+  }) async {
+    try {
+      final res = await http.post(
+        Uri.parse('$_base/api/deals/cancel'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'dealId': dealId,
+          'userId': userId,
+        }),
+      ).timeout(const Duration(seconds: 6));
+      return jsonDecode(res.body);
+    } catch (e) {
+      return {'error': 'Gagal membatalkan penawaran saham'};
+    }
+  }
+
   // Ambil brankas akta jual beli notariil tersimpan untuk user ini
   static Future<List<DealDeedModel>> getUserDeeds(String userId) async {
     try {

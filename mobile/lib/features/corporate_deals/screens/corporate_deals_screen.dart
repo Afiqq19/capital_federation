@@ -32,6 +32,10 @@ class _CorporateDealsScreenState extends State<CorporateDealsScreen> with Single
     _loadAllData();
     SocketService.socket?.on('court:verdict', _onCourtSocketEvent);
     SocketService.socket?.on('court:case_updated', _onCourtSocketEvent);
+    SocketService.socket?.on('deal:completed', _onCourtSocketEvent);
+    SocketService.socket?.on('deal:created', _onCourtSocketEvent);
+    SocketService.socket?.on('deal:cancelled', _onCourtSocketEvent);
+    SocketService.socket?.on('market:deals_updated', _onCourtSocketEvent);
   }
 
   void _onCourtSocketEvent(dynamic _) {
@@ -44,6 +48,10 @@ class _CorporateDealsScreenState extends State<CorporateDealsScreen> with Single
   void dispose() {
     SocketService.socket?.off('court:verdict', _onCourtSocketEvent);
     SocketService.socket?.off('court:case_updated', _onCourtSocketEvent);
+    SocketService.socket?.off('deal:completed', _onCourtSocketEvent);
+    SocketService.socket?.off('deal:created', _onCourtSocketEvent);
+    SocketService.socket?.off('deal:cancelled', _onCourtSocketEvent);
+    SocketService.socket?.off('market:deals_updated', _onCourtSocketEvent);
     _tabController.dispose();
     super.dispose();
   }

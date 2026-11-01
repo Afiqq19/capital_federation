@@ -7,6 +7,33 @@ const { formatCourtCase, appendCourtChat, BOT_CLERK_NAME } = require('../service
 const dealCooldownMap = new Map();
 
 module.exports = function(io) {
+  // Pastikan Top Bot Konglomerat (Haziq, Reza, Dimas, Fajar, dll) memiliki likuiditas triliunan IB untuk M&A
+  async function ensureBotConglomerateLiquidity() {
+    try {
+      const topBots = [
+        { id: 'bot-user-001', minBal: 2500000000000 }, // Haziq: 2.5 T
+        { id: 'bot-user-002', minBal: 2000000000000 }, // Reza: 2.0 T
+        { id: 'bot-user-003', minBal: 1800000000000 }, // Dimas: 1.8 T
+        { id: 'bot-user-004', minBal: 1500000000000 }, // Fajar: 1.5 T
+        { id: 'bot-user-005', minBal: 1200000000000 }, // Adit: 1.2 T
+      ];
+      for (const b of topBots) {
+        await query.run(
+          "UPDATE users SET balance_ib = MAX(balance_ib, ?), company_balance_ib = MAX(company_balance_ib, ?) WHERE id = ?",
+          [b.minBal, b.minBal, b.id]
+        );
+      }
+      await query.run(`
+        UPDATE users 
+        SET balance_ib = MAX(balance_ib, 500000000000) 
+        WHERE (id LIKE 'bot-user-00%' OR id LIKE 'bot-user-01%' OR id LIKE 'bot-user-02%')
+      `);
+    } catch (e) {
+      console.error('Error ensuring bot liquidity:', e.message);
+    }
+  }
+  ensureBotConglomerateLiquidity();
+
   // 0. Daftar Kandidat Konglomerat untuk Transaksi P2P
   router.get('/candidates', async (req, res) => {
     try {
@@ -318,6 +345,39 @@ module.exports = function(io) {
         await query.run('UPDATE companies SET founder_shares_sold = COALESCE(founder_shares_sold, 0) + ? WHERE id = ?', [pctToBuy, comp.id]);
       }
 
+      // Potong lot kepemilikan penjual di tabel portfolios jika ini adalah anak perusahaan / portofolio akuisisi
+      const sellerPort = await query.get('SELECT * FROM portfolios WHERE user_id = ? AND company_id = ?', [seller.id, comp.id]);
+      if (sellerPort) {
+        const remainingSellerLots = Math.max(0, sellerPort.lots_owned - lotsTransferred);
+        if (remainingSellerLots <= 0) {
+          await query.run('DELETE FROM portfolios WHERE id = ?', [sellerPort.id]);
+        } else {
+          await query.run('UPDATE portfolios SET lots_owned = ? WHERE id = ?', [remainingSellerLots, sellerPort.id]);
+        }
+      }
+
+      // Update Cap Table Pemegang Saham (company_shareholders)
+      const sellerSh = await query.get('SELECT * FROM company_shareholders WHERE company_id = ? AND user_id = ?', [comp.id, seller.id]);
+      if (sellerSh) {
+        const newPct = Math.max(0, parseFloat((sellerSh.percentage - pctToBuy).toFixed(1)));
+        if (newPct <= 0) {
+          await query.run('DELETE FROM company_shareholders WHERE id = ?', [sellerSh.id]);
+        } else {
+          await query.run('UPDATE company_shareholders SET percentage = ?, shares_count = shares_count - ? WHERE id = ?', [newPct, sharesTransferred, sellerSh.id]);
+        }
+      }
+
+      const buyerSh = await query.get('SELECT * FROM company_shareholders WHERE company_id = ? AND user_id = ?', [comp.id, buyer.id]);
+      if (buyerSh) {
+        const newPct = parseFloat((buyerSh.percentage + pctToBuy).toFixed(1));
+        await query.run('UPDATE company_shareholders SET percentage = ?, shares_count = shares_count + ? WHERE id = ?', [newPct, sharesTransferred, buyerSh.id]);
+      } else {
+        await query.run(
+          'INSERT INTO company_shareholders (id, company_id, user_id, holder_name, holder_type, shares_count, percentage) VALUES (?, ?, ?, ?, "INDIVIDUAL", ?, ?)',
+          [uuidv4(), comp.id, buyer.id, `${buyer.username} (${buyer.pt_name || 'Konglomerat'})`, sharesTransferred, pctToBuy]
+        );
+      }
+
       // 4. Tambah portofolio saham ke pembeli
       const existingPort = await query.get('SELECT * FROM portfolios WHERE user_id = ? AND company_id = ?', [buyer.id, comp.id]);
       if (existingPort) {
@@ -365,6 +425,33 @@ module.exports = function(io) {
         'INSERT INTO state_treasury_ledger (id, source_type, title, amount_ib, direction, reference_id, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
         [uuidv4(), 'METERAI_FEE', `Bea Meterai Digital Korporasi Akta #${deedNumber}`, meteraiFee, 'INCOME', deedNumber, `Meterai Digital Lunas (IB ${meteraiFee.toLocaleString('id-ID')})`]
       );
+
+      // Catat Buku Kas Transparan (Transparent Cash Ledger) Penjual & Pembeli
+      await recordCashFlow({
+        userId: seller.id,
+        companyId: comp.id,
+        accountType: 'PERSONAL',
+        category: 'DEAL_PROCEEDS',
+        title: `Cair Penjualan Saham ${pctToBuy.toFixed(1)}% ${comp.symbol}`,
+        amountIb: totalPrice,
+        direction: 'INCOME',
+        balanceAfter: (seller.balance_ib || 0) + totalPrice,
+        notes: `Hasil penjualan ${pctToBuy.toFixed(1)}% (${sharesTransferred.toLocaleString('id-ID')} lbr) ${comp.name} ke @${buyer.username} (Akta #${deedNumber})`
+      });
+
+      if (!buyer.id.startsWith('bot-user-') && !buyer.id.startsWith('user-bot-')) {
+        await recordCashFlow({
+          userId: buyer.id,
+          companyId: comp.id,
+          accountType: 'PERSONAL',
+          category: 'DEAL_PURCHASE',
+          title: `Beli Saham ${pctToBuy.toFixed(1)}% ${comp.symbol}`,
+          amountIb: totalBuyerDeduction,
+          direction: 'EXPENSE',
+          balanceAfter: (buyer.balance_ib || 0) - totalBuyerDeduction,
+          notes: `Pembelian ${pctToBuy.toFixed(1)}% (${sharesTransferred.toLocaleString('id-ID')} lbr) ${comp.name} dari @${seller.username} (Akta #${deedNumber})`
+        });
+      }
 
       // 8. SUKSESI KONTROL KORPORASI: Jika transaksi mencapai mayoritas (>= 50%)
       const totalShares = comp.total_shares || 10000000;
@@ -536,6 +623,7 @@ module.exports = function(io) {
 
   // BOT EVALUATOR: Bot Konglomerat mengevaluasi paket divestasi global dari pemain
   function triggerBotGlobalEvaluation(dealId) {
+    // Beri jeda 25 detik agar pemain dapat melihat penawaran aktifnya terpampang jelas di Katalog Pasar Global
     setTimeout(async () => {
       try {
         const deal = await query.get('SELECT * FROM private_deals WHERE id = ?', [dealId]);
@@ -547,9 +635,10 @@ module.exports = function(io) {
 
         const currentPrice = comp.current_price || 1000;
         const offerPrice = deal.price_per_share || currentPrice;
+        const priceRatio = offerPrice / currentPrice;
 
-        // Jika harga global wajar (<= 115% harga pasar):
-        if (offerPrice <= currentPrice * 1.15) {
+        // Bot Konglomerat tertarik memborong jika valuasi masuk akal (<= 150% harga pasar):
+        if (priceRatio <= 1.50) {
           const totalShares = comp.total_shares || 10000000;
           const pctToBuy = deal.percentage_remaining;
           const sharesTransferred = Math.round(totalShares * (pctToBuy / 100.0));
@@ -559,13 +648,27 @@ module.exports = function(io) {
           const meteraiFee = 10000.0;
           const totalDeduction = totalPrice + feeTax + meteraiFee;
 
-          const wealthyBot = await query.get(
+          // Cari bot konglomerat papan atas yang sanggup membeli
+          let wealthyBot = await query.get(
             "SELECT * FROM users WHERE (id LIKE 'bot-user-%' OR id LIKE 'user-bot-%') AND id != ? AND balance_ib >= ? ORDER BY balance_ib DESC LIMIT 1",
             [seller.id, totalDeduction]
           );
 
+          // Jika bot tunggal belum mencukupi saldo, aktifkan Konsorsium Bot Konglomerat (Haziq / Reza)
+          if (!wealthyBot) {
+            const topBot = await query.get(
+              "SELECT * FROM users WHERE (id LIKE 'bot-user-%' OR id LIKE 'user-bot-%') AND id != ? ORDER BY balance_ib DESC LIMIT 1",
+              [seller.id]
+            );
+            if (topBot) {
+              const neededSurplus = totalDeduction - (topBot.balance_ib || 0) + 1000000000;
+              await query.run('UPDATE users SET balance_ib = balance_ib + ? WHERE id = ?', [neededSurplus, topBot.id]);
+              wealthyBot = await query.get('SELECT * FROM users WHERE id = ?', [topBot.id]);
+            }
+          }
+
           if (wealthyBot) {
-            console.log(`🤖 [Bot Global] @${wealthyBot.username} memborong ${pctToBuy}% saham global ${comp.symbol} milik @${seller.username}!`);
+            console.log(`🤖 [Bot Global M&A] Konglomerat @${wealthyBot.username} memborong ${pctToBuy}% saham global ${comp.symbol} milik @${seller.username}!`);
             await executeDealTransaction({
               deal,
               buyer: wealthyBot,
@@ -581,48 +684,41 @@ module.exports = function(io) {
               tradingTaxRate: 0.0015,
               io
             });
-          } else {
-            // Jika bot sedang tidak mencukupi, Konsorsium Publik Ritel Bursa menyerap saham (Secondary Public Offering)
-            console.log(`🌐 [Bursa Global] Konsorsium Publik Ritel menyerap ${pctToBuy}% saham penawaran pasar ${comp.symbol} milik @${seller.username}!`);
-            const netSellerProceeds = totalPrice - feeTax;
-            await query.run('UPDATE users SET balance_ib = balance_ib + ? WHERE id = ?', [netSellerProceeds, seller.id]);
-            
-            // Kurangi kepemilikan penjual
-            const sellerSh = await query.get('SELECT * FROM company_shareholders WHERE company_id = ? AND user_id = ?', [comp.id, seller.id]);
-            if (sellerSh) {
-              const newPct = Math.max(0, parseFloat((sellerSh.percentage - pctToBuy).toFixed(1)));
-              if (newPct <= 0) {
-                await query.run('DELETE FROM company_shareholders WHERE id = ?', [sellerSh.id]);
-              } else {
-                await query.run('UPDATE company_shareholders SET percentage = ?, shares_count = shares_count - ? WHERE id = ?', [newPct, sharesTransferred, sellerSh.id]);
-              }
-            }
-
-            // Tambahkan porsi ke Publik Ritel di Cap Table
-            const pubSh = await query.get('SELECT * FROM company_shareholders WHERE company_id = ? AND holder_type = "PUBLIC"', [comp.id]);
-            if (pubSh) {
-              const newPubPct = parseFloat((pubSh.percentage + pctToBuy).toFixed(1));
-              await query.run('UPDATE company_shareholders SET percentage = ?, shares_count = shares_count + ? WHERE id = ?', [newPubPct, sharesTransferred, pubSh.id]);
-            } else {
-              await query.run(
-                'INSERT INTO company_shareholders (id, company_id, holder_name, holder_type, shares_count, percentage) VALUES (?, ?, "Publik Ritel (Bursa Efek)", "PUBLIC", ?, ?)',
-                [uuidv4(), comp.id, sharesTransferred, pctToBuy]
-              );
-            }
-
-            await query.run('UPDATE companies SET circulating_shares = circulating_shares + ? WHERE id = ?', [sharesTransferred, comp.id]);
-            await query.run('UPDATE private_deals SET status = "COMPLETED", percentage_remaining = 0 WHERE id = ?', [deal.id]);
-
-            // Broadcast ke mobile app & admin
-            io.emit('deal:completed', { dealId: deal.id, companyId: comp.id, symbol: comp.symbol, buyerName: 'Publik Ritel Bursa' });
-            io.emit('user:balance_updated', { userId: seller.id, newBalance: seller.balance_ib + netSellerProceeds });
           }
         }
       } catch (err) {
         console.error('Error in Bot Global evaluation:', err.message);
       }
-    }, 4000);
+    }, 25000); // 25 detik tayang aktif di katalog bursa
   }
+
+  // 4b. Batalkan / Tarik Penawaran Saham Milik Sendiri dari Pasar Global / P2P
+  router.post('/cancel', async (req, res) => {
+    try {
+      const { dealId, userId } = req.body;
+      const deal = await query.get('SELECT * FROM private_deals WHERE id = ?', [dealId]);
+      if (!deal) return res.status(404).json({ error: 'Penawaran saham tidak ditemukan' });
+
+      if (deal.seller_user_id !== userId) {
+        return res.status(403).json({ error: 'Anda hanya dapat membatalkan penawaran saham milik Anda sendiri' });
+      }
+
+      if (deal.status !== 'ACTIVE_GLOBAL' && deal.status !== 'PENDING_BUYER_SIGNATURE') {
+        return res.status(400).json({ error: `Penawaran tidak dapat ditarik (Status saat ini: ${deal.status})` });
+      }
+
+      await query.run('UPDATE private_deals SET status = "CANCELLED" WHERE id = ?', [dealId]);
+
+      if (io) {
+        io.emit('deal:cancelled', { dealId });
+        io.emit('market:deals_updated');
+      }
+
+      res.json({ success: true, message: 'Penawaran saham berhasil dibatalkan dan ditarik kembali dari bursa!' });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
 
   // 5. Tolak Tawaran P2P
   router.post('/reject', async (req, res) => {
