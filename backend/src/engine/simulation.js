@@ -373,10 +373,17 @@ class MarketSimulationEngine {
           "SELECT value FROM central_bank_settings WHERE key = 'bot_auto_intervention'"
         );
         this.cachedIsAutoIntervention = interventionSetting?.value === 'true';
+        const econRow = await query.get(
+          "SELECT value FROM central_bank_settings WHERE key = 'economic_state'"
+        );
+        this.cachedEconomicState = (econRow?.value || 'NORMAL').toUpperCase();
       }
       const activeEvents = this.cachedActiveEvents || [];
       const recentNews = this.cachedRecentNews || [];
       const isAutoIntervention = !!this.cachedIsAutoIntervention;
+      const isCrisis = this.cachedEconomicState === 'CRISIS';
+      const isRecession = this.cachedEconomicState === 'RECESSION';
+      const isBoom = this.cachedEconomicState === 'BOOM';
 
       // 2. Refresh companies from DB periodically (every 8 ticks / 32s) or if memory cache is empty
       if (this.liveCompanyMap.size === 0 || this.tickCount % 8 === 1) {
@@ -417,19 +424,39 @@ class MarketSimulationEngine {
         const diffFromTrend = (currentChangePct - baseTrend);
         tickDeltaPct -= (diffFromTrend * 0.001);
 
+        // Pengaruh Siklus Ekonomi Makro Global (CRISIS / RECESSION / BOOM)
+        if (isCrisis) {
+          // Badai Krisis Global: Tekanan jual berkelanjutan (-0.35% s/d -0.75% per tick)
+          tickDeltaPct -= (0.0035 + Math.random() * 0.0040);
+          // Tekan target trend agar terus bearish selama fase krisis
+          if (baseTrend > -15.0) {
+            this.stockTrends.set(comp.id, Math.max(-35.0, baseTrend - 0.4));
+          }
+        } else if (isRecession) {
+          tickDeltaPct -= (0.0012 + Math.random() * 0.0015);
+          if (baseTrend > -5.0) {
+            this.stockTrends.set(comp.id, Math.max(-20.0, baseTrend - 0.2));
+          }
+        } else if (isBoom) {
+          tickDeltaPct += (0.0025 + Math.random() * 0.0030);
+          if (baseTrend < 15.0) {
+            this.stockTrends.set(comp.id, Math.min(35.0, baseTrend + 0.3));
+          }
+        }
+
         // Bandar vs Ritel dynamic market moves (Bandar Akumulasi vs Bandar Guyur / Profit Taking)
         const randBandar = Math.random();
-        if (randBandar < 0.04) {
-          // Bandar Guyur / Dump: Sharp sell of -1.5% to -3.5%
-          tickDeltaPct -= (0.015 + Math.random() * 0.02);
-        } else if (randBandar < 0.08) {
+        if (randBandar < (isCrisis ? 0.14 : 0.04)) {
+          // Bandar Guyur / Dump: Sharp sell of -1.8% to -3.8% (saat krisis guyuran 3.5x lebih sering)
+          tickDeltaPct -= (0.018 + Math.random() * 0.02);
+        } else if (randBandar < (isCrisis ? 0.16 : 0.08)) {
           // Bandar Pom-Pom / Akumulasi: Buy push +1.5% to +3.5%
           tickDeltaPct += (0.015 + Math.random() * 0.02);
         }
 
         // Retail Panic Selling vs Bullish FOMO
-        if (currentChangePct < -4.5 && currentChangePct > -34.5 && baseTrend < 0) {
-          tickDeltaPct -= (0.0015 + Math.random() * 0.002);
+        if (isCrisis || (currentChangePct < -4.5 && currentChangePct > -34.5 && baseTrend < 0)) {
+          tickDeltaPct -= (0.0020 + Math.random() * 0.0025);
         } else if (baseTrend > 5.0 || currentChangePct > 3.0) {
           // Bullish Momentum / FOMO Accumulation (Mendorong harga naik menuju ARA +25% s/d +35%)
           tickDeltaPct += (0.002 + Math.random() * 0.0025);
@@ -517,8 +544,19 @@ class MarketSimulationEngine {
             const offerPrice = newPrice + j * tickSize;
             
             const baseLot = 350 + (j * 180) + Math.floor(Math.random() * 250);
-            const bidLots = isCritical ? Math.round(baseLot * 0.55) : Math.round(baseLot * 1.15);
-            const offerLots = isCritical ? Math.round(baseLot * 1.45) : Math.round(baseLot * 0.95);
+            let bidLots = isCritical ? Math.round(baseLot * 0.55) : Math.round(baseLot * 1.15);
+            let offerLots = isCritical ? Math.round(baseLot * 1.45) : Math.round(baseLot * 0.95);
+
+            if (isCrisis) {
+              bidLots = Math.max(10, Math.round(baseLot * 0.25)); // Likuiditas beli kering 75% (Krisis Likuiditas)
+              offerLots = Math.round(baseLot * 2.85); // Antrean jual panik membengkak 285%
+            } else if (isRecession) {
+              bidLots = Math.max(25, Math.round(baseLot * 0.65));
+              offerLots = Math.round(baseLot * 1.50);
+            } else if (isBoom) {
+              bidLots = Math.round(baseLot * 2.20);
+              offerLots = Math.max(15, Math.round(baseLot * 0.45));
+            }
 
             totalBidLots += bidLots;
             totalOfferLots += offerLots;
@@ -596,7 +634,14 @@ class MarketSimulationEngine {
       this.totalTurnoverIb += Math.floor(Math.random() * 180000000) + 20000000;
       this.tradeFrequency += Math.floor(Math.random() * 45) + 5;
       
-      const foreignFlowDelta = (Math.random() - 0.46) * 15000000;
+      let foreignFlowDelta = (Math.random() - 0.46) * 15000000;
+      if (isCrisis) {
+        // Pelarian modal asing keluar negeri secara masif saat krisis (Capital Outflow)
+        foreignFlowDelta = -(Math.random() * 45000000 + 20000000);
+      } else if (isBoom) {
+        // Inflow modal asing deras saat boom
+        foreignFlowDelta = Math.random() * 50000000 + 15000000;
+      }
       if (foreignFlowDelta >= 0) {
         this.foreignBuyIb += Math.round(foreignFlowDelta);
       } else {
@@ -648,15 +693,29 @@ class MarketSimulationEngine {
 
         for (let t = 0; t < tradesCount; t++) {
           const randComp = tradeableList[Math.floor(Math.random() * tradeableList.length)];
-          const isBuy = Math.random() > 0.44;
+          let isBuy = Math.random() > 0.44;
+          if (isCrisis) {
+            isBuy = Math.random() < 0.12; // 88% SELL / Panic Cut-Loss saat krisis!
+          } else if (isRecession) {
+            isBuy = Math.random() < 0.35; // 65% SELL saat resesi
+          } else if (isBoom) {
+            isBuy = Math.random() > 0.25; // 75% BUY saat zaman kemakmuran
+          }
           const poolLen = activeBots.length > 0 ? activeBots.length : 1;
           const botIdx = Math.floor(Math.random() * poolLen);
           const randomBot = activeBots[botIdx];
           // Bandar (Top 30 Konglomerat) transaksi blok besar 120-950 lot, Ritel 5-95 lot
           const isBandar = botIdx < 30;
-          const lotSize = isBandar
+          let lotSize = isBandar
             ? Math.floor(Math.random() * 830) + 120
             : Math.floor(Math.random() * 90) + 5;
+
+          if (isCrisis && !isBuy) {
+            // Volume panik jual saat krisis bursa
+            lotSize = isBandar
+              ? Math.floor(Math.random() * 1600) + 400
+              : Math.floor(Math.random() * 250) + 40;
+          }
 
           const tradeValueIb = lotSize * 100 * (randComp.current_price || 1000);
           const feeIb = Math.max(1500, Math.round(tradeValueIb * tradingTaxRate)); // Pajak Transaksi Bursa sesuai pengaturan
@@ -1745,20 +1804,33 @@ class MarketSimulationEngine {
           const variation = 0.75 + Math.random() * 0.5;
           const compImpact = impactRatio * variation;
 
-          // Limits: ARB -18% floor and ARA ceiling
-          const minAllowed = Math.max(50, Math.round(refPrice * 0.82));
+          // Limits: ARB -35% floor and ARA +35% ceiling
+          const minAllowed = Math.max(50, Math.round(refPrice * 0.65));
           const maxAllowed = Math.round(refPrice * 1.35);
 
           let newPrice = Math.round(comp.current_price * (1 + compImpact));
           newPrice = Math.max(minAllowed, Math.min(maxAllowed, newPrice));
 
-          if (comp.status !== 'SUSPENDED') {
+          if (comp.status !== 'SUSPENDED' && comp.is_seized !== 1) {
             const dailyHigh = Math.max(comp.daily_high || newPrice, newPrice);
             const dailyLow = Math.min(comp.daily_low || newPrice, newPrice);
             const changePct = parseFloat((((newPrice - refPrice) / refPrice) * 100).toFixed(2));
 
             // Shift baseline trend in memory so prices stay in shock zone
-            this.stockTrends.set(comp.id, changePct);
+            this.stockTrends.set(comp.id, Math.min(changePct, -10.0));
+
+            // SINKRONISASI LANGSUNG KE IN-MEMORY CACHE liveCompanyMap:
+            const liveComp = this.liveCompanyMap.get(comp.id);
+            if (liveComp) {
+              liveComp.current_price = newPrice;
+              liveComp.daily_low = dailyLow;
+              liveComp.daily_high = dailyHigh;
+              liveComp.price_change_pct = changePct;
+              if (changePct <= -30.0) liveComp.status = 'ARB';
+            }
+
+            // Stage price update for batched atomic commit
+            this.pendingPriceUpdates.set(comp.id, [newPrice, dailyHigh, dailyLow, comp.id]);
 
             await query.run(
               'UPDATE companies SET current_price = ?, daily_high = ?, daily_low = ? WHERE id = ?',
@@ -1772,14 +1844,17 @@ class MarketSimulationEngine {
               sector: comp.sector,
               price: newPrice,
               changePct,
-              status: changePct <= -14.5 ? 'ARB' : (changePct >= 24.5 ? 'ARA' : comp.status)
+              status: changePct <= -30.0 ? 'ARB' : (changePct >= 25.0 ? 'ARA' : comp.status)
             });
           }
         }
       }
 
+      // Flush batched price updates immediately to database
+      await this.flushPendingPrices();
+
       // Adjust IPMC Composite Index points
-      this.ipmcPoints = parseFloat((this.ipmcPoints * (1 + impactRatio * 0.65)).toFixed(2));
+      this.ipmcPoints = parseFloat((this.ipmcPoints * (1 + impactRatio * 0.85)).toFixed(2));
       this.ipmcChangePts = parseFloat((this.ipmcPoints - this.ipmcOpen).toFixed(2));
       this.ipmcChangePct = parseFloat(((this.ipmcChangePts / this.ipmcOpen) * 100).toFixed(2));
       this.ipmcLow = Math.min(this.ipmcLow, this.ipmcPoints);

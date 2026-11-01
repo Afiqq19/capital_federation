@@ -3464,11 +3464,11 @@ app.post('/api/federation/macro/state', async (req, res) => {
     // Terapkan efek langsung ke engine pasar jika ada
     if (simulationEngine && typeof simulationEngine.applyMacroShock === 'function') {
       if (economicState === 'CRISIS') {
-        await simulationEngine.applyMacroShock('ALL', -15.0);
+        await simulationEngine.applyMacroShock('ALL', -25.0);
       } else if (economicState === 'BOOM') {
-        await simulationEngine.applyMacroShock('ALL', 12.0);
+        await simulationEngine.applyMacroShock('ALL', 18.0);
       } else if (economicState === 'RECESSION') {
-        await simulationEngine.applyMacroShock('ALL', -6.0);
+        await simulationEngine.applyMacroShock('ALL', -12.0);
       }
     }
 
