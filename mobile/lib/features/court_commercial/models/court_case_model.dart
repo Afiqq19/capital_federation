@@ -25,6 +25,10 @@ class CourtCaseModel {
   final String? closedAt;
   final String? deedId;
   final String? deedNumber;
+  final String? lawyerName;
+  final double lawyerFeeIb;
+  final bool isConservatoirBeslag;
+  final double beslagAmountIb;
   final String createdAt;
 
   CourtCaseModel({
@@ -54,6 +58,10 @@ class CourtCaseModel {
     this.closedAt,
     this.deedId,
     this.deedNumber,
+    this.lawyerName,
+    this.lawyerFeeIb = 0.0,
+    this.isConservatoirBeslag = false,
+    this.beslagAmountIb = 0.0,
     required this.createdAt,
   });
 
@@ -107,6 +115,12 @@ class CourtCaseModel {
       closedAt: (json['closed_at'] ?? json['closedAt'])?.toString(),
       deedId: (json['deed_id'] ?? json['deedId'])?.toString(),
       deedNumber: (json['deed_number'] ?? json['deedNumber'])?.toString(),
+      lawyerName: (json['lawyer_name'] ?? json['lawyerName'])?.toString(),
+      lawyerFeeIb: ((json['lawyer_fee_ib'] ?? json['lawyerFeeIb']) as num?)?.toDouble() ?? 0.0,
+      isConservatoirBeslag: json['is_conservatoir_beslag'] == 1 ||
+          json['is_conservatoir_beslag'] == true ||
+          json['isConservatoirBeslag'] == true,
+      beslagAmountIb: ((json['beslag_amount_ib'] ?? json['beslagAmountIb']) as num?)?.toDouble() ?? 0.0,
       createdAt: (json['created_at'] ?? json['createdAt'])?.toString() ?? '',
     );
   }

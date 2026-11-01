@@ -26,6 +26,8 @@ class FileLawsuitSheet extends StatefulWidget {
 class _FileLawsuitSheetState extends State<FileLawsuitSheet> {
   String _caseType = 'DISPUTE'; // 'DISPUTE', 'DEFAMATION', 'RECONVENTION', 'BANKRUPTCY', 'REGULATORY'
   bool _takeoverIfInsolvent = true;
+  String _selectedLawyerKey = 'NONE'; // 'NONE', 'PUJA', 'ZAHRA', 'SAGALA'
+  bool _isConservatoirBeslag = false;
   final TextEditingController _defendantCtrl = TextEditingController();
   final TextEditingController _titleCtrl = TextEditingController();
   final TextEditingController _claimCtrl = TextEditingController(text: '500000000');
@@ -38,6 +40,32 @@ class _FileLawsuitSheetState extends State<FileLawsuitSheet> {
   String? _selectedDefName;
 
   final int _courtFee = 250000;
+
+  double get _lawyerFee {
+    switch (_selectedLawyerKey) {
+      case 'PUJA':
+        return 25000000.0;
+      case 'ZAHRA':
+        return 75000000.0;
+      case 'SAGALA':
+        return 250000000.0;
+      default:
+        return 0.0;
+    }
+  }
+
+  String? get _lawyerName {
+    switch (_selectedLawyerKey) {
+      case 'PUJA':
+        return 'Puja Azzahra, S.H., LL.M.';
+      case 'ZAHRA':
+        return 'Zahra Bintang, S.H., M.H.';
+      case 'SAGALA':
+        return 'Khairul Sagala, S.H., C.L.A.';
+      default:
+        return null;
+    }
+  }
 
   @override
   void dispose() {
@@ -281,10 +309,11 @@ class _FileLawsuitSheetState extends State<FileLawsuitSheet> {
       return;
     }
 
-    if (user.balanceIb < _courtFee) {
+    final double totalFee = _courtFee.toDouble() + _lawyerFee;
+    if (user.balanceIb < totalFee) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Saldo Kas Pribadi Anda (${CurrencyFormatter.formatFull(user.balanceIb)}) tidak mencukupi untuk biaya panitera PNAF (IB 250.000).'),
+          content: Text('Saldo Kas Pribadi Anda (${CurrencyFormatter.formatFull(user.balanceIb)}) tidak mencukupi untuk biaya panitera PNAF dan jasa pengacara (${CurrencyFormatter.formatFull(totalFee)}).'),
           backgroundColor: Colors.red,
         ),
       );
@@ -314,6 +343,9 @@ class _FileLawsuitSheetState extends State<FileLawsuitSheet> {
       claimAmountIb: claimAmount,
       notes: fullNotes,
       targetAssetDescription: targetAsset,
+      lawyerName: _lawyerName,
+      lawyerFeeIb: _lawyerFee,
+      isConservatoirBeslag: _isConservatoirBeslag,
     );
 
     setState(() => _isSubmitting = false);
@@ -707,7 +739,114 @@ class _FileLawsuitSheetState extends State<FileLawsuitSheet> {
             ),
             const SizedBox(height: 14),
 
-            // Info Biaya Panitera
+            // Pilihan Kuasa Hukum & Advokat PNAF (Top Lawyers)
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF070B14),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFF5B942).withValues(alpha: 0.4)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.gavel_rounded, color: Color(0xFFF5B942), size: 18),
+                      SizedBox(width: 8),
+                      Text(
+                        'PILIH KUASA HUKUM & ADVOKAT (PNAF)',
+                        style: TextStyle(color: Color(0xFFF5B942), fontSize: 11, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Sewa advokat top bursa untuk meningkatkan peluang kemenangan perkara dan menuntut pemulihan kerugian maksimal.',
+                    style: TextStyle(color: Color(0xFF94A3B8), fontSize: 9.5),
+                  ),
+                  const SizedBox(height: 10),
+                  _buildLawyerTile(
+                    'SAGALA',
+                    'Khairul Sagala, S.H., C.L.A.',
+                    'Sagala & Associates • Sultan Tier',
+                    250000000.0,
+                    '🔥 Win Rate +50%, Eksekusi Sita Seketika, Dalil Besi Baja Tak Terbantahkan',
+                    const Color(0xFFE11D48),
+                  ),
+                  const SizedBox(height: 6),
+                  _buildLawyerTile(
+                    'ZAHRA',
+                    'Zahra Bintang, S.H., M.H.',
+                    'Bintang Law Office • Commercial Expert',
+                    75000000.0,
+                    '⚡ Win Rate +35%, Ahli Sita Jaminan & Imunitas Gugatan Rekonvensi',
+                    const Color(0xFF8B5CF6),
+                  ),
+                  const SizedBox(height: 6),
+                  _buildLawyerTile(
+                    'PUJA',
+                    'Puja Azzahra, S.H., LL.M.',
+                    'Azzahra & Partners Law Firm',
+                    25000000.0,
+                    '🛡️ Win Rate +20%, Pengembalian Tuntutan Ganti Rugi Penuh',
+                    const Color(0xFF38BDF8),
+                  ),
+                  const SizedBox(height: 6),
+                  _buildLawyerTile(
+                    'NONE',
+                    'Maju Mandiri (Tanpa Pengacara)',
+                    'Pembelaan Sendiri di Muka Persidangan',
+                    0.0,
+                    'Biaya honorarium IB 0 (hanya bayar registrasi panitera)',
+                    const Color(0xFF64748B),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+
+            // Permohonan Sita Jaminan (Conservatoir Beslag)
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: _isConservatoirBeslag ? const Color(0xFF0284C7).withValues(alpha: 0.15) : const Color(0xFF070B14),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: _isConservatoirBeslag ? const Color(0xFF38BDF8) : const Color(0xFF1E293B)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.lock_person_rounded, color: _isConservatoirBeslag ? const Color(0xFF38BDF8) : Colors.grey, size: 22),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          '🔒 Permohonan Sita Jaminan (Conservatoir Beslag)',
+                          style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          _isConservatoirBeslag
+                              ? 'Majelis Hakim akan membekukan kas Tergugat hingga sebesar nilai tuntutan selama persidangan berlangsung agar Tergugat tidak memindahkan dana!'
+                              : 'Tidak mengajukan sita jaminan sebelum putusan diketuk.',
+                          style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 9.5),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Switch(
+                    value: _isConservatoirBeslag,
+                    activeColor: const Color(0xFF38BDF8),
+                    onChanged: (val) => setState(() => _isConservatoirBeslag = val),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+
+            // Info Biaya Panitera & Honorarium Pengacara
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -715,17 +854,48 @@ class _FileLawsuitSheetState extends State<FileLawsuitSheet> {
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: const Color(0xFF334155)),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              child: Column(
                 children: [
-                  const Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('Biaya Registrasi Panitera PNAF:', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10)),
-                      Text('Meterai Digital & Berita Acara', style: TextStyle(color: Color(0xFF64748B), fontSize: 9)),
+                      const Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Biaya Registrasi Panitera PNAF:', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10)),
+                          Text('Meterai Digital & Berita Acara', style: TextStyle(color: Color(0xFF64748B), fontSize: 9)),
+                        ],
+                      ),
+                      Text(CurrencyFormatter.formatFull(_courtFee.toDouble()), style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 11, fontWeight: FontWeight.bold, fontFamily: 'monospace')),
                     ],
                   ),
-                  Text(CurrencyFormatter.formatFull(_courtFee.toDouble()), style: const TextStyle(color: Color(0xFFF5B942), fontSize: 12, fontWeight: FontWeight.bold, fontFamily: 'monospace')),
+                  if (_lawyerFee > 0) ...[
+                    const Divider(color: Color(0xFF1E293B), height: 14),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Honorarium Kuasa Hukum:', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10)),
+                            Text(_lawyerName ?? '', style: const TextStyle(color: Color(0xFFF5B942), fontSize: 9, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                        Text(CurrencyFormatter.formatFull(_lawyerFee), style: const TextStyle(color: Color(0xFFF5B942), fontSize: 11, fontWeight: FontWeight.bold, fontFamily: 'monospace')),
+                      ],
+                    ),
+                  ],
+                  const Divider(color: Color(0xFF334155), height: 14),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('TOTAL BIAYA DIAJUKAN:', style: TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.bold)),
+                      Text(
+                        CurrencyFormatter.formatFull(_courtFee.toDouble() + _lawyerFee),
+                        style: const TextStyle(color: Color(0xFF10B981), fontSize: 12, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -787,6 +957,61 @@ class _FileLawsuitSheetState extends State<FileLawsuitSheet> {
                   Text(subtitle, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 9.5)),
                 ],
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLawyerTile(String key, String name, String firm, double fee, String perk, Color color) {
+    final isSelected = _selectedLawyerKey == key;
+    return InkWell(
+      onTap: () => setState(() => _selectedLawyerKey = key),
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.all(9),
+        decoration: BoxDecoration(
+          color: isSelected ? color.withValues(alpha: 0.15) : const Color(0xFF0B1120),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: isSelected ? color : const Color(0xFF1E293B), width: isSelected ? 1.5 : 1),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Row(
+                    children: [
+                      Icon(isSelected ? Icons.check_circle_rounded : Icons.circle_outlined, color: isSelected ? color : const Color(0xFF64748B), size: 15),
+                      const SizedBox(width: 7),
+                      Expanded(
+                        child: Text(
+                          name,
+                          style: TextStyle(color: isSelected ? Colors.white : const Color(0xFFCBD5E1), fontSize: 11, fontWeight: FontWeight.bold),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Text(
+                  fee > 0 ? CurrencyFormatter.formatFull(fee) : 'GRATIS',
+                  style: TextStyle(color: isSelected ? const Color(0xFFF5B942) : const Color(0xFF94A3B8), fontSize: 10, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 2),
+            Padding(
+              padding: const EdgeInsets.only(left: 22),
+              child: Text(firm, style: const TextStyle(color: Color(0xFF64748B), fontSize: 9)),
+            ),
+            const SizedBox(height: 3),
+            Padding(
+              padding: const EdgeInsets.only(left: 22),
+              child: Text(perk, style: TextStyle(color: isSelected ? color : const Color(0xFF94A3B8), fontSize: 9)),
             ),
           ],
         ),

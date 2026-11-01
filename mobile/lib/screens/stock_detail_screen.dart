@@ -29,6 +29,10 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
   int? _scrubIndex;
   double? _scrubPrice;
 
+  int _selectedSplitRatio = 2;
+  double _selectedDividendRate = 0.05;
+  bool _isExecutingCorporateAction = false;
+
   // Real-time Orderbook Queue tracking & highlights
   Map<int, int> _myBidOrders = {};
   Map<int, int> _myOfferOrders = {};
@@ -1033,8 +1037,8 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                     // Stockbit Technical Indicator Row (MA, EMA, BOLL, VOL, RSI, MACD, KDJ)
                     _buildTechnicalIndicatorsRow(),
 
-                    // Stockbit Sub-Tabs (Orderbook, Trade Activity, Informasi Broker, Insider)
-                    _buildStockbitSubTabs(),
+                    // Stockbit Sub-Tabs (Orderbook, Trade Activity, Informasi Broker, Insider, Aksi Korporasi)
+                    _buildStockbitSubTabs(isOwner),
 
                     // Stockbit Bursa IDX 3x3 Stats Card (Open, Prev, Lot, High, ARA, Val, Low, ARB, Avg)
                     _buildStockbitBursaStats(c, candlePoints),
@@ -1197,6 +1201,8 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                       _buildBrokerSummaryTab(c, provider),
                     ] else if (_selectedSubTab == 'Insider') ...[
                       _buildInsiderTab(c, provider),
+                    ] else if (_selectedSubTab == 'Aksi Korporasi') ...[
+                      _buildCorporateActionsTab(c, provider),
                     ],
 
                     const SizedBox(height: 14),
@@ -1830,8 +1836,14 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
     );
   }
 
-  Widget _buildStockbitSubTabs() {
-    final tabs = ['Orderbook', 'Trade Activity', 'Informasi Broker', 'Insider'];
+  Widget _buildStockbitSubTabs(bool isOwner) {
+    final tabs = [
+      'Orderbook',
+      'Trade Activity',
+      'Informasi Broker',
+      'Insider',
+      if (isOwner) 'Aksi Korporasi',
+    ];
     return Container(
       margin: const EdgeInsets.only(top: 10, bottom: 4),
       decoration: const BoxDecoration(
@@ -1885,6 +1897,390 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
             );
           }).toList(),
         ),
+      ),
+    );
+  }
+
+  Widget _buildCorporateActionsTab(CompanyModel c, GameProvider provider) {
+    final user = provider.user;
+    if (user == null) return const SizedBox.shrink();
+
+    final int splitRatio = _selectedSplitRatio;
+    final double theoreticalNewPrice = max(1.0, (c.currentPrice / splitRatio).roundToDouble());
+    final int theoreticalNewTotalShares = (c.totalShares * splitRatio).round();
+    final double divRate = _selectedDividendRate;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Section 1: Stock Split (Pemecahan Nilai Saham)
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0F172A),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.3)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(7),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF38BDF8).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.call_split_rounded, color: Color(0xFF38BDF8), size: 18),
+                    ),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'AKSI KORPORASI: STOCK SPLIT',
+                            style: TextStyle(color: Color(0xFF38BDF8), fontSize: 11, fontWeight: FontWeight.w900),
+                          ),
+                          Text(
+                            'Pemecahan Nilai Nominal Saham Emiten di Bursa',
+                            style: TextStyle(color: Color(0xFF94A3B8), fontSize: 9.5),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'Stock split membagi harga saham per lembar menjadi lebih terjangkau bagi publik bursa. Total valuasi kapitalisasi pasar dan total nilai portofolio seluruh investor tetap 100% utuh tanpa berkurang sedikit pun.',
+                  style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 10.5, height: 1.4),
+                ),
+                const SizedBox(height: 12),
+
+                // Choice Chips Rasio Split
+                const Text('Pilih Rasio Stock Split:', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 6),
+                Row(
+                  children: [2, 5, 10].map((ratio) {
+                    final isSel = _selectedSplitRatio == ratio;
+                    return Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 3),
+                        child: InkWell(
+                          onTap: () => setState(() => _selectedSplitRatio = ratio),
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            decoration: BoxDecoration(
+                              color: isSel ? const Color(0xFF38BDF8).withValues(alpha: 0.2) : const Color(0xFF070B14),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: isSel ? const Color(0xFF38BDF8) : const Color(0xFF1E293B),
+                                width: isSel ? 1.5 : 1,
+                              ),
+                            ),
+                            child: Column(
+                              children: [
+                                Text(
+                                  '1 : $ratio',
+                                  style: TextStyle(
+                                    color: isSel ? const Color(0xFF38BDF8) : Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w900,
+                                    fontFamily: 'monospace',
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Pecah ${ratio}x',
+                                  style: TextStyle(
+                                    color: isSel ? Colors.white : const Color(0xFF64748B),
+                                    fontSize: 9,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 12),
+
+                // Live Simulation Box
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF070B14),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFF1E293B)),
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Harga Saham Saat Ini:', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10)),
+                          Text(CurrencyFormatter.formatFull(c.currentPrice), style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold, fontFamily: 'monospace')),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Harga Teoretis Baru Pasca Split:', style: TextStyle(color: Color(0xFF38BDF8), fontSize: 10, fontWeight: FontWeight.bold)),
+                          Text(CurrencyFormatter.formatFull(theoreticalNewPrice), style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 12, fontWeight: FontWeight.w900, fontFamily: 'monospace')),
+                        ],
+                      ),
+                      const Divider(color: Color(0xFF1E293B), height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Total Lembar Beredar Baru:', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10)),
+                          Text('${CurrencyFormatter.formatCompact(theoreticalNewTotalShares.toDouble())} Lembar', style: const TextStyle(color: Color(0xFFF5B942), fontSize: 11, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // Tombol Eksekusi Stock Split
+                SizedBox(
+                  width: double.infinity,
+                  height: 42,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0284C7),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    icon: _isExecutingCorporateAction
+                        ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                        : const Icon(Icons.call_split_rounded, size: 16),
+                    label: Text(
+                      _isExecutingCorporateAction ? 'MEMPROSES SPLIT...' : 'EKSEKUSI STOCK SPLIT 1:$_selectedSplitRatio (RUPS)',
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                    onPressed: _isExecutingCorporateAction
+                        ? null
+                        : () async {
+                            final messenger = ScaffoldMessenger.of(context);
+                            final confirm = await showDialog<bool>(
+                              context: context,
+                              builder: (dCtx) => AlertDialog(
+                                backgroundColor: const Color(0xFF0F172A),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                title: const Row(
+                                  children: [
+                                    Icon(Icons.call_split_rounded, color: Color(0xFF38BDF8), size: 20),
+                                    SizedBox(width: 8),
+                                    Text('Konfirmasi Stock Split', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+                                  ],
+                                ),
+                                content: Text(
+                                  'Apakah Anda yakin menyetujui Aksi Korporasi Stock Split rasio 1:$_selectedSplitRatio untuk emiten ${c.symbol}?\n\n'
+                                  '• Harga per lembar saham akan disesuaikan menjadi ${CurrencyFormatter.formatFull(theoreticalNewPrice)}.\n'
+                                  '• Portofolio pemegang saham dikalikan ${_selectedSplitRatio}x lipat (nilai modal tidak berkurang).\n'
+                                  '• Antrean order pending lama di orderbook bursa akan dibatalkan otomatis.',
+                                  style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 11.5, height: 1.4),
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(dCtx, false),
+                                    child: const Text('Batal', style: TextStyle(color: Color(0xFF94A3B8))),
+                                  ),
+                                  ElevatedButton(
+                                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0284C7)),
+                                    onPressed: () => Navigator.pop(dCtx, true),
+                                    child: const Text('Eksekusi RUPS', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                  ),
+                                ],
+                              ),
+                            );
+
+                            if (confirm != true) return;
+
+                            setState(() => _isExecutingCorporateAction = true);
+                            final res = await ApiService.stockSplitCompany(
+                              userId: user.id,
+                              companyId: c.id,
+                              ratio: _selectedSplitRatio,
+                            );
+                            setState(() => _isExecutingCorporateAction = false);
+
+                            if (!mounted) return;
+                            if (res['error'] != null) {
+                              messenger.showSnackBar(
+                                SnackBar(content: Text('❌ Gagal: ${res['error']}'), backgroundColor: Colors.red),
+                              );
+                            } else {
+                              messenger.showSnackBar(
+                                SnackBar(
+                                  content: Text('✅ ${res['message'] ?? 'Stock Split berhasil dilaksanakan!'}'),
+                                  backgroundColor: const Color(0xFF10B981),
+                                  duration: const Duration(seconds: 4),
+                                ),
+                              );
+                              await provider.loadInitialData();
+                              await provider.fetchConglomerate();
+                              _fetchDetail();
+                            }
+                          },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Section 2: Kebijakan Rasio Dividen RUPS Mandiri
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0F172A),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFF5B942).withValues(alpha: 0.3)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(7),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF5B942).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.monetization_on_rounded, color: Color(0xFFF5B942), size: 18),
+                    ),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'KEBIJAKAN RASIO DIVIDEN RUPS',
+                            style: TextStyle(color: Color(0xFFF5B942), fontSize: 11, fontWeight: FontWeight.w900),
+                          ),
+                          Text(
+                            'Hak Pengendali Menentukan Persentase Payout Saham',
+                            style: TextStyle(color: Color(0xFF94A3B8), fontSize: 9.5),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'Sebagai founder/pengendali, Anda menentukan rasio dividen berkala yang dibayarkan ke seluruh investor tercatat setiap siklus arus kas bursa. Semakin tinggi dividen, semakin menarik saham bagi investor!',
+                  style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 10.5, height: 1.4),
+                ),
+                const SizedBox(height: 12),
+
+                // Choice Chips Rasio Dividen
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Pilih Kebijakan Rasio Dividen:', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                    Text(
+                      '${(divRate * 100).toStringAsFixed(1)}%',
+                      style: const TextStyle(color: Color(0xFFF5B942), fontSize: 12, fontWeight: FontWeight.w900, fontFamily: 'monospace'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [0.02, 0.05, 0.08, 0.10, 0.15, 0.20].map((rate) {
+                    final isSel = (_selectedDividendRate - rate).abs() < 0.005;
+                    return InkWell(
+                      onTap: () => setState(() => _selectedDividendRate = rate),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: isSel ? const Color(0xFFF5B942).withValues(alpha: 0.2) : const Color(0xFF070B14),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: isSel ? const Color(0xFFF5B942) : const Color(0xFF1E293B),
+                            width: isSel ? 1.5 : 1,
+                          ),
+                        ),
+                        child: Text(
+                          '${(rate * 100).toInt()}%${rate == 0.05 ? ' (Std)' : (rate >= 0.15 ? ' (Sultan)' : '')}',
+                          style: TextStyle(
+                            color: isSel ? const Color(0xFFF5B942) : const Color(0xFFCBD5E1),
+                            fontSize: 10.5,
+                            fontWeight: isSel ? FontWeight.bold : FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 14),
+
+                // Tombol Simpan Kebijakan Dividen
+                SizedBox(
+                  width: double.infinity,
+                  height: 42,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF10B981),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    icon: _isExecutingCorporateAction
+                        ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                        : const Icon(Icons.check_circle_outline_rounded, size: 16),
+                    label: Text(
+                      _isExecutingCorporateAction ? 'MENYIMPAN...' : 'SIMPAN KEBIJAKAN DIVIDEN (${(_selectedDividendRate * 100).toInt()}%)',
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                    onPressed: _isExecutingCorporateAction
+                        ? null
+                        : () async {
+                            final messenger = ScaffoldMessenger.of(context);
+                            setState(() => _isExecutingCorporateAction = true);
+                            final res = await ApiService.setDividendPolicy(
+                              userId: user.id,
+                              companyId: c.id,
+                              dividendRate: _selectedDividendRate,
+                            );
+                            setState(() => _isExecutingCorporateAction = false);
+
+                            if (!mounted) return;
+                            if (res['error'] != null) {
+                              messenger.showSnackBar(
+                                SnackBar(content: Text('❌ Gagal: ${res['error']}'), backgroundColor: Colors.red),
+                              );
+                            } else {
+                              messenger.showSnackBar(
+                                SnackBar(
+                                  content: Text('✅ ${res['message'] ?? 'Kebijakan Dividen RUPS berhasil ditetapkan!'}'),
+                                  backgroundColor: const Color(0xFF10B981),
+                                  duration: const Duration(seconds: 4),
+                                ),
+                              );
+                              await provider.loadInitialData();
+                              _fetchDetail();
+                            }
+                          },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

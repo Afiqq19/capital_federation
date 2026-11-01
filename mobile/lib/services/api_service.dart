@@ -98,8 +98,8 @@ class ApiService {
   }
 
   static const String currentAppVersion = '1.9.9';
-  static const int currentBuildNumber = 43;
-  static const String currentApkDisplayVersion = 'v1.9.9-CFX Production (Build 43)';
+  static const int currentBuildNumber = 44;
+  static const String currentApkDisplayVersion = 'v1.9.9-CFX Production (Build 44)';
 
   // Fetch Live Server Version & Update Detection Info
   static Future<Map<String, dynamic>?> getServerVersion() async {
@@ -1365,6 +1365,9 @@ class ApiService {
     String? hearingDate,
     String? notes,
     String? targetAssetDescription,
+    String? lawyerName,
+    double? lawyerFeeIb,
+    bool? isConservatoirBeslag,
   }) async {
     try {
       final response = await http.post(
@@ -1382,11 +1385,84 @@ class ApiService {
           if (hearingDate != null) 'hearingDate': hearingDate,
           if (notes != null) 'notes': notes,
           if (targetAssetDescription != null) 'targetAssetDescription': targetAssetDescription,
+          if (lawyerName != null) 'lawyerName': lawyerName,
+          if (lawyerFeeIb != null) 'lawyerFeeIb': lawyerFeeIb,
+          if (isConservatoirBeslag != null) 'isConservatoirBeslag': isConservatoirBeslag,
         }),
       ).timeout(const Duration(seconds: 6));
       return jsonDecode(response.body);
     } catch (e) {
       return {'error': 'Gagal mendaftarkan gugatan ke PNAF: Gangguan koneksi'};
+    }
+  }
+
+  // Transfer Sinergi Arus Kas Antar Perusahaan (Holding & Anak Perusahaan Konglomerasi)
+  static Future<Map<String, dynamic>> transferConglomerateCash({
+    required String userId,
+    required String fromCompanyId,
+    required String toCompanyId,
+    required double amountIb,
+    String? notes,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/conglomerate/transfer-cash'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'userId': userId,
+          'fromCompanyId': fromCompanyId,
+          'toCompanyId': toCompanyId,
+          'amountIb': amountIb,
+          if (notes != null) 'notes': notes,
+        }),
+      ).timeout(const Duration(seconds: 10));
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'error': 'Gagal transfer kas konglomerasi: $e'};
+    }
+  }
+
+  // Aksi Korporasi: Stock Split (Pemecahan Nilai Saham Emiten)
+  static Future<Map<String, dynamic>> stockSplitCompany({
+    required String userId,
+    required String companyId,
+    required int ratio,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/company/stock-split'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'userId': userId,
+          'companyId': companyId,
+          'ratio': ratio,
+        }),
+      ).timeout(const Duration(seconds: 10));
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'error': 'Gagal mengeksekusi stock split: $e'};
+    }
+  }
+
+  // Aksi Korporasi: Kebijakan Rasio Dividen RUPS Mandiri
+  static Future<Map<String, dynamic>> setDividendPolicy({
+    required String userId,
+    required String companyId,
+    required double dividendRate,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/company/dividend-policy'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'userId': userId,
+          'companyId': companyId,
+          'dividendRate': dividendRate,
+        }),
+      ).timeout(const Duration(seconds: 10));
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'error': 'Gagal menyimpan kebijakan dividen: $e'};
     }
   }
 

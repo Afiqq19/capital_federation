@@ -1399,6 +1399,288 @@ app.post('/api/company/withdraw', async (req, res) => {
   }
 });
 
+// Transfer Sinergi Arus Kas Antar Perusahaan (Holding & Anak Perusahaan Konglomerasi)
+app.post('/api/conglomerate/transfer-cash', async (req, res) => {
+  try {
+    const { userId, fromCompanyId, toCompanyId, amountIb, notes } = req.body;
+    const numAmount = parseFloat(amountIb);
+    if (!userId || !fromCompanyId || !toCompanyId || isNaN(numAmount) || numAmount <= 0) {
+      return res.status(400).json({ error: 'Parameter transfer kas tidak lengkap atau nominal tidak valid' });
+    }
+    if (fromCompanyId === toCompanyId) {
+      return res.status(400).json({ error: 'Perusahaan sumber dan tujuan tidak boleh sama' });
+    }
+
+    const user = await query.get('SELECT * FROM users WHERE id = ?', [userId]);
+    if (!user) return res.status(404).json({ error: 'User tidak ditemukan' });
+
+    // Cek kepemilikan / kendali perusahaan sumber
+    const fromComp = await query.get('SELECT * FROM companies WHERE id = ?', [fromCompanyId]);
+    if (!fromComp) return res.status(404).json({ error: 'Perusahaan sumber tidak ditemukan' });
+    if (fromComp.owner_id !== userId) {
+      const shFrom = await query.get(
+        'SELECT shares_count FROM company_shareholders WHERE company_id = ? AND user_id = ?',
+        [fromCompanyId, userId]
+      );
+      const isMajorityFrom = shFrom && (shFrom.shares_count / (fromComp.total_shares || 1)) >= 0.50;
+      if (!isMajorityFrom) {
+        return res.status(403).json({ error: `Anda bukan pemilik/pengendali ${fromComp.name} (${fromComp.symbol})` });
+      }
+    }
+
+    // Cek kepemilikan / kendali perusahaan tujuan
+    const toComp = await query.get('SELECT * FROM companies WHERE id = ?', [toCompanyId]);
+    if (!toComp) return res.status(404).json({ error: 'Perusahaan tujuan tidak ditemukan' });
+    if (toComp.owner_id !== userId) {
+      const shTo = await query.get(
+        'SELECT shares_count FROM company_shareholders WHERE company_id = ? AND user_id = ?',
+        [toCompanyId, userId]
+      );
+      const isMajorityTo = shTo && (shTo.shares_count / (toComp.total_shares || 1)) >= 0.50;
+      if (!isMajorityTo) {
+        return res.status(403).json({ error: `Anda bukan pemilik/pengendali ${toComp.name} (${toComp.symbol})` });
+      }
+    }
+
+    // Cek saldo kas perusahaan sumber
+    if (fromComp.company_balance_ib < numAmount) {
+      return res.status(400).json({
+        error: `Saldo Kas ${fromComp.symbol} (IB ${Number(fromComp.company_balance_ib || 0).toLocaleString('id-ID')}) tidak mencukupi untuk transfer IB ${numAmount.toLocaleString('id-ID')}`
+      });
+    }
+
+    const newFromBal = fromComp.company_balance_ib - numAmount;
+    const newToBal = toComp.company_balance_ib + numAmount;
+
+    await query.run('UPDATE companies SET company_balance_ib = ? WHERE id = ?', [newFromBal, fromCompanyId]);
+
+    // Jika PT tujuan sebelumnya defisit/bangkrut/dibekukan dan kini saldonya sudah >= 0, pulihkan otomatis (auto-heal)!
+    let autoHealed = false;
+    if (newToBal >= 0 && (toComp.status === 'BANKRUPT' || toComp.status === 'SUSPENDED' || toComp.is_seized === 1)) {
+      await query.run(
+        `UPDATE companies 
+         SET company_balance_ib = ?, status = 'HEALTHY', is_seized = 0, is_auction_ready = 0, seize_reason = NULL, suspended_at = NULL, suspend_until = NULL, suspend_reason = NULL
+         WHERE id = ?`,
+        [newToBal, toCompanyId]
+      );
+      autoHealed = true;
+    } else {
+      await query.run('UPDATE companies SET company_balance_ib = ? WHERE id = ?', [newToBal, toCompanyId]);
+    }
+
+    // Sinkronkan ke users.company_balance_ib jika salah satunya adalah PT Utama
+    const primaryComp = await query.get(
+      'SELECT id FROM companies WHERE owner_id = ? AND is_acquired = 0 ORDER BY created_at ASC LIMIT 1',
+      [userId]
+    );
+    if (primaryComp) {
+      if (primaryComp.id === fromCompanyId) {
+        await query.run('UPDATE users SET company_balance_ib = ? WHERE id = ?', [newFromBal, userId]);
+      } else if (primaryComp.id === toCompanyId) {
+        await query.run('UPDATE users SET company_balance_ib = ? WHERE id = ?', [newToBal, userId]);
+      }
+    }
+
+    // Catat pembukuan transparan (Double-Entry Bookkeeping Ledger)
+    const customNotes = notes && notes.trim() ? notes.trim() : 'Suntikan Sinergi Kas Konglomerasi Internal';
+    await recordCashFlow({
+      userId,
+      companyId: fromCompanyId,
+      accountType: 'COMPANY',
+      category: 'CONGLOMERATE_TRANSFER',
+      title: `Transfer Kas Sinergi ke ${toComp.symbol}`,
+      amountIb: numAmount,
+      direction: 'EXPENSE',
+      balanceAfter: newFromBal,
+      notes: `${customNotes} (Tujuan: ${toComp.name})`,
+    });
+    await recordCashFlow({
+      userId,
+      companyId: toCompanyId,
+      accountType: 'COMPANY',
+      category: 'CONGLOMERATE_TRANSFER',
+      title: `Penerimaan Kas Sinergi dari ${fromComp.symbol}`,
+      amountIb: numAmount,
+      direction: 'INCOME',
+      balanceAfter: newToBal,
+      notes: `${customNotes} (Sumber: ${fromComp.name})`,
+    });
+
+    invalidateMarketCaches();
+    io.emit('company:updated', { id: fromCompanyId, company_balance_ib: newFromBal });
+    io.emit('company:updated', { id: toCompanyId, company_balance_ib: newToBal, status: autoHealed ? 'HEALTHY' : toComp.status });
+    io.emit('user:balance_updated', { userId });
+
+    return res.json({
+      success: true,
+      message: `Berhasil mentransfer IB ${numAmount.toLocaleString('id-ID')} dari ${fromComp.symbol} ke ${toComp.symbol}!${autoHealed ? ` Status ${toComp.symbol} telah dipulihkan aktif (bebas dari kebangkrutan/sitaan)!` : ''}`,
+      fromCompanyId,
+      fromBalance: newFromBal,
+      toCompanyId,
+      toBalance: newToBal,
+      autoHealed,
+    });
+  } catch (err) {
+    console.error('Error in /api/conglomerate/transfer-cash:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Aksi Korporasi: Stock Split (Pemecahan Nilai Saham Emiten)
+app.post('/api/company/stock-split', async (req, res) => {
+  try {
+    const { userId, companyId, ratio } = req.body;
+    const splitRatio = parseInt(ratio);
+    if (![2, 5, 10].includes(splitRatio)) {
+      return res.status(400).json({ error: 'Rasio Stock Split yang didukung adalah 1:2, 1:5, atau 1:10' });
+    }
+
+    const company = await query.get('SELECT * FROM companies WHERE id = ?', [companyId]);
+    if (!company) return res.status(404).json({ error: 'Perusahaan tidak ditemukan' });
+
+    // Validasi wewenang pendiri / pengendali
+    if (company.owner_id !== userId) {
+      const sh = await query.get(
+        'SELECT shares_count FROM company_shareholders WHERE company_id = ? AND user_id = ?',
+        [companyId, userId]
+      );
+      const isMajority = sh && (sh.shares_count / (company.total_shares || 1)) >= 0.50;
+      if (!isMajority) {
+        return res.status(403).json({ error: 'Hanya Pendiri atau Pemegang Saham Mayoritas (≥50%) yang berhak mengeksekusi Stock Split' });
+      }
+    }
+
+    if (company.is_seized === 1 || company.status === 'SUSPENDED') {
+      return res.status(400).json({ error: 'Perusahaan dalam status pembekuan / sita. Selesaikan kewajiban hukum sebelum aksi korporasi' });
+    }
+
+    if (company.current_price < 20) {
+      return res.status(400).json({ error: 'Harga saham saat ini terlalu rendah untuk dilakukan stock split' });
+    }
+
+    const oldPrice = company.current_price;
+    const newPrice = Math.max(1, Math.round(oldPrice / splitRatio));
+    const newBasePrice = Math.max(1, Math.round((company.base_price || oldPrice) / splitRatio));
+    const newPrevClose = Math.max(1, Math.round((company.prev_close || oldPrice) / splitRatio));
+    const newDailyHigh = Math.max(1, Math.round((company.daily_high || oldPrice) / splitRatio));
+    const newDailyLow = Math.max(1, Math.round((company.daily_low || oldPrice) / splitRatio));
+    const newTotalShares = Math.round(company.total_shares * splitRatio);
+    const newCirculatingShares = Math.round(company.circulating_shares * splitRatio);
+    const nowIso = new Date().toISOString();
+
+    // 1. Update data emiten di tabel companies
+    await query.run(
+      `UPDATE companies 
+       SET current_price = ?, base_price = ?, prev_close = ?, daily_high = ?, daily_low = ?, 
+           total_shares = ?, circulating_shares = ?, last_stock_split_at = ?, split_ratio = ?
+       WHERE id = ?`,
+      [newPrice, newBasePrice, newPrevClose, newDailyHigh, newDailyLow, newTotalShares, newCirculatingShares, nowIso, `1:${splitRatio}`, companyId]
+    );
+
+    // 2. Sesuaikan seluruh portofolio investor (lots_owned dikali rasio, avg_buy_price dibagi rasio)
+    await query.run(
+      `UPDATE portfolios 
+       SET lots_owned = lots_owned * ?, avg_buy_price = avg_buy_price / ?
+       WHERE company_id = ?`,
+      [splitRatio, splitRatio, companyId]
+    );
+
+    // 3. Sesuaikan pencatatan lembar saham di company_shareholders
+    await query.run(
+      `UPDATE company_shareholders 
+       SET shares_count = shares_count * ?
+       WHERE company_id = ?`,
+      [splitRatio, companyId]
+    );
+
+    // 4. Batalkan order PENDING lama di orderbook agar tidak terjadi eksekusi di harga lama
+    const pendingOrders = await query.all('SELECT * FROM market_orders WHERE company_id = ? AND status = ?', [companyId, 'PENDING']);
+    for (const order of (pendingOrders || [])) {
+      if (order.type === 'BUY') {
+        const refund = Math.round(order.target_lots * 100 * order.price_per_share);
+        await query.run('UPDATE users SET balance_ib = balance_ib + ? WHERE id = ?', [refund, order.user_id]);
+      }
+    }
+    await query.run('UPDATE market_orders SET status = ? WHERE company_id = ? AND status = ?', ['CANCELLED', companyId, 'PENDING']);
+
+    // 5. Terbitkan Siaran Pers & Berita Resmi Bursa
+    const newsTitle = `📊 AKSI KORPORASI: ${company.name} (${company.symbol}) Resmi Stock Split Rasio 1:${splitRatio}!`;
+    const newsContent = `Emiten ${company.name} telah merampungkan aksi korporasi pemecahan nilai nominal saham (Stock Split) dengan rasio 1:${splitRatio}. Harga teoretis perdagangan baru ditetapkan sebesar IB ${newPrice.toLocaleString('id-ID')}/lembar. Jumlah lot seluruh pemegang saham telah disesuaikan secara proporsional tanpa mengubah nilai modal.`;
+    const newsId = uuidv4();
+    await query.run(
+      'INSERT INTO news (id, title, content, affected_sector, sentiment, published_at) VALUES (?, ?, ?, ?, ?, ?)',
+      [newsId, newsTitle, newsContent, company.sector || 'Semua Sektor', 'BULLISH', nowIso]
+    );
+
+    invalidateMarketCaches();
+    io.emit('company:updated', { id: companyId, current_price: newPrice, total_shares: newTotalShares });
+    io.emit('market:news_broadcast', { id: newsId, title: newsTitle, content: newsContent, sentiment: 'BULLISH', published_at: nowIso });
+    io.emit('market:ticker', { symbol: company.symbol, price: newPrice, change: 0, pct: 0 });
+
+    return res.json({
+      success: true,
+      message: `Stock Split 1:${splitRatio} ${company.symbol} berhasil dilaksanakan! Harga teoretis baru: IB ${newPrice.toLocaleString('id-ID')}/lembar.`,
+      newPrice,
+      newTotalShares,
+      ratio: `1:${splitRatio}`,
+    });
+  } catch (err) {
+    console.error('Error in /api/company/stock-split:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Aksi Korporasi: Kebijakan Rasio Dividen RUPS Mandiri
+app.post('/api/company/dividend-policy', async (req, res) => {
+  try {
+    const { userId, companyId, dividendRate } = req.body;
+    const numRate = parseFloat(dividendRate);
+    if (isNaN(numRate) || numRate < 0.01 || numRate > 0.30) {
+      return res.status(400).json({ error: 'Rasio dividen harus berada di antara 1% (0.01) sampai 30% (0.30)' });
+    }
+
+    const company = await query.get('SELECT * FROM companies WHERE id = ?', [companyId]);
+    if (!company) return res.status(404).json({ error: 'Perusahaan tidak ditemukan' });
+
+    if (company.owner_id !== userId) {
+      const sh = await query.get(
+        'SELECT shares_count FROM company_shareholders WHERE company_id = ? AND user_id = ?',
+        [companyId, userId]
+      );
+      const isMajority = sh && (sh.shares_count / (company.total_shares || 1)) >= 0.50;
+      if (!isMajority) {
+        return res.status(403).json({ error: 'Hanya Pendiri atau Pemegang Saham Mayoritas (≥50%) yang berhak menentukan Kebijakan Dividen' });
+      }
+    }
+
+    await query.run('UPDATE companies SET dividend_rate = ? WHERE id = ?', [numRate, companyId]);
+
+    const pctStr = `${(numRate * 100).toFixed(1)}%`;
+    const newsTitle = `📢 RUPS ${company.symbol}: Menetapkan Kebijakan Rasio Dividen ${pctStr}!`;
+    const newsContent = `Rapat Umum Pemegang Saham (RUPS) perseroan ${company.name} (${company.symbol}) resmi menyepakati rasio pembagian dividen berkala sebesar ${pctStr} kepada para pemegang saham tercatat.`;
+    const newsId = uuidv4();
+    const nowIso = new Date().toISOString();
+
+    await query.run(
+      'INSERT INTO news (id, title, content, affected_sector, sentiment, published_at) VALUES (?, ?, ?, ?, ?, ?)',
+      [newsId, newsTitle, newsContent, company.sector || 'Semua Sektor', 'BULLISH', nowIso]
+    );
+
+    invalidateMarketCaches();
+    io.emit('company:updated', { id: companyId, dividend_rate: numRate });
+    io.emit('market:news_broadcast', { id: newsId, title: newsTitle, content: newsContent, sentiment: 'BULLISH', published_at: nowIso });
+
+    return res.json({
+      success: true,
+      message: `Kebijakan Dividen RUPS ${company.symbol} berhasil ditetapkan sebesar ${pctStr}!`,
+      dividendRate: numRate,
+    });
+  } catch (err) {
+    console.error('Error in /api/company/dividend-policy:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Upgrade Bisnis & R&D (Biaya dipotong dari Kas Perusahaan — Sinkron Penuh PT Utama & Anak Perusahaan)
 app.post('/api/company/upgrade', async (req, res) => {
   try {
@@ -2620,6 +2902,9 @@ app.post('/api/court/file-case', async (req, res) => {
       courtRoomName,
       targetAssetDescription,
       notes,
+      lawyerName,
+      lawyerFeeIb,
+      isConservatoirBeslag,
     } = req.body;
     if (!plaintiffName || !defendantName || !title) {
       return res.status(400).json({ error: 'Data penggugat, tergugat, dan pokok perkara wajib diisi' });
@@ -2649,16 +2934,23 @@ app.post('/api/court/file-case', async (req, res) => {
       }
     }
 
-    // Biaya pendaftaran perkara IB 250.000 jika diajukan oleh user pemain
+    // Biaya pendaftaran perkara & honorarium kuasa hukum jika diajukan oleh user pemain
+    const parsedLawyerFee = Math.max(0, Number(lawyerFeeIb) || 0);
+    const chosenLawyer = lawyerName && String(lawyerName).trim().length > 0 && String(lawyerName) !== 'Tanpa Pengacara' ? String(lawyerName).trim() : null;
+    const effectiveBeslag = (isConservatoirBeslag === true || isConservatoirBeslag === 1 || isConservatoirBeslag === '1') ? 1 : 0;
+    const beslagAmount = effectiveBeslag ? (Number(claimAmountIb) || 0) : 0.0;
+
     if (resolvedPlUserId) {
       const plUser = await query.get('SELECT * FROM users WHERE id = ?', [resolvedPlUserId]);
       if (plUser) {
         const courtFee = 250000;
-        if (plUser.balance_ib < courtFee) {
-          return res.status(400).json({ error: 'Saldo Kas Pribadi tidak mencukupi untuk biaya panitera PNAF (IB 250.000)' });
+        const totalFee = courtFee + (chosenLawyer ? parsedLawyerFee : 0);
+        if (plUser.balance_ib < totalFee) {
+          return res.status(400).json({
+            error: `Saldo Kas Pribadi Anda (IB ${plUser.balance_ib.toLocaleString('id-ID')}) tidak mencukupi untuk biaya panitera PNAF dan honorarium kuasa hukum (Total: IB ${totalFee.toLocaleString('id-ID')})`,
+          });
         }
-        const newBal = plUser.balance_ib - courtFee;
-        await query.run('UPDATE users SET balance_ib = ? WHERE id = ?', [newBal, plUser.id]);
+        let runningBal = plUser.balance_ib - courtFee;
         await recordCashFlow({
           userId: plUser.id,
           accountType: 'PERSONAL',
@@ -2666,14 +2958,30 @@ app.post('/api/court/file-case', async (req, res) => {
           title: `Biaya Registrasi Panitera PNAF: ${title}`,
           amountIb: courtFee,
           direction: 'EXPENSE',
-          balanceAfter: newBal,
+          balanceAfter: runningBal,
           notes: `Tergugat: ${defendantName}`,
         });
         await query.run(
           'INSERT INTO state_treasury_ledger (id, source_type, title, amount_ib, direction, reference_id, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
           [uuidv4(), 'PNAF_FILING_FEE', `Biaya Registrasi Gugatan PNAF (${title})`, courtFee, 'INCOME', plUser.id, `Diajukan oleh ${plUser.username}`]
         );
-        io.emit('user:balance_updated', { userId: plUser.id, newBalance: newBal });
+
+        if (chosenLawyer && parsedLawyerFee > 0) {
+          runningBal -= parsedLawyerFee;
+          await recordCashFlow({
+            userId: plUser.id,
+            accountType: 'PERSONAL',
+            category: 'LAWYER_FEE',
+            title: `Honorarium Advokat PNAF: ${chosenLawyer}`,
+            amountIb: parsedLawyerFee,
+            direction: 'EXPENSE',
+            balanceAfter: runningBal,
+            notes: `Kuasa Hukum Gugatan Perkara: ${title}`,
+          });
+        }
+
+        await query.run('UPDATE users SET balance_ib = ? WHERE id = ?', [runningBal, plUser.id]);
+        io.emit('user:balance_updated', { userId: plUser.id, newBalance: runningBal });
       }
     }
 
@@ -2729,8 +3037,9 @@ app.post('/api/court/file-case', async (req, res) => {
         id, case_number, case_type, title, plaintiff_name, plaintiff_user_id, plaintiff_company_id,
         defendant_name, defendant_user_id, defendant_company_id, claim_amount_ib,
         court_hearing_date, hearing_time, court_room_name, target_asset_description,
-        status, verdict_notes, plaintiff_present, room_status, bot_stage, bot_next_action_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'IN_TRIAL', ?, ?, 'WAITING_PRESENCE', 0, ?)`,
+        status, verdict_notes, plaintiff_present, room_status, bot_stage, bot_next_action_at,
+        lawyer_name, lawyer_fee_ib, is_conservatoir_beslag, beslag_amount_ib
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'IN_TRIAL', ?, ?, 'WAITING_PRESENCE', 0, ?, ?, ?, ?, ?)`,
       [
         caseId,
         caseNumber,
@@ -2750,6 +3059,10 @@ app.post('/api/court/file-case', async (req, res) => {
         notes || 'Berkas perkara telah diterima Panitera PNAF. Menunggu pemeriksaan Majelis Hakim.',
         resolvedPlUserId ? 1 : 0,
         nextBotAt,
+        chosenLawyer,
+        parsedLawyerFee,
+        effectiveBeslag,
+        beslagAmount,
       ]
     );
 
@@ -8067,18 +8380,18 @@ const bundledPublicApkPath = path.join(__dirname, '../public/downloads/Capital-F
 const directPublicApkPath = path.join(__dirname, '../public/downloads/capital-federation.apk');
 const localBuiltApkPath = path.join(__dirname, '../../mobile/build/app/outputs/flutter-apk/app-release.apk');
 
-const LATEST_RELEASE_NOTES_V199 = 'v1.9.9 (Build 43): Pemulihan Aset & Bebas Denda Sitaan bagi Pemenang Sidang Penggugat (100% Gratis), Auto-Heal Kas Perseroan Positif (ABSA dll), Proteksi Self-Takeover Perusahaan Sendiri di Cap Table & Insider, Eliminasi Duplikasi Emiten di Web Admin, serta Eksekusi Denda Tunai Tanpa Sita.';
+const LATEST_RELEASE_NOTES_V199 = 'v1.9.9 (Build 44): Advokat Kondang PNAF (Puja Azzahra, Zahra Bintang, Khairul Sagala) & Permohonan Sita Jaminan (Conservatoir Beslag), Aksi Korporasi Stock Split (1:2, 1:5, 1:10) & Kebijakan Dividen RUPS Mandiri, serta Sinergi Transfer Kas Internal Konglomerasi Antar Anak PT.';
 
 async function getApkSettingsMap() {
   const defaults = {
     apk_version: '1.9.9',
-    apk_build_number: '43',
+    apk_build_number: '44',
     apk_min_android: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
-    apk_file_size_mb: '57.1 MB',
+    apk_file_size_mb: '57.2 MB',
     apk_release_notes: LATEST_RELEASE_NOTES_V199,
     apk_external_url: '',
-    apk_download_count: '512',
-    apk_sha256: '7d88d7c7869edb8e282fcd28f461451429e1cc57dac20ca2daaf02ccd3ff9cdf',
+    apk_download_count: '540',
+    apk_sha256: '361bf80156cc2182b09b9c6b6276a71c79a0752817860ec7b412883243b8fe43',
     apk_updated_at: new Date().toISOString(),
   };
   try {
@@ -8088,11 +8401,11 @@ async function getApkSettingsMap() {
         defaults[r.key] = String(r.value);
       }
     }
-    if (parseInt(defaults.apk_build_number || '0', 10) < 43 || defaults.apk_sha256 !== '7d88d7c7869edb8e282fcd28f461451429e1cc57dac20ca2daaf02ccd3ff9cdf') {
+    if (parseInt(defaults.apk_build_number || '0', 10) < 44 || defaults.apk_sha256 !== '361bf80156cc2182b09b9c6b6276a71c79a0752817860ec7b412883243b8fe43') {
       defaults.apk_version = '1.9.9';
-      defaults.apk_build_number = '43';
-      defaults.apk_file_size_mb = '57.1 MB';
-      defaults.apk_sha256 = '7d88d7c7869edb8e282fcd28f461451429e1cc57dac20ca2daaf02ccd3ff9cdf';
+      defaults.apk_build_number = '44';
+      defaults.apk_file_size_mb = '57.2 MB';
+      defaults.apk_sha256 = '361bf80156cc2182b09b9c6b6276a71c79a0752817860ec7b412883243b8fe43';
       defaults.apk_release_notes = LATEST_RELEASE_NOTES_V199;
       defaults.apk_updated_at = new Date().toISOString();
       // Persist directly to central_bank_settings so /api/settings, /api/admin/settings & /api/admin/overview match 100%!

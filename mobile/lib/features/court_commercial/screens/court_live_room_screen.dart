@@ -357,6 +357,10 @@ class _CourtLiveRoomScreenState extends State<CourtLiveRoomScreen> {
         (_caseData?['verdictNotes'] ?? _caseData?['verdict_notes'] ?? '').toString();
     final String decidedBy =
         (_caseData?['decidedBy'] ?? _caseData?['decided_by'] ?? '').toString();
+    final String? lawyerName = (_caseData?['lawyerName'] ?? _caseData?['lawyer_name'])?.toString();
+    final bool isConservatoirBeslag = _caseData?['isConservatoirBeslag'] == true ||
+        _caseData?['is_conservatoir_beslag'] == 1 ||
+        _caseData?['is_conservatoir_beslag'] == true;
 
     return Scaffold(
       backgroundColor: const Color(0xFF060A13),
@@ -500,6 +504,43 @@ class _CourtLiveRoomScreenState extends State<CourtLiveRoomScreen> {
               ],
             ),
           ),
+
+          if (lawyerName != null && lawyerName.isNotEmpty && lawyerName != 'null')
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              color: const Color(0xFF0F172A),
+              child: Row(
+                children: [
+                  const Icon(Icons.gavel_rounded, color: Color(0xFFF5B942), size: 14),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      '⚖️ Advokat Penggugat: $lawyerName',
+                      style: const TextStyle(color: Color(0xFFF5B942), fontSize: 10, fontWeight: FontWeight.bold),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (isConservatoirBeslag)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF38BDF8).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.5)),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.lock_rounded, color: Color(0xFF38BDF8), size: 10),
+                          SizedBox(width: 3),
+                          Text('Sita Jaminan', style: TextStyle(color: Color(0xFF38BDF8), fontSize: 9, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
 
           // Tombol Check-In Resmi bagi Pihak Berperkara
           if (!isDecided && !isUserPresent && (isUserPlaintiff || isUserDefendant))

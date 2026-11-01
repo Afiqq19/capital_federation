@@ -111,6 +111,10 @@ function formatCourtCase(c, messages = undefined) {
     botStage: Number(c.bot_stage || 0),
     deedId: c.deed_id || null,
     deedNumber: deedNumber || null,
+    lawyerName: c.lawyer_name || null,
+    lawyerFeeIb: Number(c.lawyer_fee_ib || 0),
+    isConservatoirBeslag: c.is_conservatoir_beslag === 1,
+    beslagAmountIb: Number(c.beslag_amount_ib || 0),
     isDecided,
     plaintiff: {
       id: c.plaintiff_user_id || '',
@@ -1422,6 +1426,37 @@ class CourtJudgeBotService {
         });
       }
     }
+
+    // Pledoi & Orasi Kuasa Hukum Penggugat (Jika Penggugat menyewa Advokat)
+    if (c.lawyer_name) {
+      let lawyerSpeech = '';
+      if (c.lawyer_name.includes('Sagala')) {
+        lawyerSpeech = `⚖️ [Advokat Khairul Sagala, S.H., C.L.A. - Sagala & Associates Sultan Tier]: "Yang Mulia Majelis Hakim PNAF yang kami muliakan! Kami hadir mendampingi Penggugat (${c.plaintiff_name}). Fakta hukum, bukti akta, dan audit bursa membuktikan tanpa keraguan sedikit pun bahwa perbuatan Tergugat (${c.defendant_name}) telah menimbulkan kerugian immateriil dan finansial nyata. Kami mendesak Majelis menjatuhkan putusan maksimal, eksekusi sita seketika, dan menolak seluruh bantahan lawan!"`;
+      } else if (c.lawyer_name.includes('Bintang')) {
+        lawyerSpeech = `⚖️ [Advokat Zahra Bintang, S.H., M.H. - Bintang Law Office]: "Yang Mulia Majelis Hakim PNAF! Seluruh eksepsi Tergugat harus dikesampingkan demi hukum. Berdasarkan Pasal 1365 KUHPerdata juncto Regulasi Pasar Modal Federasi, hak pemulihan klien kami (${c.plaintiff_name}) adalah sah dan mutlak. Kami juga memohon agar Permohonan Sita Jaminan (Conservatoir Beslag) dikabulkan guna memblokir aset Tergugat sampai perkara tuntas!"`;
+      } else if (c.lawyer_name.includes('Azzahra')) {
+        lawyerSpeech = `⚖️ [Advokat Puja Azzahra, S.H., LL.M. - Azzahra & Partners]: "Izin Yang Mulia Majelis Hakim yang terhormat! Klien kami (${c.plaintiff_name}) telah memenuhi seluruh syarat formil dan materiil gugatan dengan itikad baik. Dalil Tergugat tidak berdasar dan mengada-ada. Kami memohon keadilan ditegakkan dengan mengabulkan tuntutan ganti rugi penuh!"`;
+      } else {
+        lawyerSpeech = `⚖️ [Advokat ${c.lawyer_name}]: "Yang Mulia Majelis Hakim PNAF, kami Kuasa Hukum Penggugat (${c.plaintiff_name}) menegaskan bahwa dalil gugatan telah terbukti secara sah dan meyakinkan. Kami memohon keadilan ditegakkan demi kepastian hukum bisnis!"`;
+      }
+
+      await appendCourtChat(this.io, {
+        caseId: c.id,
+        senderName: c.lawyer_name,
+        senderRole: 'PENGGUGAT',
+        senderUserId: c.plaintiff_user_id || 'plaintiff-lawyer',
+        message: lawyerSpeech,
+      });
+    }
+
+    if (c.is_conservatoir_beslag === 1) {
+      await appendCourtChat(this.io, {
+        caseId: c.id,
+        senderName: BOT_JUDGE_NAME,
+        senderRole: 'HAKIM',
+        message: `🔒 PENETAPAN SITA JAMINAN (CONSERVATOIR BESLAG): Menimbang permohonan Penggugat yang didukung bukti awal yang cukup, Majelis Hakim menetapkan pembekuan sementara dana jaminan senilai tuntutan perkara (IB ${Number(c.claim_amount_ib || 0).toLocaleString('id-ID')}) pada kas Tergugat hingga putusan berkekuatan hukum tetap dibacakan!`,
+      });
+    }
     const examMsg = linkedDeed
       ? `⚖️ PEMERIKSAAN ALAT BUKTI: Majelis Hakim telah memverifikasi keabsahan Akta Notaris #${linkedDeed.deed_number} senilai IB ${Number(linkedDeed.total_price_ib || 0).toLocaleString('id-ID')} bermeterai lunas beserta bukti tuntutan sebesar IB ${Number(c.claim_amount_ib || 0).toLocaleString('id-ID')}. Majelis memasuki musyawarah pembacaan putusan.`
       : `⚖️ PEMERIKSAAN POKOK PERKARA: Majelis Hakim sedang meneliti berkas gugatan "${c.title}", riwayat kepatuhan finansial para pihak, dan nilai tuntutan IB ${Number(c.claim_amount_ib || 0).toLocaleString('id-ID')} sebelum mengetuk palu putusan.`;
@@ -1673,6 +1708,30 @@ class CourtJudgeBotService {
             verdictNotes = `🤝 PUTUSAN MEDIASI ARBITRASE PNAF: Majelis Hakim memutus sengketa Akta #${linkedDeed.deed_number} diselesaikan melalui jalur musyawarah perdata tanpa eksekusi sita paksa.`;
           }
         }
+      }
+    }
+
+    // Evaluasi Efek Pengacara Penggugat (Advokat Puja Azzahra, Zahra Bintang, Khairul Sagala)
+    if (c.lawyer_name && !verdictNotes.includes('NE BIS IN IDEM')) {
+      const isSagala = c.lawyer_name.includes('Sagala');
+      const isBintang = c.lawyer_name.includes('Bintang');
+      const isAzzahra = c.lawyer_name.includes('Azzahra');
+
+      if (verdictStatus !== 'VERDICT_APPROVED') {
+        const lawyerRoll = Math.random();
+        const boostThreshold = isSagala ? 0.95 : (isBintang ? 0.85 : 0.75);
+
+        if (lawyerRoll < boostThreshold) {
+          verdictStatus = 'VERDICT_APPROVED';
+          verdictType = 'APPROVED_PLAINTIFF_WIN';
+          customAwardedAmount = rawClaim > 0 ? rawClaim : 50000000;
+          verdictNotes = `✅ GUGATAN DIKABULKAN PENUH (APPROVED): Majelis Hakim PNAF mempertimbangkan pembelaan hukum brilian dan fakta otentik yang diajukan Kuasa Hukum Penggugat (${c.lawyer_name}). Tergugat (${c.defendant_name}) dinyatakan wanprestasi dan dihukum membayar ganti rugi penuh sebesar IB ${customAwardedAmount.toLocaleString('id-ID')}.`;
+          if (c.is_conservatoir_beslag === 1) {
+            verdictNotes += ' Sita Jaminan (Conservatoir Beslag) resmi dikonversi menjadi Sita Eksekusi Seketika!';
+          }
+        }
+      } else {
+        verdictNotes += ` (Didampingi Kuasa Hukum: ${c.lawyer_name})`;
       }
     }
 

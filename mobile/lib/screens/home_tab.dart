@@ -548,6 +548,32 @@ class _HomeTabState extends State<HomeTab> {
                     style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 9, fontWeight: FontWeight.bold),
                   ),
                 ),
+                if (allEntities.length >= 2) ...[
+                  const SizedBox(width: 6),
+                  InkWell(
+                    onTap: () => _showConglomerateTransferDialog(context, allEntities),
+                    borderRadius: BorderRadius.circular(6),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF5B942).withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: const Color(0xFFF5B942), width: 0.9),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.swap_horiz_rounded, color: Color(0xFFF5B942), size: 12),
+                          SizedBox(width: 4),
+                          Text(
+                            '🔄 TRANSFER KAS PT',
+                            style: TextStyle(color: Color(0xFFF5B942), fontSize: 9.5, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
                 const SizedBox(width: 8),
                 InkWell(
                   onTap: () {
@@ -994,6 +1020,7 @@ class _HomeTabState extends State<HomeTab> {
   // MODE 2: SUDAH PUNYA PT / HASIL AKUISISI
   // ==========================================
   Widget _buildTycoonView(BuildContext context, GameProvider provider, UserModel user, Map<String, dynamic> activeEntity) {
+    final List<Map<String, dynamic>> allEntities = [...provider.conglomerate];
     final bool isPrimary = activeEntity['isPrimary'] == true || (!activeEntity.containsKey('isPrimary') && user.hasPt);
     final double companyBalance = _resolveEntityCash(user, activeEntity, isPrimary: isPrimary);
     final bool isEntityIpo = isPrimary ? (user.isIpo || activeEntity['isIpo'] == true || activeEntity['isIpo'] == 1) : (activeEntity['isIpo'] == true || activeEntity['isIpo'] == 1);
@@ -1313,6 +1340,26 @@ class _HomeTabState extends State<HomeTab> {
                         ),
                       ),
                     ],
+                  ),
+                ],
+                if (allEntities.length >= 2) ...[
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFFF5B942),
+                        side: const BorderSide(color: Color(0xFFF5B942), width: 1.2),
+                        padding: const EdgeInsets.symmetric(vertical: 9),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      icon: const Icon(Icons.swap_horiz_rounded, size: 16),
+                      label: const Text(
+                        '🔄 TALANGI DARI KAS ANAK PT LAIN (SINERGI HOLDING)',
+                        style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold),
+                      ),
+                      onPressed: () => _showConglomerateTransferDialog(context, allEntities, targetEntityId: activeEntity['id']),
+                    ),
                   ),
                 ],
               ],
@@ -3032,6 +3079,427 @@ class _HomeTabState extends State<HomeTab> {
                   ),
                 );
               },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // --- MODAL TRANSFER SINERGI KAS KONGGLOMERASI ANTAR PT ---
+  void _showConglomerateTransferDialog(
+    BuildContext context,
+    List<Map<String, dynamic>> allEntities, {
+    String? targetEntityId,
+  }) {
+    final provider = context.read<GameProvider>();
+    final user = provider.user;
+    if (user == null || allEntities.length < 2) return;
+
+    Map<String, dynamic> initialTarget = allEntities.first;
+    if (targetEntityId != null) {
+      initialTarget = allEntities.firstWhere(
+        (e) => e['id'].toString() == targetEntityId.toString(),
+        orElse: () => allEntities.first,
+      );
+    } else {
+      initialTarget = allEntities.reduce((curr, next) {
+        final balC = (curr['companyBalance'] as num?)?.toDouble() ?? 0.0;
+        final balN = (next['companyBalance'] as num?)?.toDouble() ?? 0.0;
+        return balC < balN ? curr : next;
+      });
+    }
+
+    final potentialSources = allEntities.where((e) => e['id'].toString() != initialTarget['id'].toString()).toList();
+    if (potentialSources.isEmpty) return;
+
+    potentialSources.sort((a, b) {
+      final balA = (a['companyBalance'] as num?)?.toDouble() ?? 0.0;
+      final balB = (b['companyBalance'] as num?)?.toDouble() ?? 0.0;
+      return balB.compareTo(balA);
+    });
+
+    final Map<String, dynamic> initialSource = potentialSources.first;
+
+    final TextEditingController amountCtrl = TextEditingController();
+    final TextEditingController notesCtrl = TextEditingController(text: 'Suntikan Kas Talangan Sinergi Holding');
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        String fromId = initialSource['id'].toString();
+        String toId = initialTarget['id'].toString();
+        bool isSubmitting = false;
+
+        return StatefulBuilder(
+          builder: (dialogCtx, setSheetState) {
+            final fromComp = allEntities.firstWhere((e) => e['id'].toString() == fromId, orElse: () => allEntities.first);
+            final toComp = allEntities.firstWhere((e) => e['id'].toString() == toId, orElse: () => allEntities.last);
+            final double fromBal = (fromComp['companyBalance'] as num?)?.toDouble() ?? 0.0;
+            final double toBal = (toComp['companyBalance'] as num?)?.toDouble() ?? 0.0;
+
+            return Container(
+              padding: EdgeInsets.only(
+                left: 18,
+                right: 18,
+                top: 18,
+                bottom: MediaQuery.of(dialogCtx).viewInsets.bottom + 18,
+              ),
+              decoration: const BoxDecoration(
+                color: Color(0xFF0F172A),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                border: Border(top: BorderSide(color: Color(0xFFF5B942), width: 1.5)),
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF334155),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF5B942).withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.swap_horiz_rounded, color: Color(0xFFF5B942), size: 22),
+                        ),
+                        const SizedBox(width: 10),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'SINERGI KAS KONGGLOMERASI',
+                                style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w900),
+                              ),
+                              Text(
+                                'Transfer Saldo Kas Antar Perusahaan Satu Pemilik / Holding',
+                                style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Pilih Perusahaan Sumber
+                    const Text('Dari Perusahaan (Sumber Kas):', style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 11, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF070B14),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFF1E293B)),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: fromId,
+                          isExpanded: true,
+                          dropdownColor: const Color(0xFF0F172A),
+                          items: allEntities.map((e) {
+                            final b = (e['companyBalance'] as num?)?.toDouble() ?? 0.0;
+                            return DropdownMenuItem<String>(
+                              value: e['id'].toString(),
+                              child: Text(
+                                '${e['name']} (${e['symbol'] ?? 'PT'}) • Kas: ${CurrencyFormatter.formatCompact(b)}',
+                                style: TextStyle(
+                                  color: b <= 0 ? const Color(0xFF94A3B8) : Colors.white,
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                          onChanged: (val) {
+                            if (val != null && val != toId) {
+                              setSheetState(() => fromId = val);
+                            }
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Panah Transfer
+                    const Center(
+                      child: Icon(Icons.arrow_downward_rounded, color: Color(0xFFF5B942), size: 20),
+                    ),
+                    const SizedBox(height: 6),
+
+                    // Pilih Perusahaan Tujuan
+                    const Text('Ke Perusahaan (Penerima Kas):', style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 11, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF070B14),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFF1E293B)),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: toId,
+                          isExpanded: true,
+                          dropdownColor: const Color(0xFF0F172A),
+                          items: allEntities.map((e) {
+                            final b = (e['companyBalance'] as num?)?.toDouble() ?? 0.0;
+                            return DropdownMenuItem<String>(
+                              value: e['id'].toString(),
+                              child: Text(
+                                '${e['name']} (${e['symbol'] ?? 'PT'}) • Kas: ${CurrencyFormatter.formatCompact(b)}',
+                                style: TextStyle(
+                                  color: b < 0 ? const Color(0xFFF87171) : Colors.white,
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                          onChanged: (val) {
+                            if (val != null && val != fromId) {
+                              setSheetState(() => toId = val);
+                            }
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Komparasi Saldo Card
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF070B14),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFF1E293B)),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Saldo ${fromComp['symbol'] ?? 'Sumber'}:', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 9.5)),
+                                Text(
+                                  CurrencyFormatter.formatFull(fromBal),
+                                  style: TextStyle(
+                                    color: fromBal <= 0 ? const Color(0xFFF87171) : const Color(0xFF10B981),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    fontFamily: 'monospace',
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Container(width: 1, height: 26, color: const Color(0xFF334155)),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Saldo ${toComp['symbol'] ?? 'Tujuan'}:', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 9.5)),
+                                Text(
+                                  CurrencyFormatter.formatFull(toBal),
+                                  style: TextStyle(
+                                    color: toBal < 0 ? const Color(0xFFF87171) : const Color(0xFF38BDF8),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    fontFamily: 'monospace',
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Input Nominal Transfer
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Nominal Transfer (IB):', style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 11, fontWeight: FontWeight.bold)),
+                        if (fromBal > 0)
+                          Text(
+                            'Tersedia: ${CurrencyFormatter.formatCompact(fromBal)}',
+                            style: const TextStyle(color: Color(0xFFF5B942), fontSize: 10, fontWeight: FontWeight.bold),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: amountCtrl,
+                      keyboardType: TextInputType.number,
+                      style: const TextStyle(color: Colors.white, fontSize: 13, fontFamily: 'monospace', fontWeight: FontWeight.bold),
+                      decoration: InputDecoration(
+                        filled: true,
+                        fillColor: const Color(0xFF070B14),
+                        prefixText: 'IB ',
+                        prefixStyle: const TextStyle(color: Color(0xFFF5B942), fontWeight: FontWeight.bold),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF1E293B))),
+                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF1E293B))),
+                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFF5B942))),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+
+                    // Quick buttons
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        if (toBal < 0) ...[
+                          ActionChip(
+                            label: Text('Tutup Defisit (${CurrencyFormatter.formatCompact(-toBal)})', style: const TextStyle(fontSize: 10, color: Color(0xFFF87171), fontWeight: FontWeight.bold)),
+                            backgroundColor: const Color(0xFF7F1D1D).withValues(alpha: 0.3),
+                            side: const BorderSide(color: Color(0xFFEF4444)),
+                            visualDensity: VisualDensity.compact,
+                            onPressed: () {
+                              setSheetState(() => amountCtrl.text = (-toBal).toStringAsFixed(0));
+                            },
+                          ),
+                        ],
+                        if (fromBal > 0) ...[
+                          ActionChip(
+                            label: const Text('25%', style: TextStyle(fontSize: 10, color: Color(0xFFCBD5E1))),
+                            backgroundColor: const Color(0xFF070B14),
+                            side: const BorderSide(color: Color(0xFF1E293B)),
+                            visualDensity: VisualDensity.compact,
+                            onPressed: () {
+                              setSheetState(() => amountCtrl.text = (fromBal * 0.25).toStringAsFixed(0));
+                            },
+                          ),
+                          ActionChip(
+                            label: const Text('50%', style: TextStyle(fontSize: 10, color: Color(0xFFCBD5E1))),
+                            backgroundColor: const Color(0xFF070B14),
+                            side: const BorderSide(color: Color(0xFF1E293B)),
+                            visualDensity: VisualDensity.compact,
+                            onPressed: () {
+                              setSheetState(() => amountCtrl.text = (fromBal * 0.50).toStringAsFixed(0));
+                            },
+                          ),
+                          ActionChip(
+                            label: const Text('100% Maksimal', style: TextStyle(fontSize: 10, color: Color(0xFF10B981), fontWeight: FontWeight.bold)),
+                            backgroundColor: const Color(0xFF070B14),
+                            side: const BorderSide(color: Color(0xFF10B981)),
+                            visualDensity: VisualDensity.compact,
+                            onPressed: () {
+                              setSheetState(() => amountCtrl.text = fromBal.toStringAsFixed(0));
+                            },
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Catatan
+                    const Text('Catatan Buku Kas Transparan:', style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 11, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: notesCtrl,
+                      style: const TextStyle(color: Colors.white, fontSize: 11),
+                      decoration: InputDecoration(
+                        filled: true,
+                        fillColor: const Color(0xFF070B14),
+                        hintText: 'Tujuan transfer / keperluan operasional...',
+                        hintStyle: const TextStyle(color: Color(0xFF64748B), fontSize: 11),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF1E293B))),
+                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF1E293B))),
+                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFF5B942))),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+
+                    // Tombol Submit
+                    SizedBox(
+                      width: double.infinity,
+                      height: 46,
+                      child: ElevatedButton.icon(
+                        icon: isSubmitting
+                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2))
+                            : const Icon(Icons.send_rounded, size: 17),
+                        label: Text(
+                          isSubmitting ? 'MEMPROSES TRANSFER...' : 'KIRIM SINERGI KAS KONGGLOMERASI',
+                          style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 11.5),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFF5B942),
+                          foregroundColor: const Color(0xFF0A0F1D),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        onPressed: isSubmitting
+                            ? null
+                            : () async {
+                                final amount = double.tryParse(amountCtrl.text.trim()) ?? 0.0;
+                                if (amount <= 0) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Nominal transfer harus lebih besar dari IB 0!'), backgroundColor: Colors.red),
+                                  );
+                                  return;
+                                }
+                                if (fromBal < amount) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Saldo kas ${fromComp['symbol']} tidak mencukupi!'), backgroundColor: Colors.red),
+                                  );
+                                  return;
+                                }
+
+                                setSheetState(() => isSubmitting = true);
+                                final res = await ApiService.transferConglomerateCash(
+                                  userId: user.id,
+                                  fromCompanyId: fromId,
+                                  toCompanyId: toId,
+                                  amountIb: amount,
+                                  notes: notesCtrl.text.trim(),
+                                );
+                                setSheetState(() => isSubmitting = false);
+
+                                if (!context.mounted) return;
+                                if (res['error'] != null) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('❌ Gagal: ${res['error']}'), backgroundColor: Colors.red),
+                                  );
+                                } else {
+                                  Navigator.pop(dialogCtx);
+                                  await provider.fetchConglomerate();
+                                  await provider.refreshPortfolio();
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('✅ ${res['message'] ?? 'Transfer berhasil!'}'),
+                                        backgroundColor: const Color(0xFF10B981),
+                                        duration: const Duration(seconds: 4),
+                                      ),
+                                    );
+                                  }
+                                }
+                              },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             );
           },
         );

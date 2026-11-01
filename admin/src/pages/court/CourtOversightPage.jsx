@@ -654,6 +654,16 @@ export default function CourtOversightPage() {
                           <span className="text-slate-600">vs</span>
                           <span className="text-rose-400 font-semibold">{c.defendant_name}</span>
                         </div>
+                        {c.lawyer_name && (
+                          <div className="text-[10px] text-amber-300 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/30 mt-1 inline-flex items-center gap-1">
+                            <span>⚖️ Advokat:</span> <span className="font-semibold">{c.lawyer_name}</span>
+                          </div>
+                        )}
+                        {c.is_conservatoir_beslag === 1 && (
+                          <div className="text-[10px] text-cyan-300 bg-cyan-500/10 px-1.5 py-0.5 rounded border border-cyan-500/30 mt-1 ml-1 inline-flex items-center gap-1">
+                            <span>🔒 Sita Jaminan</span>
+                          </div>
+                        )}
                         {c.target_asset_description && (
                           <div className="text-[10px] text-rose-300/90 bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-500/20 mt-1 inline-block line-clamp-1 max-w-xs">
                             <span className="font-bold text-rose-400">Objek:</span> {c.target_asset_description}

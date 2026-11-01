@@ -570,7 +570,15 @@ async function initDb() {
   await safeAddColumn('court_cases', 'decided_by TEXT');
   await safeAddColumn('court_cases', 'deed_id TEXT');
   await safeAddColumn('court_cases', 'deed_number TEXT');
+  await safeAddColumn('court_cases', 'lawyer_name TEXT');
+  await safeAddColumn('court_cases', 'lawyer_fee_ib REAL DEFAULT 0.0');
+  await safeAddColumn('court_cases', 'is_conservatoir_beslag INTEGER DEFAULT 0');
+  await safeAddColumn('court_cases', 'beslag_amount_ib REAL DEFAULT 0.0');
   await safeAddColumn('court_chat_messages', 'sender_user_id TEXT');
+
+  // Corporate Actions: Stock Split
+  await safeAddColumn('companies', 'last_stock_split_at TEXT');
+  await safeAddColumn('companies', 'split_ratio TEXT');
 
   // New Corporate Legal & P2P Escrow Tables
   await query.exec(`

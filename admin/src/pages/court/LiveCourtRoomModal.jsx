@@ -207,6 +207,23 @@ export default function LiveCourtRoomModal({ open, onClose, courtCase, onVerdict
 
         {/* Live Attendance / Presensi Para Pihak */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+          {courtCase.lawyer_name && (
+            <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs flex items-center justify-between col-span-2 sm:col-span-4">
+              <div className="flex items-center gap-2">
+                <span className="text-sm">⚖️</span>
+                <div>
+                  <span className="text-[10px] font-bold text-amber-400 block uppercase">Kuasa Hukum / Advokat Penggugat</span>
+                  <span className="font-bold text-slate-100">{courtCase.lawyer_name}</span>
+                </div>
+              </div>
+              {courtCase.is_conservatoir_beslag === 1 && (
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                  🔒 SITA JAMINAN AKTIF
+                </span>
+              )}
+            </div>
+          )}
+
           {/* Hakim Ketua */}
           <div className="p-2.5 rounded-xl bg-slate-900 border border-amber-500/30 text-xs">
             <span className="text-[10px] font-bold text-amber-400 block uppercase">Hakim Ketua</span>
