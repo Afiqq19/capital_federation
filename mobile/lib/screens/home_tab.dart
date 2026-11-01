@@ -3033,13 +3033,35 @@ class _HomeTabState extends State<HomeTab> {
     final double corporateTax = isProfit ? (net * taxRate).roundToDouble() : 0.0;
     final double netAfterTax = isProfit ? (net - corporateTax + grantAmt) : (net + grantAmt);
 
+    final double totalFlow = (gross + totalExpenses) > 0 ? (gross + totalExpenses) : 1.0;
+    final double incomeRatio = (gross / totalFlow).clamp(0.05, 0.95);
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF0F172A),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: isProfit ? const Color(0xFF1E293B) : const Color(0xFFEF4444).withValues(alpha: 0.5)),
+        gradient: LinearGradient(
+          colors: [
+            const Color(0xFF0F172A),
+            isProfit ? const Color(0xFF064E3B).withValues(alpha: 0.15) : const Color(0xFF450A0A).withValues(alpha: 0.15),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: isProfit
+              ? const Color(0xFF10B981).withValues(alpha: 0.35)
+              : const Color(0xFFEF4444).withValues(alpha: 0.45),
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: (isProfit ? const Color(0xFF10B981) : const Color(0xFFEF4444)).withValues(alpha: 0.08),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -3048,18 +3070,18 @@ class _HomeTabState extends State<HomeTab> {
           if (activeSubsidy != null) ...[
             Container(
               margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
                   colors: [Color(0xFF065F46), Color(0xFF047857)],
                 ),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: const Color(0xFF34D399).withValues(alpha: 0.5)),
               ),
               child: Row(
                 children: [
                   const Icon(Icons.stars_rounded, color: Color(0xFF6EE7B7), size: 16),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       '🔥 TAX HOLIDAY AKTIF: PPh Badan Diskon Jadi ${effTaxRatePct.toStringAsFixed(0)}%${grantAmt > 0 ? ' + Hibah Operasional ${CurrencyFormatter.formatFull(grantAmt)}' : ''}',
@@ -3070,19 +3092,47 @@ class _HomeTabState extends State<HomeTab> {
               ),
             ),
           ],
+
+          // Header Arus Kas & Status BEP
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Expanded(
                 child: Row(
                   children: [
-                    Icon(Icons.analytics_rounded, color: isProfit ? const Color(0xFF38BDF8) : const Color(0xFFF59E0B), size: 18),
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: (isProfit ? const Color(0xFF10B981) : const Color(0xFFEF4444)).withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        isProfit ? Icons.account_balance_wallet_rounded : Icons.local_fire_department_rounded,
+                        color: isProfit ? const Color(0xFF34D399) : const Color(0xFFF87171),
+                        size: 16,
+                      ),
+                    ),
                     const SizedBox(width: 8),
                     Flexible(
-                      child: Text(
-                        'ARUS KAS: $shortName',
-                        style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w900, letterSpacing: 0.5),
-                        overflow: TextOverflow.ellipsis,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'ARUS KAS: $shortName',
+                            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 0.4),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Row(
+                            children: [
+                              const Icon(Icons.schedule_rounded, color: Color(0xFF38BDF8), size: 10),
+                              const SizedBox(width: 3),
+                              Text(
+                                'Siklus Tiap ${provider.cashFlowIntervalMinutes} Menit',
+                                style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 9.5, fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -3090,11 +3140,14 @@ class _HomeTabState extends State<HomeTab> {
               ),
               const SizedBox(width: 8),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: isProfit ? const Color(0xFF10B981).withValues(alpha: 0.15) : const Color(0xFFEF4444).withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: isProfit ? const Color(0xFF10B981).withValues(alpha: 0.3) : const Color(0xFFEF4444).withValues(alpha: 0.4)),
+                  color: isProfit ? const Color(0xFF10B981).withValues(alpha: 0.18) : const Color(0xFFEF4444).withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: isProfit ? const Color(0xFF10B981).withValues(alpha: 0.5) : const Color(0xFFEF4444).withValues(alpha: 0.5),
+                    width: 1.0,
+                  ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -3102,105 +3155,348 @@ class _HomeTabState extends State<HomeTab> {
                     Icon(isProfit ? Icons.trending_up_rounded : Icons.local_fire_department_rounded, color: isProfit ? const Color(0xFF34D399) : const Color(0xFFF87171), size: 12),
                     const SizedBox(width: 4),
                     Text(
-                      isProfit ? 'PROFITABEL (BEP)' : 'FASE BAKAR MODAL',
-                      style: TextStyle(color: isProfit ? const Color(0xFF34D399) : const Color(0xFFF87171), fontSize: 9.5, fontWeight: FontWeight.bold),
+                      isProfit ? 'KAS SURPLUS (+)' : 'BAKAR MODAL (-)',
+                      style: TextStyle(color: isProfit ? const Color(0xFF34D399) : const Color(0xFFF87171), fontSize: 9.5, fontWeight: FontWeight.w900),
                     ),
                   ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    isProfit ? 'Laba Bersih Masuk Kas $shortName' : 'Rugi Bersih Kas $shortName',
-                    style: TextStyle(color: isProfit ? const Color(0xFF94A3B8) : const Color(0xFFFCA5A5), fontSize: 11),
+          const SizedBox(height: 14),
+
+          // Hero Laba / Rugi Bersih
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF070B14),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFF1E293B)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        isProfit ? 'Laba Bersih Masuk Kas PT' : 'Defisit Arus Kas Masuk',
+                        style: TextStyle(
+                          color: isProfit ? const Color(0xFF94A3B8) : const Color(0xFFFCA5A5),
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 1),
+                      Text(
+                        isProfit ? '(Omzet - Beban Gaji & Ops - PPh ${effTaxRatePct.toStringAsFixed(0)}%)' : '(Omzet Penjualan - Beban Operasional)',
+                        style: const TextStyle(color: Color(0xFF64748B), fontSize: 8.5),
+                      ),
+                    ],
                   ),
-                  Text(
-                    isProfit ? '(Omzet - Beban Gaji & Ops - PPh ${effTaxRatePct.toStringAsFixed(0)}%${grantAmt > 0 ? ' + Subsidi' : ''})' : '(Omzet Penjualan - Beban Gaji & Ops)',
-                    style: const TextStyle(color: Color(0xFF64748B), fontSize: 9),
+                ),
+                const SizedBox(width: 8),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: (isProfit ? const Color(0xFF10B981) : const Color(0xFFEF4444)).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: (isProfit ? const Color(0xFF10B981) : const Color(0xFFEF4444)).withValues(alpha: 0.35),
+                      ),
+                    ),
+                    child: Text(
+                      isProfit ? '+${CurrencyFormatter.formatFull(netAfterTax)}' : '-${CurrencyFormatter.formatFull(net.abs())}',
+                      style: TextStyle(
+                        color: isProfit ? const Color(0xFF34D399) : const Color(0xFFF87171),
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          if (!isProfit) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEF4444).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.25)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.lightbulb_rounded, color: Color(0xFFF87171), size: 14),
+                  SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Fase Awal PT: Tingkatkan R&D, Pemasaran, dan Level PT untuk melampaui Titik Impas (BEP)!',
+                      style: TextStyle(color: Color(0xFFFCA5A5), fontSize: 9.5, height: 1.3),
+                    ),
                   ),
                 ],
               ),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  isProfit ? '+${CurrencyFormatter.formatFull(netAfterTax)}' : '-${CurrencyFormatter.formatFull(net.abs())}',
-                  style: TextStyle(
-                    color: isProfit ? const Color(0xFF34D399) : const Color(0xFFF87171),
-                    fontSize: 16,
-                    fontWeight: FontWeight.w900,
-                    fontFamily: 'monospace',
+            ),
+          ],
+
+          const SizedBox(height: 12),
+
+          // 2 KARTU MODERN: PEMASUKAN VS PENGELUARAN
+          Row(
+            children: [
+              // 1. KARTU PEMASUKAN (OMZET)
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(11),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        const Color(0xFF064E3B).withValues(alpha: 0.35),
+                        const Color(0xFF022C22).withValues(alpha: 0.5),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(13),
+                    border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.4), width: 1.1),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF10B981).withValues(alpha: 0.25),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Icon(Icons.south_west_rounded, color: Color(0xFF34D399), size: 12),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text('MASUK', style: TextStyle(color: Color(0xFF6EE7B7), fontSize: 8, fontWeight: FontWeight.w900)),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Total Pemasukan',
+                        style: TextStyle(color: Color(0xFF94A3B8), fontSize: 9.5, fontWeight: FontWeight.bold),
+                      ),
+                      const Text(
+                        'Omzet Penjualan & Produk',
+                        style: TextStyle(color: Color(0xFF64748B), fontSize: 8),
+                      ),
+                      const SizedBox(height: 4),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          '+${CurrencyFormatter.formatFull(gross)}',
+                          style: const TextStyle(
+                            color: Color(0xFF34D399),
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w900,
+                            fontFamily: 'monospace',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(width: 8),
+
+              // 2. KARTU PENGELUARAN (BEBAN USAHA)
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(11),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        const Color(0xFF7F1D1D).withValues(alpha: 0.35),
+                        const Color(0xFF450A0A).withValues(alpha: 0.5),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(13),
+                    border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.4), width: 1.1),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEF4444).withValues(alpha: 0.25),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Icon(Icons.north_east_rounded, color: Color(0xFFF87171), size: 12),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEF4444).withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text('KELUAR', style: TextStyle(color: Color(0xFFFCA5A5), fontSize: 8, fontWeight: FontWeight.w900)),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Total Pengeluaran',
+                        style: TextStyle(color: Color(0xFF94A3B8), fontSize: 9.5, fontWeight: FontWeight.bold),
+                      ),
+                      const Text(
+                        'Beban Gaji Tim & Kantor',
+                        style: TextStyle(color: Color(0xFF64748B), fontSize: 8),
+                      ),
+                      const SizedBox(height: 4),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          '-${CurrencyFormatter.formatFull(totalExpenses)}',
+                          style: const TextStyle(
+                            color: Color(0xFFF87171),
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w900,
+                            fontFamily: 'monospace',
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
             ],
           ),
-          if (!isProfit) ...[
-            const SizedBox(height: 6),
+
+          // Setoran Pajak PPh Badan ke Kas Negara (Jika ada laba)
+          if (isProfit && corporateTax > 0) ...[
+            const SizedBox(height: 8),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
               decoration: BoxDecoration(
-                color: const Color(0xFFEF4444).withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(6),
+                color: const Color(0xFFF59E0B).withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.3)),
               ),
-              child: const Text(
-                '💡 Perusahaan baru rintisan: Upgrade R&D, Pemasaran, dan Level PT untuk melampaui Titik Impas (Break-Even Point)!',
-                style: TextStyle(color: Color(0xFFFCA5A5), fontSize: 9),
-              ),
-            ),
-          ],
-          const SizedBox(height: 12),
-          const Divider(color: Color(0xFF1E293B), height: 1),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Row(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Icon(Icons.schedule_rounded, color: Color(0xFF38BDF8), size: 12),
-                  SizedBox(width: 4),
-                  Text('Interval Siklus Arus Kas', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10)),
+                  Row(
+                    children: [
+                      const Icon(Icons.account_balance_rounded, color: Color(0xFFF59E0B), size: 14),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Pajak PPh Badan (${provider.corporateTaxRatePct.toStringAsFixed(0)}% Kas Negara)',
+                        style: const TextStyle(color: Color(0xFFFDE68A), fontSize: 10, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  Text(
+                    '-${CurrencyFormatter.formatFull(corporateTax)}',
+                    style: const TextStyle(color: Color(0xFFF59E0B), fontSize: 11, fontWeight: FontWeight.w900, fontFamily: 'monospace'),
+                  ),
                 ],
               ),
-              Text(
-                'Tiap ${provider.cashFlowIntervalMinutes} Menit',
-                style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 10, fontWeight: FontWeight.bold),
+            ),
+          ],
+
+          const SizedBox(height: 10),
+
+          // Rasio Bar Efisiensi Arus Kas
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Efisiensi: ${(incomeRatio * 100).toStringAsFixed(0)}% Pemasukan vs ${((1 - incomeRatio) * 100).toStringAsFixed(0)}% Pengeluaran',
+                    style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 9.5),
+                  ),
+                  Text(
+                    isProfit ? 'Operasional Sehat' : 'Defisit Berjalan',
+                    style: TextStyle(
+                      color: isProfit ? const Color(0xFF34D399) : const Color(0xFFF87171),
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 5),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: SizedBox(
+                  height: 6,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        flex: (incomeRatio * 100).round(),
+                        child: Container(color: const Color(0xFF10B981)),
+                      ),
+                      Expanded(
+                        flex: ((1 - incomeRatio) * 100).round(),
+                        child: Container(color: const Color(0xFFEF4444)),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 4),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('• Omzet Bisnis (R&D + Merek + SDM)', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10)),
-              Text('+${CurrencyFormatter.formatFull(gross)}', style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 11, fontWeight: FontWeight.bold)),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('• Beban Operasional & Gaji Tim', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10)),
-              Text('-${CurrencyFormatter.formatFull(totalExpenses)}', style: const TextStyle(color: Color(0xFFF87171), fontSize: 11, fontWeight: FontWeight.bold)),
-            ],
-          ),
-          if (isProfit && corporateTax > 0) ...[
-            const SizedBox(height: 4),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('• Pajak PPh Badan (${provider.corporateTaxRatePct.toStringAsFixed(0)}% Kas Negara)', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10)),
-                Text('-${CurrencyFormatter.formatFull(corporateTax)}', style: const TextStyle(color: Color(0xFFF59E0B), fontSize: 11, fontWeight: FontWeight.bold)),
-              ],
+
+          const SizedBox(height: 12),
+
+          // Tombol Buka Jurnal Mutasi Kas
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => CashFlowLedgerScreen(
+                    userId: user.id,
+                    initialAccountType: 'COMPANY',
+                  ),
+                ),
+              ),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: Color(0xFF334155)),
+                backgroundColor: const Color(0xFF0F172A),
+                foregroundColor: const Color(0xFF38BDF8),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                padding: const EdgeInsets.symmetric(vertical: 8),
+              ),
+              icon: const Icon(Icons.receipt_long_rounded, size: 14, color: Color(0xFF38BDF8)),
+              label: const Text(
+                'Buka Buku Kas & Riwayat Mutasi Lengkap',
+                style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold),
+              ),
             ),
-          ],
+          ),
         ],
       ),
     );

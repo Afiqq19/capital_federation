@@ -462,99 +462,185 @@ class _CashFlowLedgerScreenState extends State<CashFlowLedgerScreen> {
           ),
           const SizedBox(height: 14),
 
-          // 3 Columns Stats
+          // 3 Columns Stats (Pemasukan vs Pengeluaran Modern)
           Row(
             children: [
               // 1. Pemasukan
               Expanded(
                 child: Container(
-                  padding: const EdgeInsets.all(10),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF070B14),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.2)),
+                    gradient: LinearGradient(
+                      colors: [
+                        const Color(0xFF064E3B).withValues(alpha: 0.35),
+                        const Color(0xFF022C22).withValues(alpha: 0.5),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(13),
+                    border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.35), width: 1.1),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Row(
+                      Row(
                         children: [
-                          Icon(Icons.arrow_downward_rounded, color: Color(0xFF34D399), size: 12),
-                          SizedBox(width: 3),
-                          Text('Uang Masuk', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 9.5)),
+                          Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF10B981).withValues(alpha: 0.25),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Icon(Icons.south_west_rounded, color: Color(0xFF34D399), size: 11),
+                          ),
+                          const SizedBox(width: 5),
+                          const Expanded(
+                            child: Text(
+                              'Pemasukan',
+                              style: TextStyle(color: Color(0xFF94A3B8), fontSize: 9, fontWeight: FontWeight.bold),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
                         ],
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 6),
                       Text(
                         '+${CurrencyFormatter.formatCompact(totalIncome.toDouble())}',
-                        style: const TextStyle(color: Color(0xFF34D399), fontSize: 12.5, fontWeight: FontWeight.w900),
+                        style: const TextStyle(
+                          color: Color(0xFF34D399),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w900,
+                          fontFamily: 'monospace',
+                        ),
                         overflow: TextOverflow.ellipsis,
+                      ),
+                      const Text(
+                        'Total Uang Masuk',
+                        style: TextStyle(color: Color(0xFF64748B), fontSize: 7.5),
                       ),
                     ],
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
 
               // 2. Pengeluaran
               Expanded(
                 child: Container(
-                  padding: const EdgeInsets.all(10),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF070B14),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.2)),
+                    gradient: LinearGradient(
+                      colors: [
+                        const Color(0xFF7F1D1D).withValues(alpha: 0.35),
+                        const Color(0xFF450A0A).withValues(alpha: 0.5),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(13),
+                    border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.35), width: 1.1),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Row(
+                      Row(
                         children: [
-                          Icon(Icons.arrow_upward_rounded, color: Color(0xFFF87171), size: 12),
-                          SizedBox(width: 3),
-                          Text('Uang Keluar', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 9.5)),
+                          Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEF4444).withValues(alpha: 0.25),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Icon(Icons.north_east_rounded, color: Color(0xFFF87171), size: 11),
+                          ),
+                          const SizedBox(width: 5),
+                          const Expanded(
+                            child: Text(
+                              'Pengeluaran',
+                              style: TextStyle(color: Color(0xFF94A3B8), fontSize: 9, fontWeight: FontWeight.bold),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
                         ],
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 6),
                       Text(
                         '-${CurrencyFormatter.formatCompact(totalExpense.toDouble())}',
-                        style: const TextStyle(color: Color(0xFFF87171), fontSize: 12.5, fontWeight: FontWeight.w900),
+                        style: const TextStyle(
+                          color: Color(0xFFF87171),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w900,
+                          fontFamily: 'monospace',
+                        ),
                         overflow: TextOverflow.ellipsis,
+                      ),
+                      const Text(
+                        'Total Uang Keluar',
+                        style: TextStyle(color: Color(0xFF64748B), fontSize: 7.5),
                       ),
                     ],
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
 
               // 3. Arus Bersih
               Expanded(
                 child: Container(
-                  padding: const EdgeInsets.all(10),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF070B14),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.2)),
+                    gradient: LinearGradient(
+                      colors: [
+                        const Color(0xFF0369A1).withValues(alpha: 0.25),
+                        const Color(0xFF0C4A6E).withValues(alpha: 0.4),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(13),
+                    border: Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.35), width: 1.1),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Row(
+                      Row(
                         children: [
-                          Icon(Icons.balance_rounded, color: Color(0xFF38BDF8), size: 12),
-                          SizedBox(width: 3),
-                          Text('Arus Bersih', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 9.5)),
+                          Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF38BDF8).withValues(alpha: 0.25),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Icon(Icons.balance_rounded, color: Color(0xFF38BDF8), size: 11),
+                          ),
+                          const SizedBox(width: 5),
+                          const Expanded(
+                            child: Text(
+                              'Arus Bersih',
+                              style: TextStyle(color: Color(0xFF94A3B8), fontSize: 9, fontWeight: FontWeight.bold),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
                         ],
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 6),
                       Text(
                         '${isSurplus ? '+' : ''}${CurrencyFormatter.formatCompact(netFlow.toDouble())}',
                         style: TextStyle(
                           color: isSurplus ? const Color(0xFF38BDF8) : const Color(0xFFF87171),
-                          fontSize: 12.5,
+                          fontSize: 13,
                           fontWeight: FontWeight.w900,
+                          fontFamily: 'monospace',
                         ),
                         overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        isSurplus ? 'Surplus Kas' : 'Defisit Kas',
+                        style: TextStyle(
+                          color: isSurplus ? const Color(0xFF34D399) : const Color(0xFFF87171),
+                          fontSize: 7.5,
+                        ),
                       ),
                     ],
                   ),

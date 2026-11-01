@@ -7757,18 +7757,18 @@ const bundledPublicApkPath = path.join(__dirname, '../public/downloads/Capital-F
 const directPublicApkPath = path.join(__dirname, '../public/downloads/capital-federation.apk');
 const localBuiltApkPath = path.join(__dirname, '../../mobile/build/app/outputs/flutter-apk/app-release.apk');
 
-const LATEST_RELEASE_NOTES_V195 = 'v1.9.5 (Build 33): Tombol Orderbook Dihapus Bersih (Cukup 1 Tombol Eksklusif AKUISISI PERSEROAN di Insider Cap Table), dan Form Input Website Dioptimasi Anti-Refresh.';
+const LATEST_RELEASE_NOTES_V196 = 'v1.9.6 (Build 34): Redesain Kartu Uang Pemasukan (Omzet) & Pengeluaran (Beban Operasional) Bergaya Finansial Modern Ultra Elegan, Rasio Efisiensi Arus Kas, dan Akses Cepat Buku Kas.';
 
 async function getApkSettingsMap() {
   const defaults = {
-    apk_version: '1.9.5',
-    apk_build_number: '33',
+    apk_version: '1.9.6',
+    apk_build_number: '34',
     apk_min_android: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
     apk_file_size_mb: '56.9 MB',
-    apk_release_notes: LATEST_RELEASE_NOTES_V195,
+    apk_release_notes: LATEST_RELEASE_NOTES_V196,
     apk_external_url: '',
-    apk_download_count: '360',
-    apk_sha256: '6c0f3cd085b1bacc10dd2dcfb5d6d93f371837d4f3a88e753adfe2f15fc23f3c',
+    apk_download_count: '370',
+    apk_sha256: 'a87837ab3373ee6daeb4dd99bbcadd7469a5b448c30e93d063356191ee79c6b5',
     apk_updated_at: new Date().toISOString(),
   };
   try {
@@ -7778,12 +7778,12 @@ async function getApkSettingsMap() {
         defaults[r.key] = String(r.value);
       }
     }
-    if (parseInt(defaults.apk_build_number || '0', 10) < 33) {
-      defaults.apk_version = '1.9.5';
-      defaults.apk_build_number = '33';
+    if (parseInt(defaults.apk_build_number || '0', 10) < 34) {
+      defaults.apk_version = '1.9.6';
+      defaults.apk_build_number = '34';
       defaults.apk_file_size_mb = '56.9 MB';
-      defaults.apk_sha256 = '6c0f3cd085b1bacc10dd2dcfb5d6d93f371837d4f3a88e753adfe2f15fc23f3c';
-      defaults.apk_release_notes = LATEST_RELEASE_NOTES_V195;
+      defaults.apk_sha256 = 'a87837ab3373ee6daeb4dd99bbcadd7469a5b448c30e93d063356191ee79c6b5';
+      defaults.apk_release_notes = LATEST_RELEASE_NOTES_V196;
       defaults.apk_updated_at = new Date().toISOString();
       // Persist directly to central_bank_settings so /api/settings, /api/admin/settings & /api/admin/overview match 100%!
       const keysToSync = ['apk_version', 'apk_build_number', 'apk_file_size_mb', 'apk_sha256', 'apk_release_notes', 'apk_min_android', 'apk_updated_at'];
