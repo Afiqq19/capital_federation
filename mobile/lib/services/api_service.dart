@@ -97,8 +97,8 @@ class ApiService {
     return null;
   }
 
-  static const String currentAppVersion = '1.9.9';
-  static const int currentBuildNumber = 44;
+  static const String currentAppVersion = '2.0.0';
+  static const int currentBuildNumber = 45;
   static const String currentApkDisplayVersion = 'v1.9.9-CFX Production (Build 44)';
 
   // Fetch Live Server Version & Update Detection Info

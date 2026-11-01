@@ -185,8 +185,8 @@ async function initDb() {
       status TEXT DEFAULT 'HEALTHY',
       current_price REAL NOT NULL,
       base_price REAL NOT NULL,
-      total_shares INTEGER DEFAULT 10000000,
-      circulating_shares INTEGER DEFAULT 3000000,
+      total_shares INTEGER DEFAULT 1000000000,
+      circulating_shares INTEGER DEFAULT 400000000,
       dividend_rate REAL DEFAULT 0.03,
       fundamental_score REAL DEFAULT 80.0,
       operational_level INTEGER DEFAULT 5,
@@ -579,6 +579,41 @@ async function initDb() {
   // Corporate Actions: Stock Split
   await safeAddColumn('companies', 'last_stock_split_at TEXT');
   await safeAddColumn('companies', 'split_ratio TEXT');
+
+  // Standardize Bursa Listing Shares to 10.000.000 Lot (1.000.000.000 Lembar)
+  try {
+    const oldComps = await query.all('SELECT id, total_shares, circulating_shares FROM companies WHERE total_shares <= 50000000');
+    if (oldComps && oldComps.length > 0) {
+      console.log(`📈 Migrating ${oldComps.length} companies to standard 10.000.000 Lot (1 Miliar lembar)...`);
+      for (const comp of oldComps) {
+        const factor = Math.max(1, Math.round(1000000000 / (comp.total_shares || 10000000)));
+        const newTotal = 1000000000;
+        const newCirc = Math.min(newTotal, Math.max(400000000, (comp.circulating_shares || 3000000) * factor));
+        
+        await query.run(
+          'UPDATE companies SET total_shares = ?, circulating_shares = ? WHERE id = ?',
+          [newTotal, newCirc, comp.id]
+        );
+
+        // Adjust company_shareholders shares_count proportionally (percentage stays exact)
+        await query.run(
+          'UPDATE company_shareholders SET shares_count = ROUND((percentage / 100.0) * ?) WHERE company_id = ?',
+          [newTotal, comp.id]
+        );
+
+        // Adjust portfolios lots_owned proportionally (factor = 100x)
+        if (factor > 1) {
+          await query.run(
+            'UPDATE portfolios SET lots_owned = lots_owned * ? WHERE company_id = ?',
+            [factor, comp.id]
+          );
+        }
+      }
+      console.log('✅ Standard 10 Juta Lot migration completed!');
+    }
+  } catch (err) {
+    console.error('Error migrating to 10M lots:', err.message);
+  }
 
   // New Corporate Legal & P2P Escrow Tables
   await query.exec(`

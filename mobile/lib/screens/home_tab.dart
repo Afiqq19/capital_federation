@@ -166,219 +166,258 @@ class _HomeTabState extends State<HomeTab> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Bar 1: Holding Top Bar
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(7),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF38BDF8).withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.3)),
-                    ),
-                    child: const Icon(Icons.domain_rounded, color: Color(0xFF38BDF8), size: 17),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'HOLDING KONGLOMERASI',
-                          style: TextStyle(
-                            color: Color(0xFF38BDF8),
-                            fontSize: 8.5,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 0.8,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        Text(
-                          user.username,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+        // Bar 1: Holding Top Bar (Modern Glassmorphic Obsidian)
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF0F172A), Color(0xFF131D31)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
             ),
-            const SizedBox(width: 6),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Credit Score Pill
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0F172A),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.4)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.speed_rounded, color: Color(0xFFF59E0B), size: 13),
-                      const SizedBox(width: 3),
-                      Text(
-                        'Skor: ${user.creditScore}',
-                        style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 10.5, fontWeight: FontWeight.bold),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFF1E293B)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.35),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF0284C7), Color(0xFF0369A1)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF0284C7).withValues(alpha: 0.3),
+                            blurRadius: 6,
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 6),
-                // Regulasi & Konstitusi Game Button
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const GameConstitutionScreen(),
-                      ),
-                    );
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.all(7),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0F172A),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.4)),
+                      child: const Icon(Icons.domain_rounded, color: Colors.white, size: 16),
                     ),
-                    child: const Icon(Icons.policy_rounded, color: Color(0xFF38BDF8), size: 16),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                // Kotak Masuk / Inbox Notifikasi Button
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () async {
-                    await UserInboxModal.show(context, onInboxUpdated: _checkInboxCount);
-                    _checkInboxCount();
-                  },
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(7),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF0F172A),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: _inboxUnreadCount > 0
-                                ? const Color(0xFFF59E0B)
-                                : const Color(0xFF38BDF8).withValues(alpha: 0.4),
+                    const SizedBox(width: 9),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'HOLDING KONGLOMERASI',
+                            style: TextStyle(
+                              color: Color(0xFF38BDF8),
+                              fontSize: 8.5,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 0.9,
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
-                        ),
-                        child: Icon(
-                          _inboxUnreadCount > 0 ? Icons.mark_email_unread_rounded : Icons.mail_outline_rounded,
-                          color: _inboxUnreadCount > 0 ? const Color(0xFFF59E0B) : const Color(0xFF38BDF8),
-                          size: 16,
-                        ),
+                          const SizedBox(height: 1),
+                          Text(
+                            user.username,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 0.2,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
                       ),
-                      if (_inboxUnreadCount > 0)
-                        Positioned(
-                          top: -3,
-                          right: -3,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFEF4444),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: const Color(0xFF0F172A), width: 1.5),
-                            ),
-                            constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
-                            child: Text(
-                              _inboxUnreadCount > 99 ? '99+' : '$_inboxUnreadCount',
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 8,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 6),
-                // Profil Akun & Identitas Konglomerat
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const ProfileScreen()),
-                    );
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              ),
+              const SizedBox(width: 8),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Credit Score Pill (Golden Crown / Amber)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                     decoration: BoxDecoration(
                       gradient: const LinearGradient(
-                        colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
+                        colors: [Color(0xFF261907), Color(0xFF160F06)],
                       ),
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.5)),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF10B981).withValues(alpha: 0.2),
-                          blurRadius: 6,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
+                      border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.6)),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        CircleAvatar(
-                          radius: 9,
-                          backgroundColor: const Color(0xFF10B981),
-                          child: Text(
-                            (user.username.isNotEmpty ? user.username[0] : 'U').toUpperCase(),
-                            style: const TextStyle(color: Color(0xFF022C22), fontSize: 10, fontWeight: FontWeight.w900),
-                          ),
+                        const Icon(Icons.speed_rounded, color: Color(0xFFFBBF24), size: 13),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${user.creditScore}',
+                          style: const TextStyle(color: Color(0xFFFDE68A), fontSize: 11, fontWeight: FontWeight.w900),
                         ),
-                        const SizedBox(width: 5),
-                        const Icon(Icons.manage_accounts_rounded, color: Color(0xFF10B981), size: 14),
                       ],
                     ),
                   ),
-                ),
-              ],
-            ),
-          ],
+                  const SizedBox(width: 6),
+                  // Regulasi & Konstitusi Game Button
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const GameConstitutionScreen(),
+                        ),
+                      );
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(7),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E293B).withValues(alpha: 0.7),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.4)),
+                      ),
+                      child: const Icon(Icons.policy_rounded, color: Color(0xFF38BDF8), size: 15),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  // Kotak Masuk / Inbox Notifikasi Button
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () async {
+                      await UserInboxModal.show(context, onInboxUpdated: _checkInboxCount);
+                      _checkInboxCount();
+                    },
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(7),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1E293B).withValues(alpha: 0.7),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: _inboxUnreadCount > 0
+                                  ? const Color(0xFFF59E0B)
+                                  : const Color(0xFF475569),
+                            ),
+                          ),
+                          child: Icon(
+                            _inboxUnreadCount > 0 ? Icons.mark_email_unread_rounded : Icons.mail_outline_rounded,
+                            color: _inboxUnreadCount > 0 ? const Color(0xFFF59E0B) : const Color(0xFFCBD5E1),
+                            size: 15,
+                          ),
+                        ),
+                        if (_inboxUnreadCount > 0)
+                          Positioned(
+                            top: -4,
+                            right: -4,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEF4444),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: const Color(0xFF0F172A), width: 1.5),
+                              ),
+                              constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
+                              child: Text(
+                                _inboxUnreadCount > 99 ? '99+' : '$_inboxUnreadCount',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 8,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  // Profil Akun & Identitas Konglomerat
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                      );
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF064E3B), Color(0xFF065F46)],
+                        ),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.6)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                            blurRadius: 6,
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CircleAvatar(
+                            radius: 9,
+                            backgroundColor: const Color(0xFF10B981),
+                            child: Text(
+                              (user.username.isNotEmpty ? user.username[0] : 'U').toUpperCase(),
+                              style: const TextStyle(color: Color(0xFF022C22), fontSize: 10, fontWeight: FontWeight.w900),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          const Icon(Icons.manage_accounts_rounded, color: Color(0xFF6EE7B7), size: 14),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
 
-        // Bar 2: Corporate Profile Hero Card
+        // Bar 2: Corporate Profile Hero Card (Obsidian Crystal Design)
         if (hasBusiness)
           Container(
             margin: const EdgeInsets.only(top: 12),
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: isPrimary
-                    ? [const Color(0xFF0C243B), const Color(0xFF0F172A)]
-                    : [const Color(0xFF1E1B4B), const Color(0xFF0F172A)],
+                    ? [const Color(0xFF0C243B), const Color(0xFF0F172A), const Color(0xFF070E1A)]
+                    : [const Color(0xFF1E1B4B), const Color(0xFF121429), const Color(0xFF080914)],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(18),
               border: Border.all(
                 color: isPrimary
-                    ? const Color(0xFF38BDF8).withValues(alpha: 0.35)
-                    : const Color(0xFF818CF8).withValues(alpha: 0.35),
+                    ? const Color(0xFF38BDF8).withValues(alpha: 0.4)
+                    : const Color(0xFF818CF8).withValues(alpha: 0.4),
+                width: 1.2,
               ),
+              boxShadow: [
+                BoxShadow(
+                  color: (isPrimary ? const Color(0xFF0284C7) : const Color(0xFF6366F1)).withValues(alpha: 0.12),
+                  blurRadius: 18,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -391,7 +430,7 @@ class _HomeTabState extends State<HomeTab> {
                         displayName,
                         style: const TextStyle(
                           color: Colors.white,
-                          fontSize: 16,
+                          fontSize: 16.5,
                           fontWeight: FontWeight.w900,
                           letterSpacing: 0.2,
                         ),
@@ -404,7 +443,7 @@ class _HomeTabState extends State<HomeTab> {
                       onTap: () => _showRenameDialog(context, activeEntity),
                       borderRadius: BorderRadius.circular(8),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4.5),
                         decoration: BoxDecoration(
                           color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(8),
@@ -429,7 +468,7 @@ class _HomeTabState extends State<HomeTab> {
                         onTap: () => _confirmSetPrimaryCompany(context, activeEntity),
                         borderRadius: BorderRadius.circular(8),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4.5),
                           decoration: BoxDecoration(
                             color: const Color(0xFF10B981).withValues(alpha: 0.18),
                             borderRadius: BorderRadius.circular(8),
@@ -451,67 +490,93 @@ class _HomeTabState extends State<HomeTab> {
                     ],
                   ],
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 10),
                 Wrap(
                   spacing: 6,
                   runSpacing: 4,
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3.5),
                       decoration: BoxDecoration(
                         color: isPrimary
                             ? const Color(0xFF38BDF8).withValues(alpha: 0.15)
                             : ((activeEntity['isSubsidiary'] == true || activeEntity['isAcquired'] != true)
                                 ? const Color(0xFF10B981).withValues(alpha: 0.15)
                                 : const Color(0xFF818CF8).withValues(alpha: 0.15)),
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: BorderRadius.circular(7),
                         border: Border.all(
                           color: isPrimary
-                              ? const Color(0xFF38BDF8).withValues(alpha: 0.3)
+                              ? const Color(0xFF38BDF8).withValues(alpha: 0.4)
                               : ((activeEntity['isSubsidiary'] == true || activeEntity['isAcquired'] != true)
-                                  ? const Color(0xFF10B981).withValues(alpha: 0.3)
-                                  : const Color(0xFF818CF8).withValues(alpha: 0.3)),
+                                  ? const Color(0xFF10B981).withValues(alpha: 0.4)
+                                  : const Color(0xFF818CF8).withValues(alpha: 0.4)),
                         ),
                       ),
-                      child: Text(
-                        isPrimary
-                            ? (user.isIpo ? 'PT UTAMA (TBK)' : 'PT UTAMA (TERTUTUP)')
-                            : ((activeEntity['isSubsidiary'] == true || activeEntity['isAcquired'] != true)
-                                ? 'ANAK PERUSAHAAN (${ownershipPct.toStringAsFixed(1)}%)'
-                                : 'HASIL AKUISISI (${ownershipPct.toStringAsFixed(1)}%)'),
-                        style: TextStyle(
-                          color: isPrimary
-                              ? const Color(0xFF38BDF8)
-                              : ((activeEntity['isSubsidiary'] == true || activeEntity['isAcquired'] != true)
-                                  ? const Color(0xFF34D399)
-                                  : const Color(0xFFA5B4FC)),
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w800,
-                        ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 5,
+                            height: 5,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: isPrimary
+                                  ? const Color(0xFF38BDF8)
+                                  : ((activeEntity['isSubsidiary'] == true || activeEntity['isAcquired'] != true)
+                                      ? const Color(0xFF34D399)
+                                      : const Color(0xFFA5B4FC)),
+                            ),
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            isPrimary
+                                ? (user.isIpo ? 'PT UTAMA (TBK)' : 'PT UTAMA (TERTUTUP)')
+                                : ((activeEntity['isSubsidiary'] == true || activeEntity['isAcquired'] != true)
+                                    ? 'ANAK PERUSAHAAN (${ownershipPct.toStringAsFixed(1)}%)'
+                                    : 'HASIL AKUISISI (${ownershipPct.toStringAsFixed(1)}%)'),
+                            style: TextStyle(
+                              color: isPrimary
+                                  ? const Color(0xFF38BDF8)
+                                  : ((activeEntity['isSubsidiary'] == true || activeEntity['isAcquired'] != true)
+                                      ? const Color(0xFF34D399)
+                                      : const Color(0xFFA5B4FC)),
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3.5),
                       decoration: BoxDecoration(
                         color: const Color(0xFF1E293B),
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: BorderRadius.circular(7),
+                        border: Border.all(color: const Color(0xFF334155)),
                       ),
                       child: Text(
                         'SEKTOR ${(activeEntity['sector'] ?? user.sector).toString().toUpperCase()}',
-                        style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 9.5, fontWeight: FontWeight.bold),
+                        style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 9.5, fontWeight: FontWeight.bold),
                       ),
                     ),
                     if (activeEntity['isIpo'] == true || (isPrimary && user.isIpo))
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3.5),
                         decoration: BoxDecoration(
                           color: const Color(0xFF10B981).withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.3)),
+                          borderRadius: BorderRadius.circular(7),
+                          border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.4)),
                         ),
-                        child: const Text(
-                          'GO PUBLIC (TBK)',
-                          style: TextStyle(color: Color(0xFF34D399), fontSize: 9.5, fontWeight: FontWeight.bold),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.verified_rounded, color: Color(0xFF34D399), size: 11),
+                            SizedBox(width: 4),
+                            Text(
+                              'GO PUBLIC (TBK)',
+                              style: TextStyle(color: Color(0xFF34D399), fontSize: 9.5, fontWeight: FontWeight.w900),
+                            ),
+                          ],
                         ),
                       ),
                   ],
@@ -621,7 +686,7 @@ class _HomeTabState extends State<HomeTab> {
         ),
         const SizedBox(height: 8),
         SizedBox(
-          height: 52,
+          height: 54,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             itemCount: allEntities.length,
@@ -638,26 +703,49 @@ class _HomeTabState extends State<HomeTab> {
                     _selectedCompanyId = (item['isPrimary'] == true) ? 'primary' : item['id'].toString();
                   });
                 },
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(12),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
                   decoration: BoxDecoration(
-                    color: isSel ? const Color(0xFF1E293B) : const Color(0xFF0F172A),
-                    borderRadius: BorderRadius.circular(10),
+                    gradient: isSel
+                        ? const LinearGradient(
+                            colors: [Color(0xFF132742), Color(0xFF0F1B2E)],
+                          )
+                        : null,
+                    color: isSel ? null : const Color(0xFF0B1220),
+                    borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: isSel ? const Color(0xFF38BDF8) : const Color(0xFF334155),
-                      width: isSel ? 1.5 : 1,
+                      color: isSel ? const Color(0xFF38BDF8) : const Color(0xFF1E293B),
+                      width: isSel ? 1.4 : 1,
                     ),
+                    boxShadow: isSel
+                        ? [
+                            BoxShadow(
+                              color: const Color(0xFF38BDF8).withValues(alpha: 0.15),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ]
+                        : null,
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
-                        isPrimary ? Icons.business_center_rounded : Icons.account_balance_rounded,
-                        color: isSel ? const Color(0xFF38BDF8) : const Color(0xFF94A3B8),
-                        size: 16,
+                      Container(
+                        padding: const EdgeInsets.all(5),
+                        decoration: BoxDecoration(
+                          color: isSel
+                              ? const Color(0xFF38BDF8).withValues(alpha: 0.2)
+                              : const Color(0xFF1E293B),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          isPrimary ? Icons.business_center_rounded : Icons.account_balance_rounded,
+                          color: isSel ? const Color(0xFF38BDF8) : const Color(0xFF64748B),
+                          size: 15,
+                        ),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 9),
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -666,10 +754,11 @@ class _HomeTabState extends State<HomeTab> {
                             item['name'] ?? 'PT Perusahaan',
                             style: TextStyle(
                               color: isSel ? Colors.white : const Color(0xFFCBD5E1),
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w900,
                             ),
                           ),
+                          const SizedBox(height: 1),
                           Text(
                             isPrimary
                                 ? 'PT Utama (${(item['ownershipPct'] ?? 100.0).toStringAsFixed(1)}%)'
@@ -680,9 +769,10 @@ class _HomeTabState extends State<HomeTab> {
                               color: isSel
                                   ? const Color(0xFF38BDF8)
                                   : ((item['isSubsidiary'] == true || item['isAcquired'] != true)
-                                      ? const Color(0xFF10B981)
+                                      ? const Color(0xFF34D399)
                                       : const Color(0xFF64748B)),
-                              fontSize: 9,
+                              fontSize: 9.5,
+                              fontWeight: isSel ? FontWeight.w900 : FontWeight.w600,
                             ),
                           ),
                         ],
@@ -1571,52 +1661,88 @@ class _HomeTabState extends State<HomeTab> {
           ),
         ],
 
-        // DUAL TREASURY: Kas Pribadi & Kas Perusahaan
+        // DUAL TREASURY: Kas Pribadi & Kas Perusahaan (Executive Fintech Design)
         Row(
           children: [
             // Kas Pribadi Card
             Expanded(
               child: Container(
-                padding: const EdgeInsets.all(14),
+                padding: const EdgeInsets.all(15),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF0F172A),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFF1E293B)),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF0D1E36), Color(0xFF0A1324)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: const Color(0xFF0284C7).withValues(alpha: 0.4), width: 1.2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF0284C7).withValues(alpha: 0.08),
+                      blurRadius: 12,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Row(
+                    Row(
                       children: [
-                        Icon(Icons.person_outline_rounded, color: Color(0xFF38BDF8), size: 16),
-                        SizedBox(width: 4),
-                        Text('Kas Pribadi', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.bold)),
+                        Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF0284C7).withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Icon(Icons.person_rounded, color: Color(0xFF38BDF8), size: 13),
+                        ),
+                        const SizedBox(width: 6),
+                        const Text(
+                          'Kas Pribadi',
+                          style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.bold),
+                        ),
                       ],
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 8),
                     FittedBox(
                       fit: BoxFit.scaleDown,
                       alignment: Alignment.centerLeft,
                       child: Text(
                         CurrencyFormatter.formatFull(user.balanceIb),
-                        style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w900),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 15.5,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.3,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 10),
                     // Suntik Modal Button
                     SizedBox(
                       width: double.infinity,
-                      height: 32,
+                      height: 33,
                       child: ElevatedButton(
                         onPressed: () => _showTransferModal(context, provider, isInject: true, activeEntity: activeEntity),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF38BDF8).withValues(alpha: 0.15),
+                          backgroundColor: const Color(0xFF0284C7).withValues(alpha: 0.22),
                           foregroundColor: const Color(0xFF38BDF8),
                           padding: EdgeInsets.zero,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(9),
+                            side: BorderSide(color: const Color(0xFF0284C7).withValues(alpha: 0.45)),
+                          ),
                           elevation: 0,
                         ),
-                        child: const Text('💸 Suntik Modal', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.arrow_upward_rounded, size: 12, color: Color(0xFF38BDF8)),
+                            SizedBox(width: 4),
+                            Text('Suntik Modal', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w900)),
+                          ],
+                        ),
                       ),
                     ),
                   ],
@@ -1628,40 +1754,70 @@ class _HomeTabState extends State<HomeTab> {
             // Kas PT Card
             Expanded(
               child: Container(
-                padding: const EdgeInsets.all(14),
+                padding: const EdgeInsets.all(15),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF0F172A),
-                  borderRadius: BorderRadius.circular(16),
+                  gradient: LinearGradient(
+                    colors: isBankrupt
+                        ? [const Color(0xFF2E0C0C), const Color(0xFF150808)]
+                        : (isDeficitWarning
+                            ? [const Color(0xFF261907), const Color(0xFF140D04)]
+                            : (isSeized
+                                ? [const Color(0xFF2E0C0C), const Color(0xFF150808)]
+                                : [const Color(0xFF063B2B), const Color(0xFF071B15)])),
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(18),
                   border: Border.all(
                     color: isBankrupt
                         ? const Color(0xFFEF4444).withValues(alpha: 0.8)
                         : (isDeficitWarning
-                            ? const Color(0xFFF59E0B).withValues(alpha: 0.7)
+                            ? const Color(0xFFF59E0B).withValues(alpha: 0.8)
                             : (isSeized
-                                ? const Color(0xFFEF4444).withValues(alpha: 0.6)
-                                : const Color(0xFF10B981).withValues(alpha: 0.4))),
-                    width: (isBankrupt || isDeficitWarning) ? 1.5 : 1.0,
+                                ? const Color(0xFFEF4444).withValues(alpha: 0.7)
+                                : const Color(0xFF10B981).withValues(alpha: 0.45))),
+                    width: 1.2,
                   ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: (isBankrupt || isSeized
+                              ? const Color(0xFFEF4444)
+                              : (isDeficitWarning ? const Color(0xFFF59E0B) : const Color(0xFF10B981)))
+                          .withValues(alpha: 0.09),
+                      blurRadius: 12,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        Icon(
-                          isBankrupt
-                              ? Icons.gavel_rounded
-                              : (isDeficitWarning
-                                  ? Icons.warning_amber_rounded
-                                  : (isSeized ? Icons.lock_outline_rounded : Icons.business_rounded)),
-                          color: isBankrupt
-                              ? const Color(0xFFF87171)
-                              : (isDeficitWarning
-                                  ? const Color(0xFFFBBF24)
-                                  : (isSeized ? const Color(0xFFF87171) : const Color(0xFF10B981))),
-                          size: 16,
+                        Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: (isBankrupt || isSeized
+                                    ? const Color(0xFFEF4444)
+                                    : (isDeficitWarning ? const Color(0xFFF59E0B) : const Color(0xFF10B981)))
+                                .withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Icon(
+                            isBankrupt
+                                ? Icons.gavel_rounded
+                                : (isDeficitWarning
+                                    ? Icons.warning_amber_rounded
+                                    : (isSeized ? Icons.lock_outline_rounded : Icons.account_balance_rounded)),
+                            color: isBankrupt
+                                ? const Color(0xFFF87171)
+                                : (isDeficitWarning
+                                    ? const Color(0xFFFBBF24)
+                                    : (isSeized ? const Color(0xFFF87171) : const Color(0xFF34D399))),
+                            size: 13,
+                          ),
                         ),
-                        const SizedBox(width: 4),
+                        const SizedBox(width: 6),
                         Expanded(
                           child: Text(
                             isPrimary ? 'Kas PT Utama' : 'Kas ${activeEntity['symbol'] ?? 'Perusahaan'}',
@@ -1670,7 +1826,7 @@ class _HomeTabState extends State<HomeTab> {
                                   ? const Color(0xFFF87171)
                                   : (isDeficitWarning
                                       ? const Color(0xFFFBBF24)
-                                      : (isSeized ? const Color(0xFFF87171) : const Color(0xFF10B981))),
+                                      : (isSeized ? const Color(0xFFF87171) : const Color(0xFFCBD5E1))),
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
                             ),
@@ -1679,7 +1835,7 @@ class _HomeTabState extends State<HomeTab> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 8),
                     FittedBox(
                       fit: BoxFit.scaleDown,
                       alignment: Alignment.centerLeft,
@@ -1689,8 +1845,9 @@ class _HomeTabState extends State<HomeTab> {
                           color: (isBankrupt || isDeficitWarning || isSeized)
                               ? const Color(0xFFF87171)
                               : const Color(0xFF34D399),
-                          fontSize: 15,
+                          fontSize: 15.5,
                           fontWeight: FontWeight.w900,
+                          letterSpacing: 0.3,
                         ),
                       ),
                     ),
@@ -1698,7 +1855,7 @@ class _HomeTabState extends State<HomeTab> {
                     // Action Button (Tarik Dividen vs Suntik/Bailout)
                     SizedBox(
                       width: double.infinity,
-                      height: 32,
+                      height: 33,
                       child: ElevatedButton(
                         onPressed: isBankrupt
                             ? () => _showTransferModal(context, provider, isInject: true, activeEntity: activeEntity)
@@ -1709,19 +1866,30 @@ class _HomeTabState extends State<HomeTab> {
                                     : () => _showTransferModal(context, provider, isInject: false, activeEntity: activeEntity))),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: isBankrupt
-                              ? const Color(0xFFEF4444).withValues(alpha: 0.2)
+                              ? const Color(0xFFEF4444).withValues(alpha: 0.22)
                               : (isDeficitWarning
-                                  ? const Color(0xFFF59E0B).withValues(alpha: 0.2)
+                                  ? const Color(0xFFF59E0B).withValues(alpha: 0.22)
                                   : (isSeized
-                                      ? const Color(0xFFEF4444).withValues(alpha: 0.15)
-                                      : const Color(0xFF10B981).withValues(alpha: 0.15))),
+                                      ? const Color(0xFFEF4444).withValues(alpha: 0.18)
+                                      : const Color(0xFF10B981).withValues(alpha: 0.22))),
                           foregroundColor: isBankrupt
                               ? const Color(0xFFFCA5A5)
                               : (isDeficitWarning
                                   ? const Color(0xFFFBBF24)
                                   : (isSeized ? const Color(0xFFF87171) : const Color(0xFF34D399))),
                           padding: EdgeInsets.zero,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(9),
+                            side: BorderSide(
+                              color: isBankrupt
+                                  ? const Color(0xFFEF4444).withValues(alpha: 0.5)
+                                  : (isDeficitWarning
+                                      ? const Color(0xFFF59E0B).withValues(alpha: 0.5)
+                                      : (isSeized
+                                          ? const Color(0xFFEF4444).withValues(alpha: 0.4)
+                                          : const Color(0xFF10B981).withValues(alpha: 0.5))),
+                            ),
+                          ),
                           elevation: 0,
                         ),
                         child: Text(
@@ -1730,7 +1898,7 @@ class _HomeTabState extends State<HomeTab> {
                               : (isDeficitWarning
                                   ? '⚠️ Tambah Kas'
                                   : (isSeized ? '🔒 Dibekukan' : '💰 Tarik Dividen')),
-                          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                          style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w900),
                         ),
                       ),
                     ),

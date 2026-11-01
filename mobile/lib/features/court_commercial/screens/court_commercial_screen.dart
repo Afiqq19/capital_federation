@@ -106,7 +106,7 @@ class _CourtCommercialScreenState extends State<CourtCommercialScreen> {
         content: Text(
           res['message']?.toString() ??
               (nextVal
-                  ? '🤖 Majelis Hakim Bot Otomatis PNAF Diaktifkan!'
+                  ? '⚖️ Majelis Hakim Agung PNAF Diaktifkan!'
                   : '👨‍⚖️ Diubah ke Mode Manual Hakim Agung.'),
         ),
         backgroundColor: nextVal ? const Color(0xFF059669) : const Color(0xFFB45309),
@@ -342,7 +342,7 @@ class _CourtCommercialScreenState extends State<CourtCommercialScreen> {
                                     ),
                                     child: Text(
                                       _autoJudgeEnabled
-                                          ? '🤖 HAKIM BOT OTOMATIS AKTIF (24/7)'
+                                          ? '⚖️ MAJELIS HAKIM REGULER AKTIF (24/7)'
                                           : '👨‍⚖️ MODE MANUAL HAKIM AGUNG',
                                       style: TextStyle(
                                         color: _autoJudgeEnabled
@@ -1103,9 +1103,9 @@ class _CourtCommercialScreenState extends State<CourtCommercialScreen> {
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
-                icon: const Icon(Icons.smart_toy_rounded, size: 15),
+                icon: const Icon(Icons.balance_rounded, size: 15),
                 label: const Text(
-                  '🤖 Biarkan Majelis Hakim Bot Memutuskan Otomatis',
+                  '⚖️ Serahkan Putusan ke Majelis Hakim PNAF',
                   style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900),
                 ),
                 style: OutlinedButton.styleFrom(

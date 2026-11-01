@@ -880,13 +880,13 @@ app.post('/api/company/found', async (req, res) => {
       const compId = uuidv4();
       await query.run(
         `INSERT INTO companies (id, symbol, name, sector, is_bot, status, current_price, base_price, total_shares, circulating_shares, dividend_rate, fundamental_score, owner_id, is_ipo, listing_status, description, founder_name, founded_at, company_balance_ib, prev_close, daily_high, daily_low, is_acquired, rd_level, marketing_level, hr_level, capacity_level, pt_level)
-         VALUES (?, ?, ?, ?, 0, 'HEALTHY', 1000.0, 1000.0, 10000000, 0, 0.04, 75.0, ?, 0, 'UNLISTED', ?, ?, ?, ?, 1000.0, 1050.0, 950.0, 0, 1, 1, 1, 1, 1)`,
+         VALUES (?, ?, ?, ?, 0, 'HEALTHY', 1000.0, 1000.0, 1000000000, 0, 0.04, 75.0, ?, 0, 'UNLISTED', ?, ?, ?, ?, 1000.0, 1050.0, 950.0, 0, 1, 1, 1, 1, 1)`,
         [compId, cleanSymbol, officialName, sector, userId, cleanDesc, `${user.username} (Pendiri Utama)`, formattedDate, initialPtCash]
       );
 
       await query.run(
         'INSERT INTO company_shareholders (id, company_id, holder_name, holder_type, shares_count, percentage, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [uuidv4(), compId, `${user.username} (Pendiri Utama)`, 'FOUNDER', 10000000, 100.0, userId]
+        [uuidv4(), compId, `${user.username} (Pendiri Utama)`, 'FOUNDER', 1000000000, 100.0, userId]
       );
 
       const updatedUser = await query.get('SELECT balance_ib, company_balance_ib FROM users WHERE id = ?', [userId]);
@@ -936,13 +936,13 @@ app.post('/api/company/found', async (req, res) => {
     const compId = uuidv4();
     await query.run(
       `INSERT INTO companies (id, symbol, name, sector, is_bot, status, current_price, base_price, total_shares, circulating_shares, dividend_rate, fundamental_score, owner_id, is_ipo, listing_status, description, founder_name, founded_at, company_balance_ib, prev_close, daily_high, daily_low)
-       VALUES (?, ?, ?, ?, 0, 'HEALTHY', 1000.0, 1000.0, 10000000, 0, 0.04, 75.0, ?, 0, 'UNLISTED', ?, ?, ?, ?, 1000.0, 1050.0, 950.0)`,
+       VALUES (?, ?, ?, ?, 0, 'HEALTHY', 1000.0, 1000.0, 1000000000, 0, 0.04, 75.0, ?, 0, 'UNLISTED', ?, ?, ?, ?, 1000.0, 1050.0, 950.0)`,
       [compId, cleanSymbol, officialName, sector, userId, cleanDesc, `${user.username} (Pendiri Utama)`, formattedDate, initialPtCash]
     );
 
     await query.run(
       'INSERT INTO company_shareholders (id, company_id, holder_name, holder_type, shares_count, percentage, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [uuidv4(), compId, `${user.username} (Pendiri Utama)`, 'FOUNDER', 10000000, 100.0, userId]
+      [uuidv4(), compId, `${user.username} (Pendiri Utama)`, 'FOUNDER', 1000000000, 100.0, userId]
     );
 
     const updatedUser = await query.get('SELECT balance_ib, company_balance_ib FROM users WHERE id = ?', [userId]);
@@ -2012,7 +2012,7 @@ function formatCorporateName(rawName, isIpo = false) {
 
 // Helper: Kuota Maksimal Saham Pasar Reguler (49% = Gabungan Publik Ritel + Likuiditas Konsorsium Institusi)
 function getRegularMarketQuotaShares(company) {
-  const totalShares = company?.total_shares || 10000000;
+  const totalShares = company?.total_shares || 1000000000;
   const minRegularShares = Math.floor(totalShares * 0.49);
   const circShares = company?.circulating_shares || 0;
   return Math.min(totalShares, Math.max(minRegularShares, circShares));
@@ -2025,7 +2025,7 @@ async function getCompanyShareholders(companyId, ownerUser, compData) {
     [companyId]
   );
 
-  const totalShares = compData?.total_shares || 10000000;
+  const totalShares = compData?.total_shares || 1000000000;
   const isIpoComp = compData?.is_ipo === 1 || (compData?.name && /\bTbk\.?\b/i.test(compData.name));
 
   if (rows && rows.length > 0) {
@@ -2326,7 +2326,7 @@ app.post('/api/company/ipo', async (req, res) => {
       const cleanSector = sector || user.sector || 'Teknologi';
       const numIpoPrice = parseFloat(ipoPrice) || 2500.0;
       const numFloatingPct = Math.min(49.0, Math.max(10.0, parseFloat(floatingPct) || 10.0));
-      const totalShares = parseInt(req.body.totalShares) || 10000000; // 100% total saham (default 10 Juta lembar = 100 Ribu lot)
+      const totalShares = parseInt(req.body.totalShares) || 1000000000; // 100% total saham (1 Miliar lembar = 10 Juta lot standar bursa)
       const publicShares = Math.round(totalShares * (numFloatingPct / 100.0));
       const strategicPct = Math.min(39.0, Math.max(0.0, parseFloat((100.0 - numFloatingPct - 60.0).toFixed(1))));
       const founderPct = parseFloat((100.0 - numFloatingPct - strategicPct).toFixed(1));
@@ -2534,7 +2534,7 @@ app.post('/api/company/ipo', async (req, res) => {
       const cleanSector = sector || comp.sector || 'Teknologi';
       const numIpoPrice = parseFloat(ipoPrice) || 2500.0;
       const numFloatingPct = Math.min(49.0, Math.max(10.0, parseFloat(floatingPct) || 10.0));
-      const totalShares = parseInt(req.body.totalShares) || comp.total_shares || 10000000;
+      const totalShares = parseInt(req.body.totalShares) || comp.total_shares || 1000000000;
       const publicShares = Math.round(totalShares * (numFloatingPct / 100.0));
       const strategicPct = Math.min(39.0, Math.max(0.0, parseFloat((100.0 - numFloatingPct - 60.0).toFixed(1))));
       const founderPct = parseFloat((100.0 - numFloatingPct - strategicPct).toFixed(1));
@@ -8380,18 +8380,18 @@ const bundledPublicApkPath = path.join(__dirname, '../public/downloads/Capital-F
 const directPublicApkPath = path.join(__dirname, '../public/downloads/capital-federation.apk');
 const localBuiltApkPath = path.join(__dirname, '../../mobile/build/app/outputs/flutter-apk/app-release.apk');
 
-const LATEST_RELEASE_NOTES_V199 = 'v1.9.9 (Build 44): Advokat Kondang PNAF (Puja Azzahra, Zahra Bintang, Khairul Sagala) & Permohonan Sita Jaminan (Conservatoir Beslag), Aksi Korporasi Stock Split (1:2, 1:5, 1:10) & Kebijakan Dividen RUPS Mandiri, serta Sinergi Transfer Kas Internal Konglomerasi Antar Anak PT.';
+const LATEST_RELEASE_NOTES_V200 = 'v2.0.0 (Build 45): Modernisasi Elegan UI/UX Beranda (Obsidian Fintech Prestige & Dual Treasury Glassmorphic), Standarisasi Listing Bursa Saham 10 Juta Lot (1 Miliar Lembar), Eksekusi Sita Saham Proporsional Peradilan PNAF (Fair Judicial Remedy), Skrip Debat Sidang Niaga Panas & Membara (Replik & Duplik Advokat), serta Pembersihan Label BOT di Seluruh Ruang Pengadilan.';
 
 async function getApkSettingsMap() {
   const defaults = {
-    apk_version: '1.9.9',
-    apk_build_number: '44',
+    apk_version: '2.0.0',
+    apk_build_number: '45',
     apk_min_android: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
-    apk_file_size_mb: '57.2 MB',
-    apk_release_notes: LATEST_RELEASE_NOTES_V199,
+    apk_file_size_mb: '57.3 MB',
+    apk_release_notes: LATEST_RELEASE_NOTES_V200,
     apk_external_url: '',
-    apk_download_count: '540',
-    apk_sha256: '361bf80156cc2182b09b9c6b6276a71c79a0752817860ec7b412883243b8fe43',
+    apk_download_count: '585',
+    apk_sha256: 'c191c21f63ef19793d4fdda05309a55957656a13ae01f7c76f9fea8a84be5d5e',
     apk_updated_at: new Date().toISOString(),
   };
   try {
@@ -8401,12 +8401,12 @@ async function getApkSettingsMap() {
         defaults[r.key] = String(r.value);
       }
     }
-    if (parseInt(defaults.apk_build_number || '0', 10) < 44 || defaults.apk_sha256 !== '361bf80156cc2182b09b9c6b6276a71c79a0752817860ec7b412883243b8fe43') {
-      defaults.apk_version = '1.9.9';
-      defaults.apk_build_number = '44';
+    if (parseInt(defaults.apk_build_number || '0', 10) < 45 || defaults.apk_sha256 !== 'c191c21f63ef19793d4fdda05309a55957656a13ae01f7c76f9fea8a84be5d5e') {
+      defaults.apk_version = '2.0.0';
+      defaults.apk_build_number = '45';
       defaults.apk_file_size_mb = '57.2 MB';
-      defaults.apk_sha256 = '361bf80156cc2182b09b9c6b6276a71c79a0752817860ec7b412883243b8fe43';
-      defaults.apk_release_notes = LATEST_RELEASE_NOTES_V199;
+      defaults.apk_sha256 = 'c191c21f63ef19793d4fdda05309a55957656a13ae01f7c76f9fea8a84be5d5e';
+      defaults.apk_release_notes = LATEST_RELEASE_NOTES_V200;
       defaults.apk_updated_at = new Date().toISOString();
       // Persist directly to central_bank_settings so /api/settings, /api/admin/settings & /api/admin/overview match 100%!
       const keysToSync = ['apk_version', 'apk_build_number', 'apk_file_size_mb', 'apk_sha256', 'apk_release_notes', 'apk_min_android', 'apk_updated_at'];

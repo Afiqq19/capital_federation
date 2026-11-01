@@ -867,7 +867,7 @@ class _CourtLiveRoomScreenState extends State<CourtLiveRoomScreen> {
                         _fetchRoomData();
                       },
                 child: const Text(
-                  '🤖 Bot Putuskan ➔',
+                  '⚖️ Putusan Kilat Majelis ➔',
                   style: TextStyle(
                     color: Color(0xFF34D399),
                     fontSize: 9.5,
@@ -1109,15 +1109,15 @@ class _CourtLiveRoomScreenState extends State<CourtLiveRoomScreen> {
       child: Row(
         children: [
           Icon(
-            _autoJudgeEnabled ? Icons.smart_toy_rounded : Icons.gavel_rounded,
-            color: _autoJudgeEnabled ? const Color(0xFF34D399) : const Color(0xFFF5B942),
+            _autoJudgeEnabled ? Icons.balance_rounded : Icons.gavel_rounded,
+            color: _autoJudgeEnabled ? const Color(0xFF34D399) : const Color(0xFFF59E0B),
             size: 15,
           ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               _autoJudgeEnabled
-                  ? 'Majelis Hakim Bot PNAF aktif memeriksa bukti & memutus perkara otomatis.'
+                  ? 'Majelis Hakim Agung PNAF aktif memeriksa bukti & memutus perkara komersial.'
                   : 'Mode Manual aktif: Menunggu pemeriksaan & ketukan palu Hakim Agung PNAF.',
               style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 10),
             ),
