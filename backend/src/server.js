@@ -2624,21 +2624,6 @@ app.post('/api/court/file-case', async (req, res) => {
         nextBotAt,
       ]
     );
-        plaintiffName,
-        plaintiffUserId || null,
-        defendantName,
-        resolvedDefUserId,
-        resolvedDefCompId,
-        Number(claimAmountIb) || 0.0,
-        hearingSchedule,
-        timeVal,
-        roomName,
-        targetAsset,
-        notes || 'Berkas perkara telah diterima Panitera PNAF. Menunggu pemeriksaan Majelis Hakim.',
-        plaintiffUserId ? 1 : 0,
-        nextBotAt,
-      ]
-    );
 
     await appendCourtChat(io, {
       caseId,
