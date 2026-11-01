@@ -121,6 +121,7 @@ class CompanyModel {
   final String? suspendReason;
   final String? ownerId;
   final String? ownerUsername;
+  final String? founderName;
   final String? ownerPtName;
   final String listingStatus; // 'LISTED' | 'PRE_IPO' | 'UNLISTED'
   final String? listingDate;
@@ -159,6 +160,7 @@ class CompanyModel {
     this.suspendReason,
     this.ownerId,
     this.ownerUsername,
+    this.founderName,
     this.ownerPtName,
     this.listingStatus = 'LISTED',
     this.listingDate,
@@ -252,6 +254,7 @@ class CompanyModel {
       suspendReason: json['suspend_reason']?.toString(),
       ownerId: json['owner_id']?.toString() ?? json['ownerId']?.toString(),
       ownerUsername: json['owner_username']?.toString() ?? json['ownerUsername']?.toString(),
+      founderName: json['founder_name']?.toString() ?? json['founderName']?.toString(),
       ownerPtName: json['owner_pt_name']?.toString() ?? json['ownerPtName']?.toString(),
       listingStatus: listStatus,
       listingDate: listDate,
@@ -311,11 +314,29 @@ class CompanyModel {
       suspendReason: suspendReason,
       ownerId: ownerId,
       ownerUsername: ownerUsername,
+      founderName: founderName,
       ownerPtName: ownerPtName,
       listingStatus: listingStatus,
       listingDate: listingDate,
       ipoStatus: ipoStatus,
       shareholders: shareholders ?? this.shareholders,
     );
+  }
+
+  String get displayOwnerName {
+    final u = (ownerUsername ?? founderName ?? '').trim();
+    if (u.isNotEmpty && u != 'Bot/Publik' && !u.startsWith('bot-user-') && !u.startsWith('user-bot-')) {
+      return u.replaceAll('@', '');
+    }
+    const fallbackNames = [
+      'hendra_tanoto', 'aditya_widodo', 'tirta_soediro', 'susanto_kusuma',
+      'bambang_sutanto', 'reza_hartono', 'erick_thohir', 'djoko_susanto',
+      'ciputra_wijaya', 'prajogo_pangestu', 'chairul_tanjung', 'ilham_habibie'
+    ];
+    int hash = 0;
+    for (int i = 0; i < symbol.length; i++) {
+      hash += symbol.codeUnitAt(i);
+    }
+    return fallbackNames[hash % fallbackNames.length];
   }
 }

@@ -27,7 +27,18 @@ const {
   CourtJudgeBotService,
   BOT_CLERK_NAME,
 } = require('./services/courtEngine.service');
+const { NATURAL_USERNAMES } = require('./botData');
 const registerAdminRoutes = require('./routes/admin');
+
+function hashString(str) {
+  let hash = 0;
+  const s = String(str || '');
+  for (let i = 0; i < s.length; i++) {
+    hash = ((hash << 5) - hash) + s.charCodeAt(i);
+    hash |= 0;
+  }
+  return hash;
+}
 
 const app = express();
 const server = http.createServer(app);
@@ -4282,32 +4293,47 @@ app.get('/api/companies', async (req, res) => {
     }
 
     let sql = `
-      SELECT *,
-        ROUND(((current_price - CASE WHEN prev_close > 0 THEN prev_close ELSE base_price END) / 
-               CASE WHEN prev_close > 0 THEN prev_close ELSE base_price END) * 100, 2) AS price_change_pct
-      FROM companies WHERE (listing_status = 'LISTED' OR listing_status IS NULL OR is_ipo = 1)
+      SELECT c.*,
+        COALESCE(u.username, NULLIF(c.founder_name, ''), NULLIF(c.owner_username, '')) AS owner_username,
+        COALESCE(u.pt_name, c.name) AS owner_pt_name,
+        ROUND(((c.current_price - CASE WHEN c.prev_close > 0 THEN c.prev_close ELSE c.base_price END) / 
+               CASE WHEN c.prev_close > 0 THEN c.prev_close ELSE c.base_price END) * 100, 2) AS price_change_pct
+      FROM companies c
+      LEFT JOIN users u ON c.owner_id = u.id
+      WHERE (c.listing_status = 'LISTED' OR c.listing_status IS NULL OR c.is_ipo = 1)
     `;
     const params = [];
 
     if (sector && sector !== 'ALL') {
-      sql += ' AND sector = ?';
+      sql += ' AND c.sector = ?';
       params.push(sector);
     }
     if (status) {
-      sql += ' AND status = ?';
+      sql += ' AND c.status = ?';
       params.push(status);
     }
     if (search) {
-      sql += ' AND (symbol LIKE ? OR name LIKE ?)';
-      params.push(`%${search}%`, `%${search}%`);
+      sql += ' AND (c.symbol LIKE ? OR c.name LIKE ? OR c.founder_name LIKE ? OR u.username LIKE ?)';
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
     }
 
-    sql += ' ORDER BY current_price DESC';
+    sql += ' ORDER BY c.current_price DESC';
     const companies = await query.all(sql, params);
-    const enriched = companies.map((c) => {
+    const enriched = companies.map((c, idx) => {
+      let resolvedOwner = (c.owner_username || c.founder_name || '').trim();
+      if (!resolvedOwner || resolvedOwner === 'Bot/Publik' || resolvedOwner.startsWith('bot-user-') || resolvedOwner.startsWith('user-bot-')) {
+        const fallbackName = (NATURAL_USERNAMES && NATURAL_USERNAMES.length > 0)
+          ? NATURAL_USERNAMES[Math.abs(hashString(c.symbol || c.name || String(idx))) % NATURAL_USERNAMES.length]
+          : 'hendra_tanoto';
+        resolvedOwner = fallbackName;
+      }
+      resolvedOwner = resolvedOwner.replace(/^@/, '').replace(/\s*\(.*\)$/, '').trim();
+
       const regShares = getRegularMarketQuotaShares(c);
       return {
         ...c,
+        owner_username: resolvedOwner,
+        founder_name: c.founder_name || resolvedOwner,
         regular_quota_shares: regShares,
         regular_quota_lots: Math.max(1, Math.floor(regShares / 100)),
       };
@@ -4324,13 +4350,25 @@ app.get('/api/companies', async (req, res) => {
 app.get('/api/companies/:id', async (req, res) => {
   try {
     const company = await query.get(
-      `SELECT c.*, u.username as owner_username, u.pt_name as owner_pt_name
+      `SELECT c.*, 
+        COALESCE(u.username, NULLIF(c.founder_name, ''), NULLIF(c.owner_username, '')) as owner_username, 
+        COALESCE(u.pt_name, c.name) as owner_pt_name
        FROM companies c
        LEFT JOIN users u ON c.owner_id = u.id
        WHERE c.id = ? OR c.symbol = ?`,
       [req.params.id, req.params.id.toUpperCase()]
     );
     if (!company) return res.status(404).json({ error: 'Company not found' });
+
+    let resolvedOwner = (company.owner_username || company.founder_name || '').trim();
+    if (!resolvedOwner || resolvedOwner === 'Bot/Publik' || resolvedOwner.startsWith('bot-user-') || resolvedOwner.startsWith('user-bot-')) {
+      const fallbackName = (NATURAL_USERNAMES && NATURAL_USERNAMES.length > 0)
+        ? NATURAL_USERNAMES[Math.abs(hashString(company.symbol || company.name || '0')) % NATURAL_USERNAMES.length]
+        : 'hendra_tanoto';
+      resolvedOwner = fallbackName;
+    }
+    company.owner_username = resolvedOwner.replace(/^@/, '').replace(/\s*\(.*\)$/, '').trim();
+    if (!company.founder_name) company.founder_name = company.owner_username;
 
     const shareholders = await getCompanyShareholders(company.id, null, company);
 
@@ -8005,18 +8043,18 @@ const bundledPublicApkPath = path.join(__dirname, '../public/downloads/Capital-F
 const directPublicApkPath = path.join(__dirname, '../public/downloads/capital-federation.apk');
 const localBuiltApkPath = path.join(__dirname, '../../mobile/build/app/outputs/flutter-apk/app-release.apk');
 
-const LATEST_RELEASE_NOTES_V199 = 'v1.9.9 (Build 41): Transparansi Perkara Sitaan PNAF (Pihak Penggugat, No. Perkara, Pokok Gugatan), Sinkronisasi Denda Amar Putusan Sidang Dinamis 100%, Banner Sita Eksekusi Khusus Emiten, dan Opsi Pinjaman Modal Bank BCF.';
+const LATEST_RELEASE_NOTES_V199 = 'v1.9.9 (Build 42): Perbaikan Tuntas Ketuk Palu Putusan Sidang PNAF, Sinkronisasi Nama Founder/Owner Emiten Asli & Realistis (Bebas @Bot/Publik), Panduan Edukasi 4 Amar Putusan Sidang (Approved, PKPU, Pailit, Tolak), serta Filter Pencarian Perusahaan Cerdas.';
 
 async function getApkSettingsMap() {
   const defaults = {
     apk_version: '1.9.9',
-    apk_build_number: '41',
+    apk_build_number: '42',
     apk_min_android: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
-    apk_file_size_mb: '57.0 MB',
+    apk_file_size_mb: '57.1 MB',
     apk_release_notes: LATEST_RELEASE_NOTES_V199,
     apk_external_url: '',
-    apk_download_count: '445',
-    apk_sha256: 'a4bb6ffef9e227c2db7d664f2490ff10563e7b42a82d54897eb6da763f6301ff',
+    apk_download_count: '468',
+    apk_sha256: '21e789b337886983d4ad3106cda5b799e4531830b894c92bcbc4309fd6496a09',
     apk_updated_at: new Date().toISOString(),
   };
   try {
@@ -8026,11 +8064,11 @@ async function getApkSettingsMap() {
         defaults[r.key] = String(r.value);
       }
     }
-    if (parseInt(defaults.apk_build_number || '0', 10) < 41 || defaults.apk_sha256 !== 'a4bb6ffef9e227c2db7d664f2490ff10563e7b42a82d54897eb6da763f6301ff') {
+    if (parseInt(defaults.apk_build_number || '0', 10) < 42 || defaults.apk_sha256 !== '21e789b337886983d4ad3106cda5b799e4531830b894c92bcbc4309fd6496a09') {
       defaults.apk_version = '1.9.9';
-      defaults.apk_build_number = '41';
-      defaults.apk_file_size_mb = '57.0 MB';
-      defaults.apk_sha256 = 'a4bb6ffef9e227c2db7d664f2490ff10563e7b42a82d54897eb6da763f6301ff';
+      defaults.apk_build_number = '42';
+      defaults.apk_file_size_mb = '57.1 MB';
+      defaults.apk_sha256 = '21e789b337886983d4ad3106cda5b799e4531830b894c92bcbc4309fd6496a09';
       defaults.apk_release_notes = LATEST_RELEASE_NOTES_V199;
       defaults.apk_updated_at = new Date().toISOString();
       // Persist directly to central_bank_settings so /api/settings, /api/admin/settings & /api/admin/overview match 100%!

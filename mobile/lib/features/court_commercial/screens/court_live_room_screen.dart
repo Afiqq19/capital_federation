@@ -787,13 +787,36 @@ class _CourtLiveRoomScreenState extends State<CourtLiveRoomScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                '🔨 MEJA PALU HAKIM AGUNG PNAF:',
-                style: TextStyle(
-                  color: Color(0xFFF5B942),
-                  fontSize: 9.5,
-                  fontWeight: FontWeight.w900,
-                ),
+              Row(
+                children: [
+                  const Text(
+                    '🔨 MEJA PALU HAKIM AGUNG PNAF:',
+                    style: TextStyle(
+                      color: Color(0xFFF5B942),
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  InkWell(
+                    onTap: _showVerdictExplanationModal,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF5B942).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: const Color(0xFFF5B942).withValues(alpha: 0.4)),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.help_outline_rounded, color: Color(0xFFF5B942), size: 10),
+                          SizedBox(width: 3),
+                          Text('Arti Putusan', style: TextStyle(color: Color(0xFFF5B942), fontSize: 8.5, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
               InkWell(
                 onTap: _isSubmittingVerdict
@@ -850,6 +873,156 @@ class _CourtLiveRoomScreenState extends State<CourtLiveRoomScreen> {
     );
   }
 
+  void _showVerdictExplanationModal() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF0F172A),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return Container(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(color: const Color(0xFF334155), borderRadius: BorderRadius.circular(2)),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Row(
+                children: [
+                  Icon(Icons.gavel_rounded, color: Color(0xFFF5B942), size: 20),
+                  SizedBox(width: 8),
+                  Text(
+                    'PANDUAN 4 AMAR PUTUSAN SIDANG PNAF',
+                    style: TextStyle(color: Color(0xFFF5B942), fontSize: 13, fontWeight: FontWeight.w900),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              _buildVerdictInfoItem(
+                title: '1. ✅ Approved (Gugatan Dikabulkan Penuh)',
+                color: const Color(0xFF10B981),
+                desc: 'Tergugat terbukti bersalah/wanprestasi. Ganti rugi ditarik 100% dari kas Tergugat ke Penggugat. Jika kas Tergugat kurang atau ada permohonan sita hak milik, perseroan Tergugat disita & dialihkan 100% menjadi milik Penggugat.',
+              ),
+              const SizedBox(height: 10),
+              _buildVerdictInfoItem(
+                title: '2. 🤝 PKPU (Restrukturisasi / Damai Mediasi)',
+                color: const Color(0xFF06B6D4),
+                desc: 'Penundaan Kewajiban Pembayaran Utang. Majelis Hakim memberikan moratorium & perdamaian: kewajiban perkara didiskon 50% atau restrukturisasi cicilan agar perseroan Tergugat tidak langsung bangkrut.',
+              ),
+              const SizedBox(height: 10),
+              _buildVerdictInfoItem(
+                title: '3. 🔨 Pailit (Insolvensi & Sita Eksekusi Lelang BCF)',
+                color: const Color(0xFFEF4444),
+                desc: 'Tergugat dinyatakan insolven/bangkrut atau mangkir persidangan terus-menerus (putusan verstek). Seluruh operasional perseroan dibekukan total & disita pengadilan untuk dilelang di Bursa Aset BCF guna melunasi kreditur.',
+              ),
+              const SizedBox(height: 10),
+              _buildVerdictInfoItem(
+                title: '4. ❌ Tolak (Gugatan Ditolak / Gugur)',
+                color: const Color(0xFF94A3B8),
+                desc: 'Dalil gugatan Penggugat tidak terbukti atau gugatan fiktif/fitnah. Tergugat dinyatakan bebas murni tanpa sitaan, dan biaya administrasi perkara dibebankan ke Penggugat.',
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildVerdictInfoItem({required String title, required Color color, required String desc}) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 11)),
+          const SizedBox(height: 4),
+          Text(desc, style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 10, height: 1.35)),
+        ],
+      ),
+    );
+  }
+
+  void _confirmAndSubmitVerdict({
+    required String label,
+    required Color color,
+    required String status,
+    required String userId,
+  }) {
+    String meaning = '';
+    if (status == 'VERDICT_APPROVED') {
+      meaning = 'Gugatan Penggugat DIKABULKAN PENUH (APPROVED).\n\nTergugat dinyatakan bersalah, ganti rugi ditarik 100%, dan jika kas tidak cukup atau ada klausul akuisisi, perseroan disita dan dialihkan hak miliknya secara sah kepada Penggugat.';
+    } else if (status == 'VERDICT_PKPU') {
+      meaning = 'Putusan MEDIASI / PKPU (Penundaan Kewajiban Pembayaran Utang).\n\nTergugat diberi keringanan restrukturisasi damai dengan potongan kewajiban 50% agar perseroan tidak langsung bangkrut.';
+    } else if (status == 'VERDICT_PAILIT') {
+      meaning = 'Tergugat dinyatakan PAILIT / BANGKRUT (atau mangkir sidang verstek).\n\nSeluruh operasional dibekukan total & perseroan Tergugat disita bursa untuk dimasukkan antrean lelang di Bursa Aset BCF.';
+    } else {
+      meaning = 'Gugatan DITOLAK / GUGUR demi hukum karena dalil tidak terbukti.\n\nTergugat dinyatakan bebas murni dari segala tuntutan.';
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF0F172A),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: color, width: 1.5),
+        ),
+        title: Row(
+          children: [
+            Icon(Icons.gavel_rounded, color: color, size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Ketuk Palu: $label',
+                style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          meaning,
+          style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 11.5, height: 1.45),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Batal', style: TextStyle(color: Color(0xFF94A3B8))),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: color,
+              foregroundColor: Colors.black,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              _submitVerdict(
+                verdictStatus: status,
+                adminOverride: true,
+                userId: userId,
+              );
+            },
+            child: const Text('Ketuk Palu Sekarang', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildQuickGavelChip({
     required String label,
     required Color color,
@@ -869,9 +1042,10 @@ class _CourtLiveRoomScreenState extends State<CourtLiveRoomScreen> {
           ),
           onPressed: _isSubmittingVerdict
               ? null
-              : () => _submitVerdict(
-                    verdictStatus: status,
-                    adminOverride: true,
+              : () => _confirmAndSubmitVerdict(
+                    label: label,
+                    color: color,
+                    status: status,
                     userId: userId,
                   ),
           child: Text(

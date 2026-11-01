@@ -538,6 +538,7 @@ async function initDb() {
   await safeAddColumn('companies', 'is_bumn INTEGER DEFAULT 0');
   await safeAddColumn('companies', 'seizure_deadline TEXT');
   await safeAddColumn('companies', 'is_auction_ready INTEGER DEFAULT 0');
+  await safeAddColumn('companies', 'owner_username TEXT');
 
   // Market Orders: Ensure dual column compatibility (type/order_type, target_lots/lots, price_per_share/price)
   await safeAddColumn('market_orders', "order_type TEXT DEFAULT 'BUY'");

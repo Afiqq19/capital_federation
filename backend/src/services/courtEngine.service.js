@@ -820,14 +820,15 @@ async function executeCourtVerdict(
       // === EKSEKUSI PENGALIHAN HAK MILIK SECARA LANGSUNG KEPADA PENGGUGAT ===
       const plUser = await query.get('SELECT id, username FROM users WHERE id = ?', [plaintiffId]);
       if (plUser) {
-        const prevOwnerUsername = targetComp.owner_username || 'Tergugat';
+        const prevOwnerUsername = targetComp.owner_username || targetComp.founder_name || 'Tergugat';
         const prevOwnerId = targetComp.owner_id;
 
         // 1. Update status emiten: Pemilik baru menjadi Penggugat, status SEHAT, tidak disita lagi!
         await query.run(
           `UPDATE companies 
            SET owner_id = ?, 
-               owner_username = ?, 
+               owner_username = ?,
+               founder_name = ?, 
                status = 'HEALTHY', 
                is_seized = 0, 
                is_auction_ready = 0, 
@@ -836,7 +837,7 @@ async function executeCourtVerdict(
                seizure_deadline = NULL, 
                seize_reason = NULL 
            WHERE id = ?`,
-          [plUser.id, plUser.username, targetComp.id]
+          [plUser.id, plUser.username, plUser.username, targetComp.id]
         );
 
         // 2. Alihkan Kepemilikan Pemegang Saham (company_shareholders)

@@ -74,7 +74,7 @@ class _FileLawsuitSheetState extends State<FileLawsuitSheet> {
       _selectedDefUserId = comp.ownerId;
       _selectedDefSymbol = comp.symbol;
       _selectedDefName = comp.name;
-      final ownerSuffix = (comp.ownerUsername != null && comp.ownerUsername!.isNotEmpty) ? ' - @${comp.ownerUsername}' : '';
+      final ownerSuffix = ' - @${comp.displayOwnerName}';
       _defendantCtrl.text = '${comp.name} (${comp.symbol})$ownerSuffix';
       _syncTitleAndNotes(_caseType);
     });
@@ -99,14 +99,17 @@ class _FileLawsuitSheetState extends State<FileLawsuitSheet> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) {
-        String searchQuery = '';
+        final searchCtrl = TextEditingController();
         return StatefulBuilder(
           builder: (context, setSheetState) {
+            final q = searchCtrl.text.trim().toLowerCase();
             final filtered = allCompanies.where((c) {
-              if (searchQuery.isEmpty) return true;
-              final q = searchQuery.toLowerCase();
+              if (q.isEmpty) return true;
+              final owner = c.displayOwnerName.toLowerCase();
               return c.name.toLowerCase().contains(q) ||
                   c.symbol.toLowerCase().contains(q) ||
+                  owner.contains(q) ||
+                  (c.founderName?.toLowerCase().contains(q) ?? false) ||
                   (c.ownerUsername?.toLowerCase().contains(q) ?? false) ||
                   c.sector.toLowerCase().contains(q);
             }).toList();
@@ -150,15 +153,25 @@ class _FileLawsuitSheetState extends State<FileLawsuitSheet> {
                   ),
                   const SizedBox(height: 8),
                   TextField(
+                    controller: searchCtrl,
                     autofocus: true,
                     style: const TextStyle(color: Colors.white, fontSize: 12),
-                    onChanged: (val) => setSheetState(() => searchQuery = val.trim()),
+                    onChanged: (_) => setSheetState(() {}),
                     decoration: InputDecoration(
                       filled: true,
                       fillColor: const Color(0xFF070B14),
-                      hintText: 'Cari kode saham (misal: BALN, ARPD) atau nama PT...',
+                      hintText: 'Cari kode saham, nama PT, atau owner (@adit, dsb)...',
                       hintStyle: const TextStyle(color: Color(0xFF64748B), fontSize: 11),
                       prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFFF5B942), size: 18),
+                      suffixIcon: searchCtrl.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear_rounded, color: Colors.white54, size: 16),
+                              onPressed: () {
+                                searchCtrl.clear();
+                                setSheetState(() {});
+                              },
+                            )
+                          : null,
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF1E293B))),
                       enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF1E293B))),
                       focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFF5B942))),
@@ -205,7 +218,7 @@ class _FileLawsuitSheetState extends State<FileLawsuitSheet> {
                                   overflow: TextOverflow.ellipsis,
                                 ),
                                 subtitle: Text(
-                                  'Owner: @${comp.ownerUsername ?? 'Bot/Publik'} • ${comp.sector}',
+                                  'Owner: @${comp.displayOwnerName} • ${comp.sector}',
                                   style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10),
                                 ),
                                 trailing: Column(
