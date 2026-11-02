@@ -8790,18 +8790,18 @@ const bundledPublicApkPath = path.join(__dirname, '../public/downloads/Capital-F
 const directPublicApkPath = path.join(__dirname, '../public/downloads/capital-federation.apk');
 const localBuiltApkPath = path.join(__dirname, '../../mobile/build/app/outputs/flutter-apk/app-release.apk');
 
-const LATEST_RELEASE_NOTES_V200 = 'v2.0.0 (Build 48): Penyelarasan Rincian Perkara Sita PNAF & Pailit Kas Bursa (Anti-Paradoks Penggugat Menyita Perseroan Sendiri), Penambahan Info Pihak Tergugat & Jam/Waktu Sidang Pengadilan pada Banner & Modal Tebus Mobile APK, serta Proteksi Registrasi Perkara Lawan Anak Perusahaan Sendiri.';
+const LATEST_RELEASE_NOTES_V200 = 'v2.0.0 (Build 49): Statuta Resmi Semesta CFX (Pasal 18 SHKF, Pasal 42 PFPM, Pasal 67 Regulasi Bursa, Pasal 83 Regulasi Arbitrase PNAF), Masa Aktif & Countdown Advokat Retainer 24/7 beserta Fitur Ganti/Perpanjang Kuasa Hukum, Perapian Tata Letak Portofolio Holding PT (Transfer Kas PT & Dirikan PT Baru), serta Perbaikan courtShortfallIb.';
 
 async function getApkSettingsMap() {
   const defaults = {
     apk_version: '2.0.0',
-    apk_build_number: '48',
+    apk_build_number: '49',
     apk_min_android: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
     apk_file_size_mb: '57.5 MB',
     apk_release_notes: LATEST_RELEASE_NOTES_V200,
     apk_external_url: '',
-    apk_download_count: '638',
-    apk_sha256: '2dfa8ce36b1db5aa6dab93d4f0639a7d4c3cd419513b1e36f95b41a8947913ed',
+    apk_download_count: '652',
+    apk_sha256: 'f623d53c127a03b16f7cc84d4530acb3191b758de1caccb514aa79dd16ba8086',
     apk_updated_at: new Date().toISOString(),
   };
   try {
@@ -8811,11 +8811,11 @@ async function getApkSettingsMap() {
         defaults[r.key] = String(r.value);
       }
     }
-    if (parseInt(defaults.apk_build_number || '0', 10) < 48 || defaults.apk_sha256 !== '2dfa8ce36b1db5aa6dab93d4f0639a7d4c3cd419513b1e36f95b41a8947913ed') {
+    if (parseInt(defaults.apk_build_number || '0', 10) < 49 || defaults.apk_sha256 !== 'f623d53c127a03b16f7cc84d4530acb3191b758de1caccb514aa79dd16ba8086') {
       defaults.apk_version = '2.0.0';
-      defaults.apk_build_number = '48';
+      defaults.apk_build_number = '49';
       defaults.apk_file_size_mb = '57.5 MB';
-      defaults.apk_sha256 = '2dfa8ce36b1db5aa6dab93d4f0639a7d4c3cd419513b1e36f95b41a8947913ed';
+      defaults.apk_sha256 = 'f623d53c127a03b16f7cc84d4530acb3191b758de1caccb514aa79dd16ba8086';
       defaults.apk_release_notes = LATEST_RELEASE_NOTES_V200;
       defaults.apk_updated_at = new Date().toISOString();
       // Persist directly to central_bank_settings so /api/settings, /api/admin/settings & /api/admin/overview match 100%!
