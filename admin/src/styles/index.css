@@ -222,3 +222,26 @@ input[type="range"] { accent-color: var(--gold); width: 100%; cursor: pointer; }
 
 .up { color: var(--emerald); }
 .down { color: var(--rose); }
+
+/* Continuous Running Stock Ticker Marquee (Bursa Efek Ribbon) */
+@keyframes cfxMarqueeAnimation {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+.cfx-ticker-track,
+.animate-ticker-marquee {
+  display: flex !important;
+  width: max-content !important;
+  animation: cfxMarqueeAnimation 45s linear infinite !important;
+  will-change: transform;
+}
+
+.cfx-ticker-track:hover,
+.animate-ticker-marquee:hover {
+  animation-play-state: paused !important;
+}

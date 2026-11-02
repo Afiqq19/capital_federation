@@ -149,7 +149,7 @@ export default function PublicDownloadLandingPage() {
 
   // Companies metrics for Trading Wall
   const fallbackStocks = [
-    { id: '1', symbol: 'IMPC', name: 'PT. Indonesia Public Market Capital Tbk.', current_price: 6840, base_price: 6720, sector: 'Finansial' },
+    { id: '1', symbol: 'IMPC', name: 'PT. Inter-Federation Public Market Capital Tbk.', current_price: 6840, base_price: 6720, sector: 'Finansial' },
     { id: '2', symbol: 'AGWP', name: 'PT. Agen Wisata Pesiar Tbk.', current_price: 18088, base_price: 16745, sector: 'Properti' },
     { id: '3', symbol: 'SYCA', name: 'PT. Syafiq Capital Asia Tbk.', current_price: 757, base_price: 740, sector: 'Teknologi' },
     { id: '4', symbol: 'BALN', name: 'PT. Baterai Litium Nasional Tbk.', current_price: 80050, base_price: 80050, sector: 'Energi' },
@@ -219,7 +219,28 @@ export default function PublicDownloadLandingPage() {
 
   return (
     <div className="min-h-screen bg-[#060913] text-slate-100 font-sans selection:bg-amber-400 selection:text-slate-950">
-      {/* Live Running Stock Ticker Ribbon (Marquee Berjalan ke Kiri) */}
+      {/* Scoped Keyframes for Guaranteed Smooth Infinite Marquee */}
+      <style>{`
+        @keyframes cfxMarqueeAnimation {
+          0% {
+            transform: translate3d(0, 0, 0);
+          }
+          100% {
+            transform: translate3d(-50%, 0, 0);
+          }
+        }
+        .cfx-ticker-track {
+          display: flex !important;
+          width: max-content !important;
+          animation: cfxMarqueeAnimation 40s linear infinite !important;
+          will-change: transform;
+        }
+        .cfx-ticker-track:hover {
+          animation-play-state: paused !important;
+        }
+      `}</style>
+
+      {/* Live Running Stock Ticker Ribbon (Marquee Berjalan Mulus) */}
       <div className="bg-[#070b16] border-b border-slate-800/80 py-1.5 relative overflow-hidden select-none">
         {/* Pinned Left Badge */}
         <div className="absolute left-0 top-0 bottom-0 z-20 flex items-center bg-[#070b16] px-3 sm:px-4 border-r border-slate-800/80 shadow-[4px_0_12px_rgba(0,0,0,0.7)]">
@@ -235,7 +256,7 @@ export default function PublicDownloadLandingPage() {
 
         {/* Infinite Moving Marquee Track */}
         <div className="pl-32 sm:pl-36 overflow-hidden">
-          <div className="animate-ticker-marquee flex items-center gap-4 sm:gap-6">
+          <div className="cfx-ticker-track animate-ticker-marquee flex items-center gap-4 sm:gap-6">
             {doubledTicker.map((s, idx) => {
               const change = s.pct !== undefined ? s.pct.toFixed(1) : '0.0';
               const isUp = Number(change) > 0;
@@ -342,15 +363,15 @@ export default function PublicDownloadLandingPage() {
       </header>
 
       {/* HERO SECTION */}
-      <section id="tentang" className="relative overflow-hidden pt-12 pb-16 lg:pt-16 lg:pb-24 scroll-mt-24">
+      <section id="tentang" className="relative overflow-hidden pt-4 pb-12 lg:pt-6 lg:pb-16 scroll-mt-20">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-amber-500/10 via-sky-500/5 to-transparent pointer-events-none" />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
             {/* Left Column: Game Description & Download CTA */}
-            <div className="lg:col-span-7 space-y-6">
+            <div className="lg:col-span-7 space-y-5">
               <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-bold">
                 <Sparkles size={14} className="text-amber-400" />
-                <span>GAME SIMULASI BURSA EFEK & KONGLOMERASI #1 INDONESIA</span>
+                <span>GAME SIMULASI BURSA EFEK & KERAJAAN BISNIS REPUBLIK FEDERASI</span>
               </div>
 
               <h1 className="text-3xl sm:text-5xl font-black tracking-tight text-white leading-[1.15]">
@@ -600,7 +621,7 @@ export default function PublicDownloadLandingPage() {
                     <span className="text-lg sm:text-xl font-black tracking-wider text-white">CAPITAL FEDERATION</span>
                   </div>
                   <div className="text-[11px] text-amber-400 font-mono font-bold tracking-wider">
-                    INDONESIA PUBLIC MARKET CAPITAL (IPMC)
+                    INTER-FEDERATION PUBLIC MARKET CAPITAL (IPMC)
                   </div>
                   <div className="text-[10px] text-slate-500 font-mono">
                     Bursa Efek &amp; Pasar Modal Resmi Republik Federasi
@@ -990,7 +1011,7 @@ export default function PublicDownloadLandingPage() {
               Apa Saja Isi di Dalam Game Capital Federation?
             </h2>
             <p className="text-slate-400 text-sm">
-              Dirancang menyerupai ekosistem Bursa Efek Indonesia (BEI/IDX) dan hukum korporasi nyata,
+              Dirancang menyerupai ekosistem Bursa Efek Capital Federation (CFX/IPMC) dan hukum korporasi modern,
               memberikan pengalaman menjadi Taipan & Konglomerat sesungguhnya.
             </p>
           </div>
