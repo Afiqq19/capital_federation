@@ -120,5 +120,38 @@ Container akan reboot dalam 2 detik untuk memuat kodingan baru ke memory...
     }
 });
 
+// Endpoint Darurat: Rescue & Diagnostic MSS Panel via internal Docker network
+router.get('/rescue-panel', async (req, res) => {
+    if (req.query.key !== '19122004') {
+        return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const report = { timestamp: new Date().toISOString() };
+
+    // 1. Panggil auto-deploy & restart via mss-backend
+    try {
+        const bResp = await fetch('http://mss-backend:8000/api/update-rahasia-panel?key=kunci-rahasia-mepal-2026', {
+            headers: { 'Accept': 'application/json' },
+            signal: AbortSignal.timeout(10000)
+        });
+        report.mss_backend_status = bResp.status;
+        report.mss_backend_data = await bResp.json();
+    } catch (bErr) {
+        report.mss_backend_error = bErr.message;
+    }
+
+    // 2. Cek apakah mss-frontend sudah merespons
+    try {
+        const fResp = await fetch('http://mss-frontend:80/', {
+            signal: AbortSignal.timeout(4000)
+        });
+        report.mss_frontend_status = fResp.status;
+    } catch (fErr) {
+        report.mss_frontend_error = fErr.message;
+    }
+
+    res.json(report);
+});
+
 module.exports = router;
 
