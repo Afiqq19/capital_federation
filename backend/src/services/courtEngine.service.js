@@ -343,6 +343,7 @@ async function executeCourtVerdict(
   // Tentukan finalStatus & finalType secara konsisten
   let finalStatus = verdictStatus ? normalizeStatus(verdictStatus) : null;
   let finalType = verdictType || null;
+  let courtShortfallIb = 0;
 
   if (!finalStatus && finalType) {
     if (finalType === 'APPROVED_PLAINTIFF_WIN') {
@@ -649,7 +650,7 @@ async function executeCourtVerdict(
       if (io) io.emit('treasury:updated');
     }
 
-    let courtShortfallIb = 0;
+    courtShortfallIb = 0;
     if (c.defendant_user_id && c.defendant_user_id !== plaintiffId && !['admin-001', 'bank-central-bcf'].includes(c.defendant_user_id)) {
       const defUser = await query.get('SELECT id, balance_ib, company_balance_ib FROM users WHERE id = ?', [c.defendant_user_id]);
       if (defUser) {
@@ -1672,7 +1673,7 @@ class CourtJudgeBotService {
       if (c.lawyer_name.includes('Sagala')) {
         lawyerSpeech = `⚖️ [Advokat Khairul Sagala, S.H., C.L.A. - Sagala & Associates Sultan Tier]: "Yang Mulia Majelis Hakim PNAF yang kami muliakan! Kami hadir mendampingi Penggugat (${c.plaintiff_name}). Fakta hukum, bukti akta, dan audit bursa membuktikan tanpa keraguan sedikit pun bahwa perbuatan Tergugat (${c.defendant_name}) telah menimbulkan kerugian immateriil dan finansial nyata. Kami mendesak Majelis menjatuhkan putusan maksimal, eksekusi sita seketika, dan menolak seluruh bantahan lawan!"`;
       } else if (c.lawyer_name.includes('Bintang')) {
-        lawyerSpeech = `⚖️ [Advokat Zahra Bintang, S.H., M.H. - Bintang Law Office]: "Yang Mulia Majelis Hakim PNAF! Seluruh eksepsi Tergugat harus dikesampingkan demi hukum. Berdasarkan Pasal 1365 KUHPerdata juncto Regulasi Pasar Modal Federasi, hak pemulihan klien kami (${c.plaintiff_name}) adalah sah dan mutlak. Kami juga memohon agar Permohonan Sita Jaminan (Conservatoir Beslag) dikabulkan guna memblokir aset Tergugat sampai perkara tuntas!"`;
+        lawyerSpeech = `⚖️ [Advokat Zahra Bintang, S.H., M.H. - Bintang Law Office]: "Yang Mulia Majelis Hakim PNAF! Seluruh eksepsi Tergugat harus dikesampingkan demi hukum. Berdasarkan Pasal 18 Statuta Hukum Korporasi Federasi (SHKF) juncto Pasal 42 Piagam Federasi Pasar Modal (PFPM), hak pemulihan klien kami (${c.plaintiff_name}) adalah sah dan mutlak. Kami juga memohon agar Permohonan Sita Jaminan (Conservatoir Beslag) dikabulkan guna memblokir aset Tergugat sampai perkara tuntas!"`;
       } else if (c.lawyer_name.includes('Azzahra')) {
         lawyerSpeech = `⚖️ [Advokat Puja Azzahra, S.H., LL.M. - Azzahra & Partners]: "Izin Yang Mulia Majelis Hakim yang terhormat! Klien kami (${c.plaintiff_name}) telah memenuhi seluruh syarat formil dan materiil gugatan dengan itikad baik. Dalil Tergugat tidak berdasar dan mengada-ada. Kami memohon keadilan ditegakkan dengan mengabulkan tuntutan ganti rugi penuh!"`;
       } else {

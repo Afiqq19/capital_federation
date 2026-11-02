@@ -80,6 +80,8 @@ class PortfolioSummaryModel {
   final int ptLevel;
   final bool isBlueChip;
   final double centralBankInterestRate;
+  final String? retainerLawyerName;
+  final String? retainerLawyerUntil;
   final List<PortfolioItemModel> holdings;
 
   PortfolioSummaryModel({
@@ -108,6 +110,8 @@ class PortfolioSummaryModel {
     required this.ptLevel,
     required this.isBlueChip,
     this.centralBankInterestRate = 6.5,
+    this.retainerLawyerName,
+    this.retainerLawyerUntil,
     required this.holdings,
   });
 
@@ -142,6 +146,8 @@ class PortfolioSummaryModel {
       ptLevel: json['ptLevel'] ?? 1,
       isBlueChip: json['isBlueChip'] == true,
       centralBankInterestRate: (json['centralBankInterestRate'] ?? 6.5).toDouble(),
+      retainerLawyerName: json['retainerLawyerName'] ?? json['retainer_lawyer_name'],
+      retainerLawyerUntil: json['retainerLawyerUntil'] ?? json['retainer_lawyer_until'],
       holdings: list,
     );
   }

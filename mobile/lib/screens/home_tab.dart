@@ -595,97 +595,121 @@ class _HomeTabState extends State<HomeTab> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
+            Container(
+              padding: const EdgeInsets.all(5),
+              decoration: BoxDecoration(
+                color: const Color(0xFF38BDF8).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.corporate_fare_rounded, color: Color(0xFF38BDF8), size: 14),
+            ),
+            const SizedBox(width: 8),
             const Text(
               'Portofolio Perusahaan',
-              style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w800),
+              style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w900, letterSpacing: 0.2),
             ),
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF38BDF8).withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    '${allEntities.length} Perusahaan',
-                    style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 9, fontWeight: FontWeight.bold),
-                  ),
-                ),
-                if (allEntities.length >= 2) ...[
-                  const SizedBox(width: 6),
-                  InkWell(
-                    onTap: () => _showConglomerateTransferDialog(context, allEntities),
-                    borderRadius: BorderRadius.circular(6),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF5B942).withValues(alpha: 0.18),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: const Color(0xFFF5B942), width: 0.9),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.swap_horiz_rounded, color: Color(0xFFF5B942), size: 12),
-                          SizedBox(width: 4),
-                          Text(
-                            '🔄 TRANSFER KAS PT',
-                            style: TextStyle(color: Color(0xFFF5B942), fontSize: 9.5, fontWeight: FontWeight.bold),
-                          ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+              decoration: BoxDecoration(
+                color: const Color(0xFF38BDF8).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.3), width: 0.8),
+              ),
+              child: Text(
+                '${allEntities.length} Perseroan',
+                style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 9.5, fontWeight: FontWeight.w800),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            if (allEntities.length >= 2) ...[
+              Expanded(
+                child: InkWell(
+                  onTap: () => _showConglomerateTransferDialog(context, allEntities),
+                  borderRadius: BorderRadius.circular(9),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 8),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          const Color(0xFFF59E0B).withValues(alpha: 0.22),
+                          const Color(0xFFB45309).withValues(alpha: 0.14),
                         ],
                       ),
-                    ),
-                  ),
-                ],
-                const SizedBox(width: 8),
-                InkWell(
-                  onTap: () {
-                    final provider = context.read<GameProvider>();
-                    final bool hasBankrupt = allEntities.any((e) =>
-                        (e['companyBalance'] != null && (e['companyBalance'] as num) <= -50000000.0) ||
-                        e['status'] == 'BANKRUPT' ||
-                        (e['isSeized'] == true && (e['seizeReason']?.toString().toUpperCase().contains('PAILIT') ?? false)));
-                    if (hasBankrupt) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('⚠️ Anda memiliki entitas perseroan yang Bangkrut / Pailit! Anda dilarang mendirikan PT baru sebelum menyuntik modal dan memulihkan kepailitan.'),
-                          backgroundColor: Color(0xFFEF4444),
-                          duration: Duration(seconds: 4),
-                        ),
-                      );
-                      return;
-                    }
-                    _showFoundCompanyDialog(context, provider, provider.user, true, isSubsidiary: true);
-                  },
-                  borderRadius: BorderRadius.circular(6),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF10B981).withValues(alpha: 0.18),
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: const Color(0xFF10B981), width: 0.9),
+                      borderRadius: BorderRadius.circular(9),
+                      border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.7), width: 1),
                     ),
                     child: const Row(
-                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.add_business_rounded, color: Color(0xFF10B981), size: 12),
-                        SizedBox(width: 4),
+                        Icon(Icons.swap_horiz_rounded, color: Color(0xFFFBBF24), size: 14),
+                        SizedBox(width: 5),
                         Text(
-                          '+ DIRIKAN PT BARU',
-                          style: TextStyle(color: Color(0xFF10B981), fontSize: 9.5, fontWeight: FontWeight.bold),
+                          'Transfer Kas PT',
+                          style: TextStyle(color: Color(0xFFFDE68A), fontSize: 10.5, fontWeight: FontWeight.w800),
                         ),
                       ],
                     ),
                   ),
                 ),
-              ],
+              ),
+              const SizedBox(width: 8),
+            ],
+            Expanded(
+              child: InkWell(
+                onTap: () {
+                  final provider = context.read<GameProvider>();
+                  final bool hasBankrupt = allEntities.any((e) =>
+                      (e['companyBalance'] != null && (e['companyBalance'] as num) <= -50000000.0) ||
+                      e['status'] == 'BANKRUPT' ||
+                      (e['isSeized'] == true && (e['seizeReason']?.toString().toUpperCase().contains('PAILIT') ?? false)));
+                  if (hasBankrupt) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('⚠️ Anda memiliki entitas perseroan yang Bangkrut / Pailit! Anda dilarang mendirikan PT baru sebelum menyuntik modal dan memulihkan kepailitan.'),
+                        backgroundColor: Color(0xFFEF4444),
+                        duration: Duration(seconds: 4),
+                      ),
+                    );
+                    return;
+                  }
+                  _showFoundCompanyDialog(context, provider, provider.user, true, isSubsidiary: true);
+                },
+                borderRadius: BorderRadius.circular(9),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 8),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        const Color(0xFF10B981).withValues(alpha: 0.22),
+                        const Color(0xFF047857).withValues(alpha: 0.14),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(9),
+                    border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.7), width: 1),
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.add_business_rounded, color: Color(0xFF34D399), size: 14),
+                      SizedBox(width: 5),
+                      Text(
+                        '+ Dirikan PT Baru',
+                        style: TextStyle(color: Color(0xFFA7F3D0), fontSize: 10.5, fontWeight: FontWeight.w800),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 9),
         SizedBox(
           height: 54,
           child: ListView.separated(
@@ -3217,13 +3241,13 @@ class _HomeTabState extends State<HomeTab> {
                                   ],
                                 ),
                                 const SizedBox(height: 10),
-                                _buildLawArticleRow('Pasal 1365 KUHPerdata', 'Perbuatan Melawan Hukum (Onrechtmatige Daad): mewajibkan pihak yang menimbulkan kerugian karena fitnah mengganti rugi penuh.'),
+                                _buildLawArticleRow('Pasal 18 Statuta Hukum Korporasi Federasi (SHKF)', 'Perbuatan Melawan Regulasi & Rekonvensi Fitnah: Pihak yang menyebarkan tuduhan manipulasi tanpa bukti forensik bursa wajib mengganti rugi finansial secara penuh ke kas emiten korban.'),
                                 const SizedBox(height: 6),
-                                _buildLawArticleRow('Pasal 93 UU No. 8/1995 Pasar Modal', 'Larangan memberikan keterangan material tidak benar atau menyesatkan yang mendistorsi harga efek dan merusak valuasi emiten.'),
+                                _buildLawArticleRow('Pasal 42 Piagam Federasi Pasar Modal (PFPM)', 'Integritas Informasi Kuotasi Efek: Larangan keras mendistorsi sentimen dan valuasi saham emiten terdaftar dengan laporan rekayasa.'),
                                 const SizedBox(height: 6),
-                                _buildLawArticleRow('Pasal 310-311 KUHP jo. UU ITE', 'Delik pencemaran nama baik dan fitnah publik yang merusak reputasi kredibilitas bisnis emiten di hadapan investor bursa.'),
+                                _buildLawArticleRow('Pasal 67 Regulasi Perlindungan Hak Emiten CFX', 'Ganti Rugi Pencemaran Reputasi Bursa: Hak pencairan kompensasi ganti rugi likuiditas tunai yang dipotong langsung dari saldo dan saham Tergugat.'),
                                 const SizedBox(height: 6),
-                                _buildLawArticleRow('Pasal 83 Regulasi Arbitrase PNAF', 'Hak Korban memohon Audit Forensik Digital Server Bursa CFX dan Sita Jaminan seketika terhadap rekening Tergugat.'),
+                                _buildLawArticleRow('Pasal 83 Regulasi Arbitrase & Peradilan Niaga PNAF', 'Hak Audit Forensik Server Bursa CFX: Majelis Hakim berwenang memeriksa log transaksi digital server bursa dan menerbitkan penetapan Sita Jaminan seketika.'),
                               ],
                             ),
                           ),
@@ -3434,7 +3458,7 @@ class _HomeTabState extends State<HomeTab> {
                                         lawyerName: activeLawyer['name'] as String,
                                         lawyerFeeIb: activeFee,
                                         targetAssetDescription: 'Sita Kas & Saham $accuser untuk Pemulihan Reputasi Emiten $entityName',
-                                        notes: 'Gugatan Banding & Rekonvensi atas perkara No. $caseNo. Berdasarkan Pasal 1365 KUHPerdata jo. Pasal 93 UU Pasar Modal No. 8/1995, Penggugat memohon Majelis Hakim mengaudit database server bursa dan menghukum Tergugat membayar ganti rugi pencemaran nama baik IB ${CurrencyFormatter.formatFull(selectedDamages)}.',
+                                        notes: 'Gugatan Banding & Rekonvensi atas perkara No. $caseNo. Berdasarkan Pasal 18 Statuta SHKF jo. Pasal 42 Piagam PFPM Federasi, Penggugat memohon Majelis Hakim PNAF mengaudit database log server bursa CFX dan menghukum Tergugat membayar ganti rugi pencemaran nama baik IB ${CurrencyFormatter.formatFull(selectedDamages)}.',
                                         isConservatoirBeslag: true,
                                       );
 
@@ -3504,6 +3528,19 @@ class _HomeTabState extends State<HomeTab> {
     Map<String, dynamic> activeEntity,
   ) {
     final bool hasRetainer = user.hasActiveRetainer;
+    DateTime? untilDt;
+    int remainingDays = 0;
+    int remainingHours = 0;
+    String expiryDateStr = '-';
+    if (hasRetainer && user.retainerLawyerUntil != null && user.retainerLawyerUntil!.isNotEmpty) {
+      untilDt = DateTime.tryParse(user.retainerLawyerUntil!);
+      if (untilDt != null) {
+        final diff = untilDt.difference(DateTime.now());
+        remainingDays = diff.inDays;
+        remainingHours = diff.inHours % 24;
+        expiryDateStr = '${untilDt.day.toString().padLeft(2, '0')}/${untilDt.month.toString().padLeft(2, '0')}/${untilDt.year}';
+      }
+    }
 
     return InkWell(
       onTap: () => _showRetainerLawyerModal(context, provider, user, activeEntity),
@@ -3514,8 +3551,8 @@ class _HomeTabState extends State<HomeTab> {
           gradient: LinearGradient(
             colors: hasRetainer
                 ? [
-                    const Color(0xFF065F46).withValues(alpha: 0.35),
-                    const Color(0xFF0F766E).withValues(alpha: 0.20),
+                    const Color(0xFF065F46).withValues(alpha: 0.40),
+                    const Color(0xFF0F766E).withValues(alpha: 0.25),
                   ]
                 : [
                     const Color(0xFF1E1B4B).withValues(alpha: 0.35),
@@ -3524,24 +3561,24 @@ class _HomeTabState extends State<HomeTab> {
           ),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: hasRetainer ? const Color(0xFF10B981).withValues(alpha: 0.6) : const Color(0xFF6366F1).withValues(alpha: 0.35),
+            color: hasRetainer ? const Color(0xFF10B981).withValues(alpha: 0.7) : const Color(0xFF6366F1).withValues(alpha: 0.35),
             width: hasRetainer ? 1.4 : 1,
           ),
         ),
         child: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(7),
+              padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: hasRetainer
-                    ? const Color(0xFF10B981).withValues(alpha: 0.2)
+                    ? const Color(0xFF10B981).withValues(alpha: 0.22)
                     : const Color(0xFF6366F1).withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(9),
+                borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(
                 hasRetainer ? Icons.verified_user_rounded : Icons.gavel_rounded,
                 color: hasRetainer ? const Color(0xFF34D399) : const Color(0xFFA5B4FC),
-                size: 18,
+                size: 20,
               ),
             ),
             const SizedBox(width: 10),
@@ -3551,12 +3588,16 @@ class _HomeTabState extends State<HomeTab> {
                 children: [
                   Row(
                     children: [
-                      Text(
-                        hasRetainer ? 'Kuasa Hukum Tetap 24/7 (Siaga)' : 'Biro Hukum & Retainer Advokat 24/7',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.bold,
+                      Flexible(
+                        child: Text(
+                          hasRetainer ? 'Kuasa Hukum: ${user.retainerLawyerName}' : 'Biro Hukum & Retainer Advokat 24/7',
+                          style: TextStyle(
+                            color: hasRetainer ? const Color(0xFFECFDF5) : Colors.white,
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       const SizedBox(width: 6),
@@ -3571,7 +3612,7 @@ class _HomeTabState extends State<HomeTab> {
                           ),
                         ),
                         child: Text(
-                          hasRetainer ? 'KEBAL VERSTEK' : 'OFFLINE DEFENSE',
+                          hasRetainer ? 'KEBAL VERSTEK 24/7' : 'OFFLINE DEFENSE',
                           style: TextStyle(
                             color: hasRetainer ? const Color(0xFF34D399) : const Color(0xFFA5B4FC),
                             fontSize: 8,
@@ -3581,14 +3622,15 @@ class _HomeTabState extends State<HomeTab> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 1.5),
+                  const SizedBox(height: 2),
                   Text(
                     hasRetainer
-                        ? '${user.retainerLawyerName} aktif mendampingi perseroan Anda.'
+                        ? '🛡️ Aktif s/d $expiryDateStr ($remainingDays Hari $remainingHours Jam Lagi) • Siaga PNAF'
                         : 'Sewa pengacara siaga membela perseroan otomatis jika digugat saat Anda tidak online.',
                     style: TextStyle(
                       color: hasRetainer ? const Color(0xFF6EE7B7) : const Color(0xFF94A3B8),
                       fontSize: 9.5,
+                      fontWeight: hasRetainer ? FontWeight.w600 : FontWeight.normal,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -3596,11 +3638,36 @@ class _HomeTabState extends State<HomeTab> {
                 ],
               ),
             ),
-            const SizedBox(width: 4),
-            Icon(
-              Icons.arrow_forward_ios_rounded,
-              color: hasRetainer ? const Color(0xFF34D399) : const Color(0xFF6366F1),
-              size: 13,
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+              decoration: BoxDecoration(
+                color: hasRetainer ? const Color(0xFF10B981).withValues(alpha: 0.25) : const Color(0xFF6366F1).withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: hasRetainer ? const Color(0xFF10B981) : const Color(0xFF6366F1),
+                  width: 0.8,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    hasRetainer ? Icons.edit_note_rounded : Icons.shield_rounded,
+                    color: hasRetainer ? const Color(0xFF34D399) : const Color(0xFFA5B4FC),
+                    size: 11,
+                  ),
+                  const SizedBox(width: 3),
+                  Text(
+                    hasRetainer ? 'Ganti / Perpanjang' : 'Sewa',
+                    style: TextStyle(
+                      color: hasRetainer ? const Color(0xFFECFDF5) : Colors.white,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -3744,39 +3811,80 @@ class _HomeTabState extends State<HomeTab> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           if (user.hasActiveRetainer) ...[
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              margin: const EdgeInsets.only(bottom: 16),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF10B981).withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.4)),
-                              ),
-                              child: Row(
-                                children: [
-                                  const Icon(Icons.check_circle_rounded, color: Color(0xFF10B981), size: 18),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        const Text(
-                                          'KONTRAK AKTIF TERDAFTAR',
-                                          style: TextStyle(color: Color(0xFF34D399), fontSize: 10, fontWeight: FontWeight.bold),
-                                        ),
-                                        Text(
-                                          '${user.retainerLawyerName}',
-                                          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                                        ),
-                                        const Text(
-                                          'Perseroan Anda kebal putusan verstek jika digugat saat Anda sedang offline.',
-                                          style: TextStyle(color: Color(0xFF94A3B8), fontSize: 9.5),
-                                        ),
+                            Builder(
+                              builder: (ctx) {
+                                DateTime? activeUntilDt;
+                                int activeRemainingDays = 0;
+                                int activeRemainingHours = 0;
+                                String activeExpiryDateStr = '-';
+                                if (user.retainerLawyerUntil != null && user.retainerLawyerUntil!.isNotEmpty) {
+                                  activeUntilDt = DateTime.tryParse(user.retainerLawyerUntil!);
+                                  if (activeUntilDt != null) {
+                                    final diff = activeUntilDt.difference(DateTime.now());
+                                    activeRemainingDays = diff.inDays;
+                                    activeRemainingHours = diff.inHours % 24;
+                                    activeExpiryDateStr = '${activeUntilDt.day.toString().padLeft(2, '0')}/${activeUntilDt.month.toString().padLeft(2, '0')}/${activeUntilDt.year}';
+                                  }
+                                }
+                                return Container(
+                                  padding: const EdgeInsets.all(12),
+                                  margin: const EdgeInsets.only(bottom: 16),
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        const Color(0xFF065F46).withValues(alpha: 0.35),
+                                        const Color(0xFF0F766E).withValues(alpha: 0.20),
                                       ],
                                     ),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: const Color(0xFF10B981), width: 1.2),
                                   ),
-                                ],
-                              ),
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Icon(Icons.verified_rounded, color: Color(0xFF34D399), size: 24),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                const Text(
+                                                  'KONTRAK KUASA HUKUM SEDANG AKTIF',
+                                                  style: TextStyle(color: Color(0xFF34D399), fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 0.4),
+                                                ),
+                                                const Spacer(),
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                                  decoration: BoxDecoration(
+                                                    color: const Color(0xFF10B981).withValues(alpha: 0.25),
+                                                    borderRadius: BorderRadius.circular(4),
+                                                  ),
+                                                  child: Text(
+                                                    '$activeRemainingDays Hari $activeRemainingHours Jam Lagi',
+                                                    style: const TextStyle(color: Color(0xFFA7F3D0), fontSize: 9, fontWeight: FontWeight.w900),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 3),
+                                            Text(
+                                              '${user.retainerLawyerName}',
+                                              style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.bold),
+                                            ),
+                                            const SizedBox(height: 3),
+                                            Text(
+                                              '🗓️ Masa Perlindungan: s/d $activeExpiryDateStr (${activeUntilDt != null ? '${activeUntilDt.hour.toString().padLeft(2, '0')}:${activeUntilDt.minute.toString().padLeft(2, '0')} WIB' : '-'}). Anda dapat berganti advokat lain atau menambah durasi masa aktif di bawah ini.',
+                                              style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 9.5),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
                             ),
                           ],
 
@@ -4061,6 +4169,9 @@ class _HomeTabState extends State<HomeTab> {
                                           ),
                                         );
                                       } else {
+                                        final hiredLawyerName = res['lawyerName']?.toString() ?? (activeLawyer['name'] as String);
+                                        final hiredUntil = res['retainerUntil']?.toString() ?? DateTime.now().add(Duration(days: selectedDurationDays)).toIso8601String();
+                                        provider.setRetainerLawyer(name: hiredLawyerName, until: hiredUntil);
                                         Navigator.pop(ctx);
                                         await provider.fetchUserData();
                                         if (!context.mounted) return;
@@ -4081,7 +4192,9 @@ class _HomeTabState extends State<HomeTab> {
                                     )
                                   : Text(
                                       canAfford
-                                          ? 'TANDATANGANI KONTRAK RETAINER (${CurrencyFormatter.formatFull(fee)})'
+                                          ? (user.hasActiveRetainer
+                                              ? 'GANTI / PERPANJANG KUASA HUKUM (${CurrencyFormatter.formatFull(fee)})'
+                                              : 'TANDATANGANI KONTRAK RETAINER (${CurrencyFormatter.formatFull(fee)})')
                                           : 'SALDO TIDAK MENCUKUPI',
                                       style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.4),
                                     ),

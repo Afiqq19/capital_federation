@@ -603,11 +603,23 @@ class GameProvider extends ChangeNotifier {
         ptLevel: p.ptLevel,
         creditScore: p.creditScore,
         isBlueChip: p.isBlueChip,
+        retainerLawyerName: p.retainerLawyerName ?? _user!.retainerLawyerName,
+        retainerLawyerUntil: p.retainerLawyerUntil ?? _user!.retainerLawyerUntil,
       );
       _syncUserWithPrimaryConglomerate();
     }
     unawaited(fetchUserLoans());
     notifyListeners();
+  }
+
+  void setRetainerLawyer({required String name, required String until}) {
+    if (_user != null) {
+      _user = _user!.copyWith(
+        retainerLawyerName: name,
+        retainerLawyerUntil: until,
+      );
+      notifyListeners();
+    }
   }
 
   // Register New User

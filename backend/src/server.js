@@ -5763,6 +5763,8 @@ app.get('/api/portfolio/:userId', async (req, res) => {
       fundamentalScore: syncedFund,
       isBlueChip: Boolean(user.is_blue_chip),
       centralBankInterestRate,
+      retainerLawyerName: user.retainer_lawyer_name || null,
+      retainerLawyerUntil: user.retainer_lawyer_until || null,
       holdings: detailedHoldings
     });
   } catch (err) {

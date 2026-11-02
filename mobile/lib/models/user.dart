@@ -144,6 +144,8 @@ class UserModel {
     bool? emailVerified,
     String? role,
     String? creditTier,
+    String? retainerLawyerName,
+    String? retainerLawyerUntil,
   }) {
     return UserModel(
       id: id,
@@ -175,6 +177,8 @@ class UserModel {
       emailVerified: emailVerified ?? this.emailVerified,
       role: role ?? this.role,
       creditTier: creditTier ?? this.creditTier,
+      retainerLawyerName: retainerLawyerName ?? this.retainerLawyerName,
+      retainerLawyerUntil: retainerLawyerUntil ?? this.retainerLawyerUntil,
     );
   }
 }
