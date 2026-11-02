@@ -8801,7 +8801,7 @@ async function getApkSettingsMap() {
     apk_release_notes: LATEST_RELEASE_NOTES_V200,
     apk_external_url: '',
     apk_download_count: '652',
-    apk_sha256: 'f623d53c127a03b16f7cc84d4530acb3191b758de1caccb514aa79dd16ba8086',
+    apk_sha256: '66d3988e0f8c01c04d6869affdcc46f4156da8643fb25bc878b63b94508d5c72',
     apk_updated_at: new Date().toISOString(),
   };
   try {
@@ -8811,11 +8811,11 @@ async function getApkSettingsMap() {
         defaults[r.key] = String(r.value);
       }
     }
-    if (parseInt(defaults.apk_build_number || '0', 10) < 49 || defaults.apk_sha256 !== 'f623d53c127a03b16f7cc84d4530acb3191b758de1caccb514aa79dd16ba8086') {
+    if (parseInt(defaults.apk_build_number || '0', 10) < 49 || defaults.apk_sha256 !== '66d3988e0f8c01c04d6869affdcc46f4156da8643fb25bc878b63b94508d5c72') {
       defaults.apk_version = '2.0.0';
       defaults.apk_build_number = '49';
       defaults.apk_file_size_mb = '57.5 MB';
-      defaults.apk_sha256 = 'f623d53c127a03b16f7cc84d4530acb3191b758de1caccb514aa79dd16ba8086';
+      defaults.apk_sha256 = '66d3988e0f8c01c04d6869affdcc46f4156da8643fb25bc878b63b94508d5c72';
       defaults.apk_release_notes = LATEST_RELEASE_NOTES_V200;
       defaults.apk_updated_at = new Date().toISOString();
       // Persist directly to central_bank_settings so /api/settings, /api/admin/settings & /api/admin/overview match 100%!
@@ -8837,7 +8837,14 @@ async function saveApkSetting(key, value) {
 }
 
 function getActiveApkFilePath() {
-  const candidates = [hostedApkPath, bundledPublicApkPath, directPublicApkPath, localBuiltApkPath].filter((p) => fs.existsSync(p));
+  if (fs.existsSync(bundledPublicApkPath)) {
+    try {
+      if (!fs.existsSync(hostedApkPath) || fs.statSync(bundledPublicApkPath).mtimeMs > fs.statSync(hostedApkPath).mtimeMs) {
+        fs.copyFileSync(bundledPublicApkPath, hostedApkPath);
+      }
+    } catch (_) {}
+  }
+  const candidates = [bundledPublicApkPath, hostedApkPath, directPublicApkPath, localBuiltApkPath].filter((p) => fs.existsSync(p));
   if (candidates.length === 0) return null;
   candidates.sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
   return candidates[0];
@@ -8998,6 +9005,9 @@ const handleApkDownload = async (req, res) => {
     if (activeApk) {
       res.setHeader('Content-Type', 'application/vnd.android.package-archive');
       res.setHeader('Content-Disposition', `attachment; filename="${downloadFileName}"`);
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
       return res.sendFile(activeApk);
     }
 
