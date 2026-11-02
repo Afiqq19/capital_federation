@@ -349,71 +349,92 @@ export default function PublicDownloadLandingPage() {
                 hingga kuasai ekonomi negara sebagai <strong>Sultan 12 Naga</strong>!
               </p>
 
-              {/* Main Download Box */}
-              <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-slate-900/95 via-[#0B1325] to-slate-900 border border-amber-500/40 shadow-2xl shadow-amber-500/10 space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="px-2.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[11px] font-black">
-                        INSTALLER RESMI ANDROID (.APK)
-                      </span>
-                      <span className="text-xs text-amber-300 font-mono font-bold">
-                        {versionInfo.apkVersion}
-                      </span>
-                    </div>
-                    <h2 className="text-lg font-black text-white">
-                      Unduh Aplikasi Capital Federation Sekarang
+              {/* TENTANG GAME: 4 PILAR GAMEPLAY UTAMA */}
+              <div className="rounded-2xl bg-gradient-to-br from-slate-900/90 via-[#0A1020] to-slate-950 border border-slate-800/80 p-5 sm:p-6 shadow-2xl space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
+                    <h2 className="text-sm font-black text-amber-300 tracking-wider uppercase font-mono">
+                      TENTANG GAME &amp; PILAR GAMEPLAY CFX
                     </h2>
-                    <p className="text-xs text-slate-400">
-                      Distribusi langsung resmi dari Server Capital Federation (Bebas Iklan & 100% Gratis).
+                  </div>
+                  <span className="text-[11px] font-mono text-slate-400">
+                    Simulasi Nyata Real-Time
+                  </span>
+                </div>
+
+                {/* 4 Pilar Fitur Game Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Pilar 1: Bursa Efek & E-IPO */}
+                  <div className="p-3.5 rounded-xl bg-slate-950/70 border border-emerald-500/25 hover:border-emerald-500/50 transition space-y-1">
+                    <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs font-mono">
+                      <TrendingUp size={16} className="text-emerald-400 shrink-0" />
+                      <span>Bursa Efek &amp; E-IPO 4 Tahap</span>
+                    </div>
+                    <p className="text-[11.5px] text-slate-300 leading-relaxed">
+                      Trading saham 363+ emiten berkode 4-huruf resmi, pantau grafik pergerakan pasar, dan bawa perusahaan Anda go public melalui E-IPO 4 tahap.
                     </p>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={handleDownloadApk}
-                    disabled={isDownloading}
-                    className="inline-flex items-center justify-center gap-3 px-6 py-4 rounded-xl bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 hover:from-amber-300 hover:to-orange-400 text-slate-950 font-black text-sm shadow-xl shadow-amber-500/25 transition transform hover:-translate-y-0.5 cursor-pointer shrink-0"
-                  >
-                    <Download size={20} className="stroke-[2.5]" />
-                    <div className="text-left">
-                      <div className="leading-none">
-                        {isDownloading ? 'MENGUNDUH APK...' : 'DOWNLOAD APK RESMI'}
-                      </div>
-                      <div className="text-[10px] font-bold opacity-80 mt-0.5">
-                        Ukuran: {versionInfo.fileSizeMb} • Android 10+
-                      </div>
+                  {/* Pilar 2: Badan Hukum PT & Holding Group */}
+                  <div className="p-3.5 rounded-xl bg-slate-950/70 border border-sky-500/25 hover:border-sky-500/50 transition space-y-1">
+                    <div className="flex items-center gap-2 text-sky-400 font-bold text-xs font-mono">
+                      <Building2 size={16} className="text-sky-400 shrink-0" />
+                      <span>Pendirian PT &amp; Akta Notaris</span>
                     </div>
-                  </button>
+                    <p className="text-[11.5px] text-slate-300 leading-relaxed">
+                      Legalisasi perseroan berbadan hukum resmi, bentuk sinergi holding kas anak usaha, dan lakukan aksi akuisisi tender offer RUPS.
+                    </p>
+                  </div>
+
+                  {/* Pilar 3: Pengadilan Niaga PNAF */}
+                  <div className="p-3.5 rounded-xl bg-slate-950/70 border border-rose-500/25 hover:border-rose-500/50 transition space-y-1">
+                    <div className="flex items-center gap-2 text-rose-400 font-bold text-xs font-mono">
+                      <Gavel size={16} className="text-rose-400 shrink-0" />
+                      <span>Sidang Arbitrase &amp; Sita Aset PNAF</span>
+                    </div>
+                    <p className="text-[11.5px] text-slate-300 leading-relaxed">
+                      Meja hijau peradilan sengketa bursa, sita kas dan saham lawan pelanggar pasar modal, sewa pengacara, serta aju banding pemulihan nama baik.
+                    </p>
+                  </div>
+
+                  {/* Pilar 4: Takhta Sultan 12 Naga */}
+                  <div className="p-3.5 rounded-xl bg-slate-950/70 border border-amber-500/25 hover:border-amber-500/50 transition space-y-1">
+                    <div className="flex items-center gap-2 text-amber-400 font-bold text-xs font-mono">
+                      <Crown size={16} className="text-amber-400 shrink-0" />
+                      <span>Takhta Sultan 12 Naga</span>
+                    </div>
+                    <p className="text-[11.5px] text-slate-300 leading-relaxed">
+                      Raih takhta 12 konglomerat tertinggi penentu stabilitas pasar keuangan Federasi dan kendalikan peredaran likuiditas modal nasional.
+                    </p>
+                  </div>
                 </div>
 
-                {/* Quick Certification Badges inside CTA */}
-                <div className="pt-3 border-t border-slate-800/80 grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-[11px]">
-                  <div className="flex items-center gap-2 text-emerald-300 font-semibold">
-                    <ShieldCheck size={15} className="text-emerald-400 shrink-0" />
-                    <span>Sertifikasi Aman Play Protect</span>
+                {/* Action Buttons: Navigasi Bersih & Nyaman */}
+                <div className="pt-3 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                    <Sparkles size={14} className="text-amber-400 shrink-0" />
+                    <span>Multiplayer Real-Time &bull; Bebas Iklan &bull; Server Cloud 24 Jam</span>
                   </div>
-                  <div className="flex items-center gap-2 text-sky-300 font-semibold">
-                    <Smartphone size={15} className="text-sky-400 shrink-0" />
-                    <span>Min. Android 10.0 (API 29)</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-amber-300 font-semibold">
-                    <Users size={15} className="text-amber-400 shrink-0" />
-                    <span>{versionInfo.downloadCount}+ Unduhan Aktif</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-purple-300 font-semibold">
-                    <Lock size={15} className="text-purple-400 shrink-0" />
-                    <span>Enkripsi Akun Cloud Server</span>
+
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <button
+                      type="button"
+                      onClick={() => handleNavClick('trading-wall', '/bursa')}
+                      className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs shadow-lg shadow-emerald-500/20 transition cursor-pointer"
+                    >
+                      <TrendingUp size={14} />
+                      <span>Layar Bursa (Live)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleNavClick('fitur', '/fitur')}
+                      className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-slate-800/90 hover:bg-slate-700/90 text-slate-200 border border-slate-700 font-bold text-xs transition cursor-pointer"
+                    >
+                      <span>Pelajari Fitur &rarr;</span>
+                    </button>
                   </div>
                 </div>
-
-                {/* Release Notes */}
-                {versionInfo.releaseNotes && (
-                  <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 text-xs text-slate-300">
-                    <span className="font-black text-amber-400">🆕 Pembaruan v{versionInfo.version}: </span>
-                    {versionInfo.releaseNotes}
-                  </div>
-                )}
               </div>
             </div>
 
