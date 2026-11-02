@@ -362,16 +362,16 @@ export default function CompaniesPage() {
         ) : (
           <div className="overflow-x-auto rounded-lg border border-slate-800/80">
             <table className="w-full text-left border-collapse text-xs">
-              <thead className="bg-slate-900/90 text-[11px] font-semibold text-slate-400 uppercase tracking-wider sticky top-0 border-b border-slate-800">
+              <thead className="bg-slate-900/95 text-[11px] font-semibold text-slate-400 uppercase tracking-wider sticky top-0 border-b border-slate-800 z-30">
                 <tr>
-                  <th className="py-2.5 px-3 min-w-[190px]">Emiten & Pemilik</th>
-                  <th className="py-2.5 px-2.5 w-24">Sektor</th>
-                  <th className="py-2.5 px-2.5 text-right w-28">Harga / Lot</th>
-                  <th className="py-2.5 px-2 text-right w-20">24 Jam</th>
-                  <th className="py-2.5 px-2.5 text-right w-24">Market Cap</th>
-                  <th className="py-2.5 px-2.5 text-center w-28">Status</th>
-                  <th className="py-2.5 px-2 w-36">Bot Algoritma</th>
-                  <th className="py-2.5 px-3 text-right min-w-[280px]">Tindakan Otoritas</th>
+                  <th className="py-2.5 px-3 min-w-[210px] sticky left-0 z-20 bg-slate-900 border-r border-slate-800 shadow-[2px_0_6px_rgba(0,0,0,0.5)]">Emiten & Pemilik</th>
+                  <th className="py-2.5 px-2.5 w-24 whitespace-nowrap">Sektor</th>
+                  <th className="py-2.5 px-2.5 text-right min-w-[120px] whitespace-nowrap">Harga / Lot</th>
+                  <th className="py-2.5 px-2 text-right min-w-[80px] whitespace-nowrap">24 Jam</th>
+                  <th className="py-2.5 px-2.5 text-right min-w-[110px] whitespace-nowrap">Market Cap</th>
+                  <th className="py-2.5 px-2.5 text-center min-w-[100px] whitespace-nowrap">Status</th>
+                  <th className="py-2.5 px-2 min-w-[130px] whitespace-nowrap">Bot Algoritma</th>
+                  <th className="py-2.5 px-3 text-right min-w-[300px] whitespace-nowrap">Tindakan Otoritas</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60 bg-slate-950/40 font-normal">
@@ -389,8 +389,8 @@ export default function CompaniesPage() {
                         isOverblown ? 'bg-rose-950/15' : ''
                       }`}
                     >
-                      {/* Emiten & Pemilik */}
-                      <td className="py-2 px-3">
+                      {/* Emiten & Pemilik (Sticky Left Column) */}
+                      <td className={`py-2 px-3 sticky left-0 z-10 border-r border-slate-800/80 shadow-[2px_0_6px_rgba(0,0,0,0.5)] whitespace-nowrap ${isOverblown ? 'bg-[#180a14]' : 'bg-[#090e1a]'}`}>
                         <div className="flex items-center gap-1.5">
                           <span className="font-bold text-slate-100 text-[13px] tracking-wide font-mono">
                             {c.symbol}
@@ -402,7 +402,7 @@ export default function CompaniesPage() {
                           )}
                           <span className="text-[10px] font-mono text-slate-500">#{c.id.slice(0, 6)}</span>
                         </div>
-                        <div className="text-[11px] text-slate-300 font-medium truncate max-w-[200px]" title={c.name}>
+                        <div className="text-[11px] text-slate-300 font-medium truncate max-w-[190px]" title={c.name}>
                           {c.name}
                         </div>
                         <div className="text-[10px] flex items-center gap-1 mt-0.5">
@@ -417,36 +417,36 @@ export default function CompaniesPage() {
                       </td>
 
                       {/* Sektor */}
-                      <td className="py-2 px-2.5">
+                      <td className="py-2 px-2.5 whitespace-nowrap">
                         <span className="text-[10px] text-slate-300 font-medium px-2 py-0.5 rounded bg-slate-900 border border-slate-800/90 whitespace-nowrap">
                           {c.sector || 'Umum'}
                         </span>
                       </td>
 
                       {/* Harga / Lot */}
-                      <td className="py-2 px-2.5 text-right font-mono">
-                        <div className={`font-bold ${isOverblown ? 'text-rose-400 text-[13px]' : 'text-slate-100'}`}>
+                      <td className="py-2 px-2.5 text-right font-mono whitespace-nowrap">
+                        <div className={`font-bold whitespace-nowrap leading-tight ${isOverblown ? 'text-rose-400 text-[13px]' : 'text-slate-100 text-xs'}`}>
                           {ib(price)}
                         </div>
-                        <div className="text-[9px] text-slate-500">
+                        <div className="text-[10px] text-slate-400 whitespace-nowrap mt-0.5">
                           1 Lot = {ibShort(lotVal)}
                         </div>
                       </td>
 
                       {/* Perubahan 24 Jam */}
-                      <td className="py-2 px-2 text-right font-mono font-bold">
-                        <span className={chg >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
+                      <td className="py-2 px-2 text-right font-mono font-bold whitespace-nowrap">
+                        <span className={`inline-block px-1.5 py-0.5 rounded text-[11px] ${chg >= 0 ? 'text-emerald-400 bg-emerald-500/10' : 'text-rose-400 bg-rose-500/10'}`}>
                           {signedPct(chg)}
                         </span>
                       </td>
 
                       {/* Market Cap */}
-                      <td className="py-2 px-2.5 text-right font-mono text-slate-300">
+                      <td className="py-2 px-2.5 text-right font-mono text-slate-200 font-semibold whitespace-nowrap">
                         {ibShort(marketCap)}
                       </td>
 
                       {/* Status Bursa */}
-                      <td className="py-2 px-2.5 text-center">
+                      <td className="py-2 px-2.5 text-center whitespace-nowrap">
                         {c.is_seized ? (
                           <Badge tone="rose" pulse>⚖️ DISITA</Badge>
                         ) : c.is_bumn ? (
@@ -463,7 +463,7 @@ export default function CompaniesPage() {
                       </td>
 
                       {/* Algoritma Bot Market Maker */}
-                      <td className="py-2 px-2">
+                      <td className="py-2 px-2 whitespace-nowrap">
                         <select
                           value={c.bot_status || 'MODERATE'}
                           onChange={(e) => actions.setBotStatus(c.id, e.target.value)}

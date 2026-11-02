@@ -19,6 +19,9 @@ import {
   Users,
   ArrowRight,
   Lock,
+  Activity,
+  BarChart3,
+  Search,
 } from 'lucide-react';
 
 export default function PublicDownloadLandingPage() {
@@ -38,6 +41,10 @@ export default function PublicDownloadLandingPage() {
   });
   const [topLeaders, setTopLeaders] = useState([]);
   const [topStocks, setTopStocks] = useState([]);
+  const [allCompanies, setAllCompanies] = useState([]);
+  const [wallSector, setWallSector] = useState('ALL');
+  const [wallSearch, setWallSearch] = useState('');
+  const [clockDate, setClockDate] = useState(new Date());
   const [isDownloading, setIsDownloading] = useState(false);
 
   const scrollToSection = (sectionId) => {
@@ -55,12 +62,20 @@ export default function PublicDownloadLandingPage() {
   };
 
   useEffect(() => {
+    const clockTimer = setInterval(() => {
+      setClockDate(new Date());
+    }, 1000);
+    return () => clearInterval(clockTimer);
+  }, []);
+
+  useEffect(() => {
     let active = true;
-    // 1. Amati URL awal (e.g. /peringkat, /tentang, /fitur, /spesifikasi)
+    // 1. Amati URL awal (e.g. /peringkat, /tentang, /fitur, /spesifikasi, /bursa)
     const handleLocation = () => {
       const clean = (window.location.pathname || '').replace(/^\/+|\/+$/g, '').toLowerCase();
-      if (['peringkat', 'tentang', 'fitur', 'spesifikasi'].includes(clean)) {
-        setTimeout(() => scrollToSection(clean), 180);
+      if (['peringkat', 'tentang', 'fitur', 'spesifikasi', 'bursa', 'trading-wall'].includes(clean)) {
+        const targetId = ['bursa', 'trading-wall'].includes(clean) ? 'trading-wall' : clean;
+        setTimeout(() => scrollToSection(targetId), 180);
       }
     };
     handleLocation();
@@ -82,7 +97,8 @@ export default function PublicDownloadLandingPage() {
         .then((r) => r.json())
         .then((data) => {
           if (active && Array.isArray(data) && data.length > 0) {
-            setTopStocks(data.slice(0, 8));
+            setTopStocks(data.slice(0, 12));
+            setAllCompanies(data);
           }
         })
         .catch(() => {});
@@ -123,6 +139,79 @@ export default function PublicDownloadLandingPage() {
     const val = Number(num) || 0;
     return 'IB ' + Math.round(val).toLocaleString('id-ID');
   };
+
+  // Digital Flip Clock Values (WIB - Asia/Jakarta)
+  const clockHours = String(clockDate.getHours()).padStart(2, '0');
+  const clockMins = String(clockDate.getMinutes()).padStart(2, '0');
+  const clockSecs = String(clockDate.getSeconds()).padStart(2, '0');
+  const clockDayStr = clockDate.toLocaleDateString('id-ID', { weekday: 'long' });
+  const clockDateStr = clockDate.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+
+  // Companies metrics for Trading Wall
+  const fallbackStocks = [
+    { id: '1', symbol: 'IMPC', name: 'PT. Indonesia Public Market Capital Tbk.', current_price: 6840, base_price: 6720, sector: 'Finansial' },
+    { id: '2', symbol: 'AGWP', name: 'PT. Agen Wisata Pesiar Tbk.', current_price: 18088, base_price: 16745, sector: 'Properti' },
+    { id: '3', symbol: 'SYCA', name: 'PT. Syafiq Capital Asia Tbk.', current_price: 757, base_price: 740, sector: 'Teknologi' },
+    { id: '4', symbol: 'BALN', name: 'PT. Baterai Litium Nasional Tbk.', current_price: 80050, base_price: 80050, sector: 'Energi' },
+    { id: '5', symbol: 'ABKS', name: 'PT. Abadi Komputasi Samudera Tbk.', current_price: 189191, base_price: 252700, sector: 'Teknologi' },
+    { id: '6', symbol: 'ABFC', name: 'PT. Abadi Finansial Citra Tbk.', current_price: 118224, base_price: 161200, sector: 'Finansial' },
+    { id: '7', symbol: 'AKOM', name: 'PT. Artha Konsumsi Mitra Tbk.', current_price: 8210, base_price: 8210, sector: 'F&B' },
+    { id: '8', symbol: 'ARPD', name: 'PT. Artha Pengembang Dinamika Tbk.', current_price: 62944, base_price: 62944, sector: 'Properti' },
+    { id: '9', symbol: 'MERK', name: 'PT. Merck Farmasi Tbk.', current_price: 3600, base_price: 3640, sector: 'Kesehatan' },
+    { id: '10', symbol: 'MIKA', name: 'PT. Mitra Keluarga Sehat Tbk.', current_price: 1605, base_price: 1590, sector: 'Kesehatan' },
+    { id: '11', symbol: 'META', name: 'PT. Nusantara Meta Industri Tbk.', current_price: 238, base_price: 238, sector: 'Infrastruktur' },
+    { id: '12', symbol: 'MFMI', name: 'PT. Multifiling Mitra Tbk.', current_price: 1300, base_price: 1300, sector: 'Jasa' },
+    { id: '13', symbol: 'MGLV', name: 'PT. Mega Galva Logistik Tbk.', current_price: 8125, base_price: 8250, sector: 'Transportasi' },
+    { id: '14', symbol: 'MINA', name: 'PT. Minahasa Samudera Tbk.', current_price: 292, base_price: 302, sector: 'Pertanian' },
+    { id: '15', symbol: 'MKAP', name: 'PT. Mitra Kreasi Andalan Tbk.', current_price: 1160, base_price: 1100, sector: 'Teknologi' },
+    { id: '16', symbol: 'MIDI', name: 'PT. Midi Utama Retail Tbk.', current_price: 282, base_price: 286, sector: 'Konsumsi' },
+  ];
+
+  const sourceStocks = allCompanies.length > 0 ? allCompanies : fallbackStocks;
+
+  const stockList = sourceStocks.map((c) => {
+    const cur = Number(c.current_price) || 0;
+    const base = Number(c.prev_close || c.base_price) || cur || 100;
+    const diff = cur - base;
+    const pct = base > 0 ? (diff / base) * 100 : 0;
+    return {
+      ...c,
+      cur,
+      base,
+      diff,
+      pct,
+      isUp: diff > 0,
+      isDown: diff < 0,
+    };
+  });
+
+  // IPMC Composite Index Calculation (Mirip IDX Composite di Bursa Efek)
+  const totalCur = stockList.reduce((acc, c) => acc + c.cur, 0);
+  const totalBase = stockList.reduce((acc, c) => acc + c.base, 0);
+  const ratio = totalBase > 0 ? totalCur / totalBase : 1;
+  const baseIndex = 6002.20;
+  const compositeIndex = (baseIndex * ratio).toFixed(2);
+  const compositeDiff = (Number(compositeIndex) - baseIndex).toFixed(2);
+  const compositePct = ((Number(compositeDiff) / baseIndex) * 100).toFixed(2);
+  const isIndexGain = Number(compositeDiff) >= 0;
+
+  // Top 5 Gainers
+  const topGainers = [...stockList].sort((a, b) => b.pct - a.pct).slice(0, 5);
+
+  // Top 5 Freq / Most Active
+  const topFreq = [...stockList].sort((a, b) => b.cur - a.cur).slice(0, 5);
+
+  // Filtered Matrix Grid for the Giant Screen
+  const filteredWallStocks = stockList.filter((c) => {
+    if (wallSector === 'GAINERS') return c.pct > 0;
+    if (wallSector === 'LOSERS') return c.pct < 0;
+    if (wallSector !== 'ALL' && c.sector !== wallSector) return false;
+    if (wallSearch.trim()) {
+      const q = wallSearch.toLowerCase();
+      return (c.symbol || '').toLowerCase().includes(q) || (c.name || '').toLowerCase().includes(q);
+    }
+    return true;
+  }).slice(0, 24);
 
   return (
     <div className="min-h-screen bg-[#060913] text-slate-100 font-sans selection:bg-amber-400 selection:text-slate-950">
@@ -187,10 +276,11 @@ export default function PublicDownloadLandingPage() {
             </button>
             <button
               type="button"
-              onClick={() => handleNavClick('fitur', '/fitur')}
-              className="hover:text-amber-400 transition cursor-pointer bg-transparent border-0 p-0 text-slate-300 font-bold text-xs"
+              onClick={() => handleNavClick('trading-wall', '/bursa')}
+              className="hover:text-emerald-300 transition cursor-pointer bg-transparent border-0 p-0 text-emerald-400 font-black text-xs flex items-center gap-1.5"
             >
-              Fitur Utama
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              Layar Bursa CFX (Live Wall)
             </button>
             <button
               type="button"
@@ -199,6 +289,13 @@ export default function PublicDownloadLandingPage() {
             >
               <Crown size={13} className="text-amber-400" />
               Top 12 Naga
+            </button>
+            <button
+              type="button"
+              onClick={() => handleNavClick('fitur', '/fitur')}
+              className="hover:text-amber-400 transition cursor-pointer bg-transparent border-0 p-0 text-slate-300 font-bold text-xs"
+            >
+              Fitur Utama
             </button>
             <button
               type="button"
@@ -411,6 +508,291 @@ export default function PublicDownloadLandingPage() {
                     )}
                   </div>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* BURSA EFEK DIGITAL TRADING WALL (Layar Raksasa Perdagangan Saham CFX / IDX Composite Screen) */}
+      <section id="trading-wall" className="py-16 bg-[#040711] border-y border-slate-800/80 relative overflow-hidden scroll-mt-20">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-sky-950/20 via-transparent to-transparent pointer-events-none" />
+
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 relative">
+          {/* Header Title */}
+          <div className="text-center max-w-3xl mx-auto space-y-2">
+            <span className="px-3.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/35 text-emerald-300 text-xs font-black tracking-wide inline-flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+              BURSA EFEK DIGITAL TERINTEGRASI REAL-TIME
+            </span>
+            <h2 className="text-2xl sm:text-4xl font-black text-white">
+              Layar Raksasa Perdagangan Efek (CFX Giant Trading Floor Wall)
+            </h2>
+            <p className="text-slate-400 text-xs sm:text-sm">
+              Pantau pergerakan harga saham, indeks komposit IPMC Composite (IHSF), saham teraktif (Top Gainers &amp; Most Active), serta likuiditas 360+ emiten bursa secara langsung.
+            </p>
+          </div>
+
+          {/* THE GIANT TRADING BOARD (Styled like the IDX Trading Screen) */}
+          <div className="rounded-3xl border-2 border-slate-700/80 bg-gradient-to-b from-[#090e1c] via-[#060a14] to-[#04070e] shadow-[0_0_60px_rgba(0,0,0,0.85)] p-4 sm:p-7 relative overflow-hidden">
+            {/* Top Board Frame: Logo, Composite Index, and Real-Time WIB Digital Clock */}
+            <div className="flex flex-col lg:flex-row items-center justify-between gap-6 pb-6 border-b border-slate-800">
+              {/* Left: CFX Official Exchange Monogram Logo */}
+              <div className="flex items-center gap-3.5">
+                <div className="relative">
+                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-400 via-rose-500 to-red-600 p-[2.5px] shadow-lg shadow-rose-500/25">
+                    <div className="w-full h-full rounded-[14px] bg-slate-950 flex flex-col items-center justify-center">
+                      <span className="text-sm font-black tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-amber-300 to-amber-500 leading-none">CFX</span>
+                      <span className="text-[7.5px] font-bold text-slate-400 tracking-wider leading-none mt-1">BURSA</span>
+                    </div>
+                  </div>
+                  <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 border-2 border-slate-950 flex items-center justify-center">
+                    <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                  </span>
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg sm:text-xl font-black tracking-wider text-white">CAPITAL FEDERATION</span>
+                  </div>
+                  <div className="text-[11px] text-amber-400 font-mono font-bold tracking-wider">
+                    INDONESIA PUBLIC MARKET CAPITAL (IPMC)
+                  </div>
+                  <div className="text-[10px] text-slate-500 font-mono">
+                    Bursa Efek &amp; Pasar Modal Resmi Republik Federasi
+                  </div>
+                </div>
+              </div>
+
+              {/* Center: IPMC COMPOSITE (IHSF) Main Index */}
+              <div className="text-center flex-1 max-w-md w-full">
+                <div className="flex items-center justify-center gap-2">
+                  <span className="text-xs sm:text-sm font-bold text-slate-400 font-mono tracking-widest uppercase">
+                    IPMC COMPOSITE (IHSF)
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                    INDEKS RESMI
+                  </span>
+                </div>
+
+                <div className="mt-1 flex items-center justify-center gap-3">
+                  <span className={`text-4xl sm:text-5xl lg:text-6xl font-black font-mono tracking-tight ${isIndexGain ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    {Number(compositeIndex).toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                  <div className="flex flex-col items-start font-mono font-bold leading-tight">
+                    <span className={`text-base sm:text-lg flex items-center gap-0.5 ${isIndexGain ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      {isIndexGain ? '▲ +' : '▼ '}{Math.abs(compositePct)}%
+                    </span>
+                    <span className={`text-xs sm:text-sm ${isIndexGain ? 'text-emerald-400/90' : 'text-rose-400/90'}`}>
+                      {isIndexGain ? '+' : ''}{compositeDiff}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Trading Volume, Value, Frequency Bar (Matching Image 4) */}
+                <div className="mt-3 pt-2.5 border-t border-slate-800/80 grid grid-cols-3 gap-2 text-center font-mono">
+                  <div>
+                    <div className="text-[9.5px] text-slate-400 uppercase tracking-wider">TRADING VOLUME</div>
+                    <div className="text-xs sm:text-sm font-bold text-slate-100 mt-0.5">14,820 M Lot</div>
+                  </div>
+                  <div className="border-x border-slate-800/80">
+                    <div className="text-[9.5px] text-slate-400 uppercase tracking-wider">TRADING VALUE</div>
+                    <div className="text-xs sm:text-sm font-bold text-amber-400 mt-0.5">IB 8,492 B</div>
+                  </div>
+                  <div>
+                    <div className="text-[9.5px] text-slate-400 uppercase tracking-wider">TRADING FREQ</div>
+                    <div className="text-xs sm:text-sm font-bold text-sky-400 mt-0.5">1.185 M Order</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right: Authentic Real-Time Digital Flip Clock (Matching Image 4) */}
+              <div className="bg-slate-950/90 border border-slate-700/80 rounded-2xl p-3 sm:p-4 text-center min-w-[200px] shadow-inner font-mono">
+                <div className="flex items-center justify-center gap-1.5 text-2xl sm:text-3xl font-black text-amber-400 tracking-wider">
+                  <span className="px-2 py-1 rounded-lg bg-slate-900 border border-slate-800">{clockHours}</span>
+                  <span className="animate-pulse text-amber-500">:</span>
+                  <span className="px-2 py-1 rounded-lg bg-slate-900 border border-slate-800">{clockMins}</span>
+                  <span className="animate-pulse text-amber-500 text-xl">:</span>
+                  <span className="px-1.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-xs text-amber-300/80">{clockSecs}</span>
+                </div>
+                <div className="text-[11px] font-bold text-slate-300 mt-2 uppercase tracking-wider">
+                  {clockDateStr} &bull; {clockDayStr}
+                </div>
+                <div className="text-[9.5px] text-emerald-400 font-bold tracking-widest mt-0.5 flex items-center justify-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  WIB &bull; BURSA BERJALAN AKTIF
+                </div>
+              </div>
+            </div>
+
+            {/* Sub-Header: TOP 5 GAINERS & TOP 5 FREQ (Matching Image 4 Side-by-Side Tables) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+              {/* TOP 5 GAINERS */}
+              <div className="rounded-2xl bg-slate-950/80 border border-emerald-500/30 p-3.5 shadow-lg">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-2">
+                  <span className="text-xs font-black text-emerald-400 tracking-wider uppercase font-mono flex items-center gap-1.5">
+                    <TrendingUp size={14} /> TOP 5 GAINERS
+                  </span>
+                  <span className="text-[10px] font-mono text-slate-500">Lonjakan Tertinggi</span>
+                </div>
+                <table className="w-full text-xs font-mono">
+                  <thead>
+                    <tr className="text-[10px] text-slate-400 border-b border-slate-800/60 text-left">
+                      <th className="py-1 w-8 text-center">NO</th>
+                      <th className="py-1">STOCK</th>
+                      <th className="py-1 text-right">PRICE (IB)</th>
+                      <th className="py-1 text-right">CHANGE</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/40">
+                    {topGainers.map((g, idx) => (
+                      <tr key={g.id || g.symbol} className="hover:bg-slate-900/60 transition">
+                        <td className="py-1.5 text-center text-slate-500 font-bold">{idx + 1}</td>
+                        <td className="py-1.5 font-black text-sky-300">
+                          {g.symbol}
+                          <span className="text-[10px] text-slate-400 block truncate max-w-[140px] font-normal">{g.name}</span>
+                        </td>
+                        <td className="py-1.5 text-right font-bold text-slate-100">{Number(g.cur).toLocaleString('id-ID')}</td>
+                        <td className="py-1.5 text-right font-black text-emerald-400">
+                          ▲ +{g.pct.toFixed(2)}%
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* TOP 5 FREQ / MOST ACTIVE */}
+              <div className="rounded-2xl bg-slate-950/80 border border-amber-500/30 p-3.5 shadow-lg">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-2">
+                  <span className="text-xs font-black text-amber-400 tracking-wider uppercase font-mono flex items-center gap-1.5">
+                    <Activity size={14} /> TOP 5 FREQ / MOST ACTIVE
+                  </span>
+                  <span className="text-[10px] font-mono text-slate-500">Frekuensi Tertinggi</span>
+                </div>
+                <table className="w-full text-xs font-mono">
+                  <thead>
+                    <tr className="text-[10px] text-slate-400 border-b border-slate-800/60 text-left">
+                      <th className="py-1 w-8 text-center">NO</th>
+                      <th className="py-1">STOCK</th>
+                      <th className="py-1 text-right">PRICE (IB)</th>
+                      <th className="py-1 text-right">FREQ / VOL</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/40">
+                    {topFreq.map((f, idx) => (
+                      <tr key={f.id || f.symbol} className="hover:bg-slate-900/60 transition">
+                        <td className="py-1.5 text-center text-slate-500 font-bold">{idx + 1}</td>
+                        <td className="py-1.5 font-black text-amber-300">
+                          {f.symbol}
+                          <span className="text-[10px] text-slate-400 block truncate max-w-[140px] font-normal">{f.name}</span>
+                        </td>
+                        <td className="py-1.5 text-right font-bold text-slate-100">{Number(f.cur).toLocaleString('id-ID')}</td>
+                        <td className="py-1.5 text-right font-bold text-sky-400">
+                          {((idx + 1) * 8420).toLocaleString('id-ID')} Trx
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* GIANT MATRIX GRID WALL OF STOCKS (Matching Lower 2/3 of Image 4) */}
+            <div className="mt-6 pt-5 border-t border-slate-800">
+              {/* Filter & Search Bar */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mb-4">
+                <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 text-xs font-mono">
+                  {['ALL', 'GAINERS', 'LOSERS', 'Teknologi', 'Finansial', 'Energi', 'Properti', 'Kesehatan'].map((sec) => (
+                    <button
+                      key={sec}
+                      type="button"
+                      onClick={() => setWallSector(sec)}
+                      className={`px-3 py-1 rounded-lg text-[11px] font-bold transition whitespace-nowrap cursor-pointer border ${
+                        wallSector === sec
+                          ? 'bg-amber-400 text-slate-950 border-amber-400 shadow-md shadow-amber-500/20'
+                          : 'bg-slate-900/90 text-slate-400 hover:text-slate-200 border-slate-800'
+                      }`}
+                    >
+                      {sec === 'ALL' ? 'Semua Emiten' : sec === 'GAINERS' ? '🚀 Top Gainers' : sec === 'LOSERS' ? '📉 Top Losers' : sec}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="w-full sm:w-64 relative">
+                  <input
+                    type="text"
+                    value={wallSearch}
+                    onChange={(e) => setWallSearch(e.target.value)}
+                    placeholder="Cari kode saham (cth: AGWP, BALN)..."
+                    className="w-full bg-slate-900/90 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-amber-400 font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* The 4x6 / 5x5 Matrix Screen Wall */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5 sm:gap-3">
+                {filteredWallStocks.map((stock) => {
+                  const isUp = stock.isUp;
+                  const isDown = stock.isDown;
+                  const cardTone = isUp
+                    ? 'border-emerald-500/50 bg-gradient-to-b from-[#082a1b]/90 via-[#041910]/95 to-[#020d08] text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.12)]'
+                    : isDown
+                    ? 'border-rose-500/50 bg-gradient-to-b from-[#330f16]/90 via-[#1f090d]/95 to-[#0f0406] text-rose-400 shadow-[0_0_12px_rgba(244,63,94,0.12)]'
+                    : 'border-slate-700/60 bg-gradient-to-b from-[#181d2c]/90 via-[#0e121d]/95 to-[#080a10] text-amber-300';
+
+                  return (
+                    <div
+                      key={stock.id || stock.symbol}
+                      className={`p-3 rounded-xl border transition-all duration-200 hover:scale-[1.03] hover:z-10 cursor-default font-mono flex flex-col justify-between ${cardTone}`}
+                    >
+                      {/* Tile Header: Symbol & Sector */}
+                      <div className="flex items-center justify-between border-b border-white/10 pb-1.5 mb-1.5">
+                        <span className="font-black text-sm sm:text-base text-white tracking-wider">
+                          {stock.symbol}
+                        </span>
+                        <span className="text-[9px] uppercase font-bold px-1.5 py-0.2 rounded bg-black/40 text-slate-300 border border-white/10">
+                          {stock.sector ? stock.sector.slice(0, 8) : 'BURSA'}
+                        </span>
+                      </div>
+
+                      {/* Big Center Price (Matching Image 4) */}
+                      <div className="text-center py-1 sm:py-2">
+                        <div className="text-xl sm:text-2xl font-black text-white tracking-tight leading-none">
+                          {Number(stock.cur).toLocaleString('id-ID')}
+                        </div>
+                        <div className="text-[9px] text-slate-400 mt-0.5">
+                          1 Lot: IB {((stock.cur * 100) / 1000).toLocaleString('id-ID')} Rb
+                        </div>
+                      </div>
+
+                      {/* Tile Bottom: % and points change (Matching Image 4) */}
+                      <div className="pt-1.5 border-t border-white/10 flex items-center justify-between text-[11px] font-bold">
+                        <span className="flex items-center gap-0.5">
+                          {isUp ? '▲ +' : isDown ? '▼ ' : ''}{stock.pct.toFixed(2)}%
+                        </span>
+                        <span className="text-[10px] opacity-80">
+                          {stock.diff > 0 ? `+${stock.diff}` : stock.diff}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Bottom Quick Call to Action */}
+              <div className="mt-6 pt-4 border-t border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="text-xs text-slate-400 flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>Data emiten disinkronkan secara langsung dari Engine Bursa Efek CFX &amp; Pengadilan Niaga PNAF.</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleDownloadApk}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/20 transition cursor-pointer"
+                >
+                  <Download size={14} />
+                  <span>MULAI TRADING DI GAME &bull; UNDUH APK</span>
+                </button>
               </div>
             </div>
           </div>

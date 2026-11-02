@@ -26,6 +26,7 @@ const {
   healExistingCourtCases,
   CourtJudgeBotService,
   BOT_CLERK_NAME,
+  dispatchInboxNotification,
 } = require('./services/courtEngine.service');
 const { NATURAL_USERNAMES } = require('./botData');
 const registerAdminRoutes = require('./routes/admin');
