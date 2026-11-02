@@ -269,21 +269,21 @@ export default function DashboardPage({ onNavigate }) {
       )}
 
       {/* 3. SIX PRIMARY STAT CARDS */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <StatCard
           label="Kapitalisasi Bursa"
           value={ibShort(totalMarketCap)}
-          hint={`${companies?.length || 107} Emiten Terdaftar`}
+          hint={`${companies?.length || 363} Emiten Terdaftar`}
           icon={TrendingUp}
           tone="gold"
         />
         {(() => {
-          const treasuryBal = Number(overview?.treasuryBalance ?? 0);
+          const treasuryBal = Number(overview?.treasuryBalance !== undefined ? overview.treasuryBalance : 50000000000);
           const isDeficit = treasuryBal < 0;
           return (
             <StatCard
               label="Cadangan Kas Negara"
-              value={ibShort(overview?.treasuryBalance !== undefined ? overview.treasuryBalance : 50000000000)}
+              value={ibShort(treasuryBal)}
               hint={isDeficit ? '⚠️ Defisit Fiskal Kas Negara' : 'Brankas Fiskal Federasi'}
               icon={Coins}
               tone={isDeficit ? 'rose' : 'emerald'}
@@ -292,14 +292,14 @@ export default function DashboardPage({ onNavigate }) {
         })()}
         <StatCard
           label="Bunga Acuan BCF"
-          value={`${bank?.interest_rate ?? 5.5}%`}
+          value={`${bank?.interest_rate ?? 18}%`}
           hint="Kebijakan Moneter"
           icon={Landmark}
           tone="sky"
         />
         <StatCard
           label="Konglomerat"
-          value={users?.length || 0}
+          value={(overview?.totalPlayers || users?.length || 1053).toLocaleString('id-ID')}
           hint="Akun Pemain Aktif"
           icon={Users}
           tone="violet"

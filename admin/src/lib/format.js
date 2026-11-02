@@ -6,11 +6,12 @@ export const ib = (v) => `IB\u00A0${num(v)}`;
 export const ibShort = (v) => {
   const n = Number(v) || 0;
   const abs = Math.abs(n);
+  const sign = n < 0 ? '-' : '';
   const fmt = (x, d = 2) => x.toLocaleString('id-ID', { maximumFractionDigits: d });
-  if (abs >= 1e12) return `IB\u00A0${fmt(n / 1e12)}\u00A0T`;
-  if (abs >= 1e9) return `IB\u00A0${fmt(n / 1e9)}\u00A0M`;
-  if (abs >= 1e6) return `IB\u00A0${fmt(n / 1e6)}\u00A0Jt`;
-  return `IB\u00A0${num(n)}`;
+  if (abs >= 1e12) return `${sign}IB\u00A0${fmt(abs / 1e12)}\u00A0T`;
+  if (abs >= 1e9) return `${sign}IB\u00A0${fmt(abs / 1e9)}\u00A0M`;
+  if (abs >= 1e6) return `${sign}IB\u00A0${fmt(abs / 1e6)}\u00A0Jt`;
+  return `${sign}IB\u00A0${num(abs)}`;
 };
 
 export const signedPct = (v, digits = 2) => {

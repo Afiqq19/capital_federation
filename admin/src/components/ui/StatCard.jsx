@@ -63,12 +63,12 @@ export default function StatCard({ label, value, hint, subValue, icon: Icon, ton
         className="absolute top-0 left-0 right-0 h-[2px]"
         style={{ background: t.topBorder }}
       />
-      <div className="flex items-start justify-between gap-2.5">
+      <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="stat-label text-[10.5px] font-bold tracking-wider text-slate-400 uppercase font-mono truncate">{label}</p>
-          <div className="mt-1 flex items-baseline gap-2">
+          <p className="stat-label text-[11px] font-bold tracking-wider text-slate-400 uppercase font-mono whitespace-nowrap">{label}</p>
+          <div className="mt-1.5 flex items-baseline gap-2">
             <span
-              className="stat-value text-base sm:text-lg lg:text-xl xl:text-2xl font-black font-mono tracking-tight leading-none whitespace-nowrap overflow-hidden text-ellipsis"
+              className="stat-value text-xl sm:text-2xl lg:text-3xl font-black font-mono tracking-tight leading-none whitespace-nowrap"
               style={{ color: t.fg, textShadow: `0 0 14px ${t.glow}` }}
               title={typeof value === 'string' ? value : undefined}
             >
@@ -76,7 +76,7 @@ export default function StatCard({ label, value, hint, subValue, icon: Icon, ton
             </span>
           </div>
           {subValue && (
-            <p className="text-[11px] font-mono text-slate-400 mt-1 whitespace-nowrap truncate" title={subValue}>
+            <p className="text-[11px] font-mono text-slate-400 mt-1 whitespace-nowrap" title={subValue}>
               {subValue}
             </p>
           )}
