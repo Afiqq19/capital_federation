@@ -3009,6 +3009,21 @@ app.post('/api/court/file-case', async (req, res) => {
       }
     }
 
+    // Validasi Anti-Paradoks: Penggugat dilarang menggugat perseroan miliknya sendiri atau akunnya sendiri
+    if (resolvedPlUserId && resolvedDefCompId) {
+      const defComp = await query.get('SELECT owner_id, name, symbol FROM companies WHERE id = ?', [resolvedDefCompId]);
+      if (defComp && defComp.owner_id === resolvedPlUserId) {
+        return res.status(400).json({
+          error: `Pendaftaran Gugatan Ditolak: Anda tidak dapat menggugat perseroan milik Anda sendiri (${defComp.name} - ${defComp.symbol}) ke Pengadilan Niaga PNAF! Gunakan menu Restrukturisasi atau Portofolio.`
+        });
+      }
+    }
+    if (resolvedPlUserId && resolvedDefUserId && resolvedPlUserId === resolvedDefUserId) {
+      return res.status(400).json({
+        error: 'Pendaftaran Gugatan Ditolak: Pihak Penggugat dan Tergugat tidak boleh berasal dari akun konglomerat yang sama!'
+      });
+    }
+
     const typeCode =
       caseType === 'BANKRUPTCY' ? 'Pailit'
       : caseType === 'DISPUTE' ? 'Sengketa'
@@ -3026,8 +3041,12 @@ app.post('/api/court/file-case', async (req, res) => {
       caseSeq++;
     }
     const caseId = uuidv4();
-    const hearingSchedule = courtHearingDate || hearingDate || 'Hari Ini, Sidang Segera';
-    const timeVal = hearingTime || 'Sesi Aktif WIB';
+    const wibNow = new Date(Date.now() + 7 * 3600 * 1000);
+    const monthsId = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+    const formattedWibTime = `${String(wibNow.getUTCHours()).padStart(2, '0')}:${String(wibNow.getUTCMinutes()).padStart(2, '0')} WIB`;
+    const formattedWibDate = `Hari Ini, ${String(wibNow.getUTCDate()).padStart(2, '0')} ${monthsId[wibNow.getUTCMonth()]} ${wibNow.getUTCFullYear()}`;
+    const hearingSchedule = courtHearingDate || hearingDate || formattedWibDate;
+    const timeVal = hearingTime || formattedWibTime;
     const roomName = courtRoomName || 'Ruang Sidang Utama Kartika PNAF';
     const targetAsset = targetAssetDescription || 'Saham Portofolio, Dividen, dan Rekening Konglomerat';
     const nextBotAt = new Date(Date.now() + 8000).toISOString();
@@ -3623,6 +3642,7 @@ app.get('/api/user/conglomerate/:userId', async (req, res) => {
         status: effectivePrimaryStatus,
         seizeReason: primaryComp.seize_reason || null,
         seizedBy: primaryComp.seized_by || null,
+        seizedAt: primaryComp.seized_at || null,
         isUma: primaryComp.uma_flag === 1,
         umaReason: primaryComp.uma_reason || null
       });
@@ -3701,6 +3721,7 @@ app.get('/api/user/conglomerate/:userId', async (req, res) => {
         status: (a.status === 'BANKRUPT' && (a.company_balance_ib || 0) > -50000000 && a.is_seized !== 1) ? 'HEALTHY' : (a.status || 'HEALTHY'),
         seizeReason: a.seize_reason,
         seizedBy: a.seized_by,
+        seizedAt: a.seized_at || null,
         isUma: a.uma_flag === 1,
         umaReason: a.uma_reason
       });
@@ -8766,18 +8787,18 @@ const bundledPublicApkPath = path.join(__dirname, '../public/downloads/Capital-F
 const directPublicApkPath = path.join(__dirname, '../public/downloads/capital-federation.apk');
 const localBuiltApkPath = path.join(__dirname, '../../mobile/build/app/outputs/flutter-apk/app-release.apk');
 
-const LATEST_RELEASE_NOTES_V200 = 'v2.0.0 (Build 47): Kontrak Advokat Kuasa Hukum Tetap (Retainer Law Firm 24/7) Kebal Putusan Verstek Saat Offline, Dynamic Prestige Win-Rate Pricing untuk 3 Master Advokat (Puja Azzahra, Zahra Bintang, Khairul Sagala), Fitur Intervensi Regulasi Normalisasi Manipulasi Saham Gorengan (Tunggal & Massal > IB 20.000) dengan Haircut Loss Spekulan & Sita PNAF, serta Redesign Web Admin Direktori Emiten Bloomberg Terminal High-Density Compact Layout.';
+const LATEST_RELEASE_NOTES_V200 = 'v2.0.0 (Build 48): Penyelarasan Rincian Perkara Sita PNAF & Pailit Kas Bursa (Anti-Paradoks Penggugat Menyita Perseroan Sendiri), Penambahan Info Pihak Tergugat & Jam/Waktu Sidang Pengadilan pada Banner & Modal Tebus Mobile APK, serta Proteksi Registrasi Perkara Lawan Anak Perusahaan Sendiri.';
 
 async function getApkSettingsMap() {
   const defaults = {
     apk_version: '2.0.0',
-    apk_build_number: '47',
+    apk_build_number: '48',
     apk_min_android: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
     apk_file_size_mb: '57.5 MB',
     apk_release_notes: LATEST_RELEASE_NOTES_V200,
     apk_external_url: '',
     apk_download_count: '638',
-    apk_sha256: 'fae315978b4fcce3e8ccae85b20841d292d914bedbbff89dfff6933da0862cad',
+    apk_sha256: '2dfa8ce36b1db5aa6dab93d4f0639a7d4c3cd419513b1e36f95b41a8947913ed',
     apk_updated_at: new Date().toISOString(),
   };
   try {
@@ -8787,11 +8808,11 @@ async function getApkSettingsMap() {
         defaults[r.key] = String(r.value);
       }
     }
-    if (parseInt(defaults.apk_build_number || '0', 10) < 47 || defaults.apk_sha256 !== 'fae315978b4fcce3e8ccae85b20841d292d914bedbbff89dfff6933da0862cad') {
+    if (parseInt(defaults.apk_build_number || '0', 10) < 48 || defaults.apk_sha256 !== '2dfa8ce36b1db5aa6dab93d4f0639a7d4c3cd419513b1e36f95b41a8947913ed') {
       defaults.apk_version = '2.0.0';
-      defaults.apk_build_number = '47';
+      defaults.apk_build_number = '48';
       defaults.apk_file_size_mb = '57.5 MB';
-      defaults.apk_sha256 = 'fae315978b4fcce3e8ccae85b20841d292d914bedbbff89dfff6933da0862cad';
+      defaults.apk_sha256 = '2dfa8ce36b1db5aa6dab93d4f0639a7d4c3cd419513b1e36f95b41a8947913ed';
       defaults.apk_release_notes = LATEST_RELEASE_NOTES_V200;
       defaults.apk_updated_at = new Date().toISOString();
       // Persist directly to central_bank_settings so /api/settings, /api/admin/settings & /api/admin/overview match 100%!

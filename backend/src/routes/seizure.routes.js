@@ -141,20 +141,18 @@ module.exports = function(io, simulationEngine) {
       const isAuctionReady = msLeft <= 0 || comp.is_auction_ready === 1;
       const hoursLeft = Math.max(0, Math.round(msLeft / (1000 * 60 * 60)));
 
-      // Cari berkas perkara pengadilan (court_cases) yang mendasari sita eksekusi emiten ini
-      let linkedCase = await query.get(
-        `SELECT * FROM court_cases 
-         WHERE (defendant_company_id = ? OR defendant_user_id = ? OR title LIKE ? OR target_asset_description LIKE ?)
-           AND status IN ('VERDICT_APPROVED', 'VERDICT_PAILIT', 'VERDICT_PKPU', 'IN_TRIAL')
-         ORDER BY created_at DESC LIMIT 1`,
-        [comp.id, comp.owner_id || '', `%${comp.symbol}%`, `%${comp.symbol}%`]
-      );
-      if (!linkedCase) {
+      const isDeficitPailit = Number(comp.company_balance_ib || 0) <= -50000000 || comp.status === 'BANKRUPT' || (comp.seize_reason && comp.seize_reason.toUpperCase().includes('PAILIT'));
+
+      // Cari berkas perkara pengadilan (court_cases) yang mendasari sita eksekusi emiten ini (HANYA perkara yang menang/dikabulkan)
+      let linkedCase = null;
+      if (!isDeficitPailit) {
         linkedCase = await query.get(
           `SELECT * FROM court_cases 
            WHERE (defendant_company_id = ? OR defendant_user_id = ? OR title LIKE ? OR target_asset_description LIKE ?)
+             AND status IN ('VERDICT_APPROVED', 'VERDICT_PAILIT')
+             AND (plaintiff_user_id IS NULL OR plaintiff_user_id != ?)
            ORDER BY created_at DESC LIMIT 1`,
-          [comp.id, comp.owner_id || '', `%${comp.symbol}%`, `%${comp.symbol}%`]
+          [comp.id, comp.owner_id || '', `%${comp.symbol}%`, `%${comp.symbol}%`, comp.owner_id || '---']
         );
       }
 
@@ -178,7 +176,7 @@ module.exports = function(io, simulationEngine) {
         }
       }
       // Denda Sanksi PNAF: Jika pemilik saat ini adalah Penggugat yang memenangkan perkara, denda = 0 (Bebas Biaya!)
-      let pnafSanctionFine = courtFine > 0 ? courtFine : Math.max(100000000.0, Math.round((comp.base_price || 2000) * 50000));
+      let pnafSanctionFine = courtFine > 0 ? courtFine : (isDeficitPailit ? 50000000.0 : Math.max(100000000.0, Math.round((comp.base_price || 2000) * 50000)));
       if (isOwnerPlaintiffWinner) {
         pnafSanctionFine = 0.0;
         courtFine = 0.0;
@@ -188,17 +186,37 @@ module.exports = function(io, simulationEngine) {
       let caseNumber = linkedCase ? linkedCase.case_number : null;
       let caseTitle = linkedCase ? linkedCase.title : null;
       let plaintiffName = linkedCase ? linkedCase.plaintiff_name : null;
-      if (!caseNumber && comp.seize_reason) {
-        const match = comp.seize_reason.match(/No\.\s*([^\s\[(]+)/);
-        if (match) caseNumber = match[1];
-      }
-      if (!plaintiffName && comp.seize_reason) {
-        const match = comp.seize_reason.match(/oleh Penggugat:\s*([^\[\-]+)/);
-        if (match) plaintiffName = match[1].trim();
-      }
-      if (!caseTitle && comp.seize_reason) {
-        const match = comp.seize_reason.match(/\[Perkara:\s*([^\]]+)\]/) || comp.seize_reason.match(/\(([^)]+)\)/);
-        if (match) caseTitle = match[1].trim();
+      let defendantName = linkedCase ? linkedCase.defendant_name : (comp.name ? `${comp.name} (${comp.symbol})` : comp.symbol);
+      let hearingTime = linkedCase ? (linkedCase.hearing_time || '10:00 WIB') : null;
+      let hearingDate = linkedCase ? (linkedCase.court_hearing_date || 'Hari Ini') : null;
+
+      if (isDeficitPailit) {
+        caseNumber = 'PNAF/BCF-INSOLVENSI/2026';
+        caseTitle = 'Kepailitan Operasional: Defisit Kas Melebihi Batas Maksimum (-IB 50.000.000)';
+        plaintiffName = 'Kepaniteraan PNAF & Otoritas Bank BCF';
+        defendantName = `${comp.name} (${comp.symbol})`;
+        hearingTime = 'Sesi Insolvensi Bursa';
+        hearingDate = 'Hari Ini';
+      } else {
+        if (!caseNumber && comp.seize_reason) {
+          const match = comp.seize_reason.match(/No\.\s*([^\s\[(]+)/);
+          if (match) caseNumber = match[1];
+        }
+        if (!plaintiffName && comp.seize_reason) {
+          const match = comp.seize_reason.match(/(?:\[Penggugat:\s*|oleh Penggugat:\s*)([^\]|\-]+)/);
+          if (match) plaintiffName = match[1].trim();
+        }
+        if (comp.seize_reason) {
+          const defMatch = comp.seize_reason.match(/(?:\[Tergugat:\s*|terhadap Tergugat:\s*)([^\]|\-]+)/);
+          if (defMatch) defendantName = defMatch[1].trim();
+
+          const timeMatch = comp.seize_reason.match(/(?:\[Waktu(?: Sidang| Pembekuan)?:\s*)([^\]]+)/);
+          if (timeMatch) hearingTime = timeMatch[1].trim();
+        }
+        if (!caseTitle && comp.seize_reason) {
+          const match = comp.seize_reason.match(/\[Perkara:\s*([^\]]+)\]/) || comp.seize_reason.match(/\(([^)]+)\)/);
+          if (match) caseTitle = match[1].trim();
+        }
       }
 
       // Cek pinjaman aktif pemilik di tabel loans
@@ -241,9 +259,12 @@ module.exports = function(io, simulationEngine) {
         courtCaseId: linkedCase ? linkedCase.id : null,
         caseNumber: caseNumber || '037.9703/Pdt.Sus-Bursa/2026/PNAF',
         caseTitle: caseTitle || 'Laporan Dugaan Manipulasi Pasar Bursa & Transaksi Semu',
-        caseType: linkedCase ? linkedCase.case_type : 'REGULATORY',
+        caseType: linkedCase ? linkedCase.case_type : (isDeficitPailit ? 'BANKRUPTCY' : 'REGULATORY'),
         plaintiffName: plaintiffName || 'Komite Pengawas Bursa OPFF',
-        defendantName: linkedCase ? linkedCase.defendant_name : comp.name,
+        defendantName: defendantName || (linkedCase ? linkedCase.defendant_name : comp.name),
+        hearingTime: hearingTime || (linkedCase ? linkedCase.hearing_time : '10:00 WIB'),
+        courtHearingDate: hearingDate || (linkedCase ? linkedCase.court_hearing_date : 'Hari Ini'),
+        isBankruptcy: isDeficitPailit,
         verdictNotes: linkedCase ? linkedCase.verdict_notes : (comp.seize_reason || 'Terbukti Bersalah'),
         claimAmountIb: linkedCase ? Number(linkedCase.claim_amount_ib || 0) : pnafSanctionFine,
         verdictAwardedAmount: pnafSanctionFine,

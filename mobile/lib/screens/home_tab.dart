@@ -1170,23 +1170,41 @@ class _HomeTabState extends State<HomeTab> {
       explanation = '🔒 STATUS DIBEKUKAN: Perseroan sedang dalam status pembekuan dan sita otoritas bursa (${seizeReason ?? 'Sanksi Regulasi'}). Segera suntikkan modal talangan dari kas pribadi atau hubungi Kepaniteraan untuk memulihkan status perdagangan.';
     }
 
-    String parsedCaseNo = '037.9703/Pdt.Sus-Bursa/2026/PNAF';
-    String parsedPlaintiff = 'Komite Pengawas Bursa OPFF';
-    String parsedTitle = 'Laporan Dugaan Manipulasi Pasar Bursa & Goreng Saham';
+    final bool isBankruptcyReason = (seizeReason != null && seizeReason.toUpperCase().contains('PAILIT')) || (companyBalance <= -30000000.0);
+    String parsedCaseNo = isBankruptcyReason ? 'PNAF/BCF-INSOLVENSI/2026' : '037.9703/Pdt.Sus-Bursa/2026/PNAF';
+    String parsedPlaintiff = isBankruptcyReason ? 'Kepaniteraan PNAF & Otoritas Bank BCF' : 'Komite Pengawas Bursa OPFF';
+    String parsedDefendant = entityName;
+    String parsedHearingTime = '';
+    String parsedTitle = isBankruptcyReason ? 'Kepailitan Operasional: Defisit Kas Melebihi Batas Maksimum (-IB 50.000.000)' : 'Laporan Dugaan Manipulasi Pasar Bursa & Goreng Saham';
     String parsedFine = '';
 
     if (seizeReason != null && seizeReason.isNotEmpty) {
       final caseNoMatch = RegExp(r'No\.\s*([^\s\[(]+)').firstMatch(seizeReason);
       if (caseNoMatch != null) parsedCaseNo = caseNoMatch.group(1) ?? parsedCaseNo;
 
-      final plaintiffMatch = RegExp(r'oleh Penggugat:\s*([^\[\-]+)').firstMatch(seizeReason);
+      final plaintiffMatch = RegExp(r'(?:\[Penggugat:\s*|oleh Penggugat:\s*)([^\]|\-]+)').firstMatch(seizeReason);
       if (plaintiffMatch != null) parsedPlaintiff = plaintiffMatch.group(1)?.trim() ?? parsedPlaintiff;
+
+      final defMatch = RegExp(r'(?:\[Tergugat:\s*|terhadap Tergugat:\s*)([^\]|\-]+)').firstMatch(seizeReason);
+      if (defMatch != null) parsedDefendant = defMatch.group(1)?.trim() ?? parsedDefendant;
+
+      final timeMatch = RegExp(r'(?:\[Waktu(?: Sidang| Pembekuan)?:\s*)([^\]]+)').firstMatch(seizeReason);
+      if (timeMatch != null) parsedHearingTime = timeMatch.group(1)?.trim() ?? '';
 
       final titleMatch = RegExp(r'\[Perkara:\s*([^\]]+)\]').firstMatch(seizeReason) ?? RegExp(r'\(([^)]+)\)').firstMatch(seizeReason);
       if (titleMatch != null) parsedTitle = titleMatch.group(1)?.trim() ?? parsedTitle;
 
       final fineMatch = RegExp(r'\[Tuntutan\/Denda:\s*([^\]]+)\]').firstMatch(seizeReason);
       if (fineMatch != null) parsedFine = fineMatch.group(1)?.trim() ?? '';
+    }
+
+    if (parsedHearingTime.isEmpty && activeEntity['seizedAt'] != null) {
+      try {
+        final dt = DateTime.parse(activeEntity['seizedAt'].toString()).toLocal();
+        final hh = dt.hour.toString().padLeft(2, '0');
+        final mm = dt.minute.toString().padLeft(2, '0');
+        parsedHearingTime = '$hh:$mm WIB (${dt.day}/${dt.month}/${dt.year})';
+      } catch (_) {}
     }
 
     final int rdLevel = (activeEntity['rdLevel'] as num?)?.toInt() ?? user.rdLevel;
@@ -1298,13 +1316,31 @@ class _HomeTabState extends State<HomeTab> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Row(
+                        Row(
                           children: [
-                            Icon(Icons.gavel_rounded, color: Color(0xFFFCA5A5), size: 14),
-                            SizedBox(width: 6),
-                            Text(
-                              'RINCIAN PERKARA & PIHAK PENGGUGAT',
-                              style: TextStyle(color: Color(0xFFFCA5A5), fontSize: 10.5, fontWeight: FontWeight.w900),
+                            const Icon(Icons.gavel_rounded, color: Color(0xFFFCA5A5), size: 14),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                isBankruptcyReason ? 'RINCIAN KEPAILITAN OPERASIONAL & BCF' : 'RINCIAN PERKARA & PIHAK BERPERKARA',
+                                style: const TextStyle(color: Color(0xFFFCA5A5), fontSize: 10.5, fontWeight: FontWeight.w900),
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: (isBankruptcyReason ? const Color(0xFFDC2626) : const Color(0xFFD97706)).withValues(alpha: 0.25),
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(color: isBankruptcyReason ? const Color(0xFFEF4444) : const Color(0xFFF59E0B), width: 0.8),
+                              ),
+                              child: Text(
+                                isBankruptcyReason ? 'PAILIT KAS' : 'INKRAH SIDANG',
+                                style: TextStyle(
+                                  color: isBankruptcyReason ? const Color(0xFFFCA5A5) : const Color(0xFFFDE68A),
+                                  fontSize: 8.5,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
                             ),
                           ],
                         ),
@@ -1312,7 +1348,7 @@ class _HomeTabState extends State<HomeTab> {
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text('🏛️ No. Perkara: ', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.w600)),
+                            Text(isBankruptcyReason ? '🏛️ Registrasi Pailit: ' : '🏛️ No. Perkara: ', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.w600)),
                             Expanded(child: Text(parsedCaseNo, style: const TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.bold))),
                           ],
                         ),
@@ -1320,7 +1356,7 @@ class _HomeTabState extends State<HomeTab> {
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text('👤 Pihak Penggugat: ', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.w600)),
+                            Text(isBankruptcyReason ? '👤 Otoritas Pemutus: ' : '👤 Pihak Penggugat: ', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.w600)),
                             Expanded(child: Text(parsedPlaintiff, style: const TextStyle(color: Color(0xFFFBBF24), fontSize: 10.5, fontWeight: FontWeight.bold))),
                           ],
                         ),
@@ -1328,7 +1364,37 @@ class _HomeTabState extends State<HomeTab> {
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text('📜 Pokok Gugatan: ', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.w600)),
+                            const Text('🎯 Pihak Tergugat: ', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.w600)),
+                            Expanded(child: Text(parsedDefendant, style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 10.5, fontWeight: FontWeight.bold))),
+                          ],
+                        ),
+                        if (parsedHearingTime.isNotEmpty) ...[
+                          const SizedBox(height: 3),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('🕒 Jam & Waktu Sidang: ', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.w600)),
+                              Expanded(
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF38BDF8).withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    parsedHearingTime,
+                                    style: const TextStyle(color: Color(0xFFBAE6FD), fontSize: 10, fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                        const SizedBox(height: 3),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(isBankruptcyReason ? '📜 Pokok Kepailitan: ' : '📜 Pokok Gugatan: ', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.w600)),
                             Expanded(child: Text(parsedTitle, style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 10.5))),
                           ],
                         ),
@@ -1337,11 +1403,28 @@ class _HomeTabState extends State<HomeTab> {
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text('💰 Nilai Amar Sidang: ', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.w600)),
+                              Text(isBankruptcyReason ? '💰 Defisit / Batas Denda: ' : '💰 Nilai Amar Sidang: ', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.w600)),
                               Expanded(child: Text(parsedFine, style: const TextStyle(color: Color(0xFF34D399), fontSize: 10.5, fontWeight: FontWeight.w900))),
                             ],
                           ),
                         ],
+                        const SizedBox(height: 3),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('⚖️ Status Eksekusi: ', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.w600)),
+                            Expanded(
+                              child: Text(
+                                isBankruptcyReason ? 'Insolvensi Pailit (Kas Beku di BCF)' : 'Putusan Inkrah (Terbukti Bersalah)',
+                                style: TextStyle(
+                                  color: isBankruptcyReason ? const Color(0xFFF87171) : const Color(0xFFFBBF24),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ],
                     ),
                   ),
@@ -4125,6 +4208,8 @@ class _HomeTabState extends State<HomeTab> {
             }
 
             final String modalPlaintiff = data['plaintiffName']?.toString() ?? 'Komite Pengawas Bursa OPFF';
+            final String modalDefendant = data['defendantName']?.toString() ?? entityName;
+            final String modalHearingTime = data['hearingTime']?.toString() ?? '';
             final String modalCaseNo = data['caseNumber']?.toString() ?? '037.9703/Pdt.Sus-Bursa/2026/PNAF';
             final String modalTitle = data['caseTitle']?.toString() ?? 'Laporan Dugaan Manipulasi Pasar Bursa';
             final bool isWinner = data['isOwnerPlaintiffWinner'] == true ||
@@ -4249,6 +4334,24 @@ class _HomeTabState extends State<HomeTab> {
                                 Expanded(child: Text(modalPlaintiff, style: const TextStyle(color: Color(0xFFFBBF24), fontSize: 10.5, fontWeight: FontWeight.bold))),
                               ],
                             ),
+                            const SizedBox(height: 4),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('🎯 Pihak Tergugat: ', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.w600)),
+                                Expanded(child: Text(modalDefendant, style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 10.5, fontWeight: FontWeight.bold))),
+                              ],
+                            ),
+                            if (modalHearingTime.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text('🕒 Jam & Waktu Sidang: ', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.w600)),
+                                  Expanded(child: Text(modalHearingTime, style: const TextStyle(color: Color(0xFFBAE6FD), fontSize: 10.5, fontWeight: FontWeight.bold))),
+                                ],
+                              ),
+                            ],
                             const SizedBox(height: 4),
                             Row(
                               crossAxisAlignment: CrossAxisAlignment.start,

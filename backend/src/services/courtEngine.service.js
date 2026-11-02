@@ -1077,7 +1077,9 @@ async function executeCourtVerdict(
       const seizureDeadline = new Date(now.getTime() + 4 * 24 * 60 * 60 * 1000).toISOString();
       const effectiveAward = Number(awardedAmount || c.verdict_awarded_amount || c.claim_amount_ib || 0);
       const formattedAward = effectiveAward > 0 ? ` [Tuntutan/Denda: IB ${effectiveAward.toLocaleString('id-ID')}]` : '';
-      const reason = `Sita Eksekusi Putusan Hakim PNAF No. ${c.case_number} [Perkara: ${c.title}] oleh Penggugat: ${c.plaintiff_name}${formattedAward} - Terbukti Bersalah`;
+      const scheduleTime = c.hearing_time || '10:00 WIB';
+      const scheduleDate = c.court_hearing_date || 'Hari Ini';
+      const reason = `Sita Eksekusi Putusan Hakim PNAF No. ${c.case_number} [Perkara: ${c.title}] [Penggugat: ${c.plaintiff_name}] [Tergugat: ${c.defendant_name}] [Waktu Sidang: ${scheduleTime}, ${scheduleDate}]${formattedAward} - Terbukti Bersalah`;
 
       await query.run(
         `UPDATE companies 
@@ -1391,21 +1393,52 @@ async function healExistingCourtCases() {
       healedCount++;
     }
 
-    // Penyelarasan Alasan Sita (seize_reason) Perseroan yang Disita agar memuat data Penggugat & Nilai Amar Sidang
+    // Penyelarasan Alasan Sita (seize_reason) Perseroan yang Disita agar memuat data Penggugat, Tergugat & Waktu Sidang
     const seizedComps = await query.all('SELECT * FROM companies WHERE is_seized = 1');
     for (const sc of (seizedComps || [])) {
-      if (!sc.seize_reason || !sc.seize_reason.includes('Penggugat:')) {
+      const isDeficitPailit = Number(sc.company_balance_ib || 0) <= -50000000 || sc.status === 'BANKRUPT' || (sc.seize_reason && sc.seize_reason.toUpperCase().includes('PAILIT'));
+      
+      // Kasus 1: Perseroan disita karena Kepailitan Kas / Insolvensi Bank BCF
+      if (isDeficitPailit) {
+        const wibParts = getWibParts(sc.seized_at ? new Date(sc.seized_at) : new Date());
+        const bankruptcyReason = `PAILIT BURSA: Defisit kas operasional telah menembus batas insolvensi maksimum (-IB 50.000.000). Perseroan dibekukan oleh Kepaniteraan PNAF & Bank Sentral BCF. [Tergugat: ${sc.name} (${sc.symbol})] [Otoritas: Pengadilan Niaga PNAF & Bank BCF] [Waktu Sidang: ${wibParts.timeStr}, ${wibParts.dateStr}]`;
+        if (!sc.seize_reason || !sc.seize_reason.includes('PAILIT BURSA:') || !sc.seize_reason.includes('[Tergugat:')) {
+          await query.run(
+            "UPDATE companies SET seize_reason = ?, seized_by = 'Pengadilan Niaga Federasi (PNAF) & BCF' WHERE id = ?",
+            [bankruptcyReason, sc.id]
+          );
+        }
+        continue;
+      }
+
+      // Kasus 2: Perseroan disita karena Putusan Sengketa / Regulasi Pengadilan PNAF
+      // Periksa apakah alasan sita sudah memuat Tergugat & Waktu Sidang
+      const hasFullDetails = sc.seize_reason && sc.seize_reason.includes('[Tergugat:') && sc.seize_reason.includes('[Waktu Sidang:');
+      const hasPlaintiffSelfSeizure = sc.seize_reason && sc.owner_id && sc.seize_reason.includes(sc.owner_id);
+
+      if (!hasFullDetails || hasPlaintiffSelfSeizure) {
+        // HANYA tautkan ke perkara yang statusnya DIKABULKAN (VERDICT_APPROVED / VERDICT_PAILIT)
+        // dan Penggugat BUKAN pemilik perseroan itu sendiri!
         const linkedC = await query.get(
           `SELECT * FROM court_cases 
-           WHERE (defendant_company_id = ? OR defendant_user_id = ? OR title LIKE ? OR target_asset_description LIKE ?)
+           WHERE status IN ('VERDICT_APPROVED', 'VERDICT_PAILIT')
+             AND (defendant_company_id = ? OR defendant_user_id = ? OR title LIKE ? OR target_asset_description LIKE ?)
+             AND (plaintiff_user_id IS NULL OR plaintiff_user_id != ?)
            ORDER BY created_at DESC LIMIT 1`,
-          [sc.id, sc.owner_id || '', `%${sc.symbol}%`, `%${sc.symbol}%`]
+          [sc.id, sc.owner_id || '', `%${sc.symbol}%`, `%${sc.symbol}%`, sc.owner_id || '---']
         );
         if (linkedC) {
           const award = Number(linkedC.verdict_awarded_amount || linkedC.claim_amount_ib || 0);
           const formatted = award > 0 ? ` [Tuntutan/Denda: IB ${award.toLocaleString('id-ID')}]` : '';
-          const newReason = `Sita Eksekusi Putusan Hakim PNAF No. ${linkedC.case_number} [Perkara: ${linkedC.title}] oleh Penggugat: ${linkedC.plaintiff_name}${formatted} - Terbukti Bersalah`;
+          const scheduleTime = linkedC.hearing_time || '10:00 WIB';
+          const scheduleDate = linkedC.court_hearing_date || 'Hari Ini';
+          const newReason = `Sita Eksekusi Putusan Hakim PNAF No. ${linkedC.case_number} [Perkara: ${linkedC.title}] [Penggugat: ${linkedC.plaintiff_name}] [Tergugat: ${linkedC.defendant_name}] [Waktu Sidang: ${scheduleTime}, ${scheduleDate}]${formatted} - Terbukti Bersalah`;
           await query.run('UPDATE companies SET seize_reason = ? WHERE id = ?', [newReason, sc.id]);
+        } else {
+          // Default jika tidak ada perkara lawan aktif
+          const wibParts = getWibParts(sc.seized_at ? new Date(sc.seized_at) : new Date());
+          const defaultReason = `Sita Eksekusi Pengawas Bursa & PNAF: Terbukti Pelanggaran Regulasi Bursa [Tergugat: ${sc.name} (${sc.symbol})] [Otoritas: Pengawas Bursa & PNAF] [Waktu Sidang: ${wibParts.timeStr}, ${wibParts.dateStr}]`;
+          await query.run('UPDATE companies SET seize_reason = ? WHERE id = ?', [defaultReason, sc.id]);
         }
       }
     }

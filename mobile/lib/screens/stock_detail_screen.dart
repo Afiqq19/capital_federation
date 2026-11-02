@@ -3540,16 +3540,25 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
 
     // Parse seize reason details if available
     final rawReason = c.seizeReason ?? 'Sita Eksekusi Putusan Hakim PNAF';
-    String caseNo = '037.9703/Pdt.Sus-Bursa/2026/PNAF';
-    String plaintiff = 'Komite Pengawas Bursa OPFF';
-    String caseTitle = 'Laporan Dugaan Manipulasi Pasar Bursa & Goreng Saham';
+    final bool isBankruptcyReason = rawReason.toUpperCase().contains('PAILIT') || c.status == 'BANKRUPT';
+    String caseNo = isBankruptcyReason ? 'PNAF/BCF-INSOLVENSI/2026' : '037.9703/Pdt.Sus-Bursa/2026/PNAF';
+    String plaintiff = isBankruptcyReason ? 'Kepaniteraan PNAF & Otoritas Bank BCF' : 'Komite Pengawas Bursa OPFF';
+    String defendant = '${c.name} (${c.symbol})';
+    String hearingTime = '';
+    String caseTitle = isBankruptcyReason ? 'Kepailitan Operasional: Defisit Kas Melebihi Batas Maksimum (-IB 50.000.000)' : 'Laporan Dugaan Manipulasi Pasar Bursa & Goreng Saham';
     String fineStr = '';
 
     final caseNoMatch = RegExp(r'No\.\s*([^\s\[(]+)').firstMatch(rawReason);
     if (caseNoMatch != null) caseNo = caseNoMatch.group(1) ?? caseNo;
 
-    final plaintiffMatch = RegExp(r'oleh Penggugat:\s*([^\[\-]+)').firstMatch(rawReason);
+    final plaintiffMatch = RegExp(r'(?:\[Penggugat:\s*|oleh Penggugat:\s*)([^\]|\-]+)').firstMatch(rawReason);
     if (plaintiffMatch != null) plaintiff = plaintiffMatch.group(1)?.trim() ?? plaintiff;
+
+    final defMatch = RegExp(r'(?:\[Tergugat:\s*|terhadap Tergugat:\s*)([^\]|\-]+)').firstMatch(rawReason);
+    if (defMatch != null) defendant = defMatch.group(1)?.trim() ?? defendant;
+
+    final timeMatch = RegExp(r'(?:\[Waktu(?: Sidang| Pembekuan)?:\s*)([^\]]+)').firstMatch(rawReason);
+    if (timeMatch != null) hearingTime = timeMatch.group(1)?.trim() ?? '';
 
     final titleMatch = RegExp(r'\[Perkara:\s*([^\]]+)\]').firstMatch(rawReason) ?? RegExp(r'\(([^)]+)\)').firstMatch(rawReason);
     if (titleMatch != null) caseTitle = titleMatch.group(1)?.trim() ?? caseTitle;
@@ -3635,7 +3644,7 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('👤 Pihak Penggugat: ', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.w600)),
+                    Text(isBankruptcyReason ? '👤 Otoritas Pemutus: ' : '👤 Pihak Penggugat: ', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.w600)),
                     Expanded(
                       child: Text(plaintiff, style: const TextStyle(color: Color(0xFFFBBF24), fontSize: 10.5, fontWeight: FontWeight.bold)),
                     ),
@@ -3645,7 +3654,39 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('📜 Pokok Gugatan: ', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.w600)),
+                    const Text('🎯 Pihak Tergugat: ', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.w600)),
+                    Expanded(
+                      child: Text(defendant, style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 10.5, fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
+                if (hearingTime.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('🕒 Jam & Waktu Sidang: ', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.w600)),
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF38BDF8).withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            hearingTime,
+                            style: const TextStyle(color: Color(0xFFBAE6FD), fontSize: 10, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 4),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(isBankruptcyReason ? '📜 Pokok Kepailitan: ' : '📜 Pokok Gugatan: ', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.w600)),
                     Expanded(
                       child: Text(caseTitle, style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 10.5)),
                     ),
