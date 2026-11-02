@@ -150,6 +150,24 @@ router.get('/rescue-panel', async (req, res) => {
         report.mss_frontend_error = fErr.message;
     }
 
+    // 3. Cek mss-ttyd
+    try {
+        const tResp = await fetch('http://mss-ttyd:7681/ttyd/', {
+            signal: AbortSignal.timeout(4000)
+        });
+        report.mss_ttyd_status = tResp.status;
+    } catch (tErr) {
+        report.mss_ttyd_error = tErr.message;
+    }
+    try {
+        const tResp2 = await fetch('http://mss-ttyd:7681/', {
+            signal: AbortSignal.timeout(4000)
+        });
+        report.mss_ttyd_root_status = tResp2.status;
+    } catch (tErr) {
+        report.mss_ttyd_root_error = tErr.message;
+    }
+
     res.json(report);
 });
 
