@@ -7757,6 +7757,392 @@ app.delete('/api/admin/companies/:id', async (req, res) => {
   }
 });
 
+// Admin: Intervensi Regulasi & Normalisasi Harga Saham Manipulasi Tunggal
+app.post('/api/admin/companies/normalize-price', async (req, res) => {
+  try {
+    const { companyId, targetPrice, seizeManipulator = false, applyHaircutNotice = true, reason } = req.body;
+    if (!companyId) return res.status(400).json({ error: 'Company ID harus diisi' });
+
+    const parsedTarget = Math.max(50, Math.round(Number(targetPrice) || 2500));
+    const comp = await query.get('SELECT * FROM companies WHERE id = ?', [companyId]);
+    if (!comp) return res.status(404).json({ error: 'Perusahaan / Emiten tidak ditemukan' });
+
+    const oldPrice = Number(comp.current_price) || parsedTarget;
+    const nowIso = new Date().toISOString();
+
+    let newStatus = comp.status;
+    let isSeized = comp.is_seized || 0;
+    let seizedBy = comp.seized_by;
+    let seizedAt = comp.seized_at;
+    let seizeReason = comp.seize_reason;
+
+    if (seizeManipulator) {
+      isSeized = 1;
+      newStatus = 'CRITICAL';
+      seizedBy = 'Pengawas Bursa IPMC & PNAF';
+      seizedAt = nowIso;
+      seizeReason = reason || 'Sita Eksekusi Pengawas Bursa & PNAF: Terbukti Praktik Manipulasi Goreng Saham';
+    } else if (newStatus === 'SUSPENDED') {
+      newStatus = 'HEALTHY';
+    }
+
+    // 1. Update database record emiten
+    await query.run(
+      `UPDATE companies
+       SET current_price = ?,
+           base_price = ?,
+           prev_close = ?,
+           daily_high = ?,
+           daily_low = ?,
+           uma_flag = 0,
+           uma_reason = NULL,
+           uma_direction = NULL,
+           suspended_at = NULL,
+           suspend_until = NULL,
+           suspend_reason = NULL,
+           status = ?,
+           is_seized = ?,
+           seized_by = ?,
+           seized_at = ?,
+           seize_reason = ?
+       WHERE id = ?`,
+      [parsedTarget, parsedTarget, parsedTarget, parsedTarget, parsedTarget, newStatus, isSeized, seizedBy, seizedAt, seizeReason, companyId]
+    );
+
+    // 2. Bersihkan antrean limit order ekstrem di bursa (market_orders)
+    const extremeBuys = await query.all(
+      `SELECT id, user_id, price, lots, order_type FROM market_orders 
+       WHERE company_id = ? AND (order_type = 'BUY' OR type = 'BUY') AND price > ?`,
+      [companyId, parsedTarget * 1.5]
+    );
+    for (const ord of extremeBuys || []) {
+      const refundAmount = (ord.lots || 0) * 100 * (ord.price || 0);
+      await query.run('UPDATE users SET balance_ib = balance_ib + ? WHERE id = ?', [refundAmount, ord.user_id]);
+      await query.run('DELETE FROM market_orders WHERE id = ?', [ord.id]);
+    }
+    await query.run(
+      `DELETE FROM market_orders 
+       WHERE company_id = ? AND (order_type = 'SELL' OR type = 'SELL') AND price > ?`,
+      [companyId, parsedTarget * 2.0]
+    );
+
+    // 3. Haircut Loss Absorption untuk Investor Pemegang Saham
+    let totalInvestorsNotified = 0;
+    if (applyHaircutNotice && oldPrice > parsedTarget) {
+      const holders = await query.all(
+        'SELECT user_id, lots_owned FROM portfolios WHERE company_id = ? AND lots_owned > 0',
+        [companyId]
+      );
+      for (const h of holders || []) {
+        if (!h.user_id || h.user_id.startsWith('bot-') || h.user_id === 'admin-001') continue;
+        const totalLoss = Math.round((h.lots_owned || 0) * 100 * (oldPrice - parsedTarget));
+        await dispatchInboxNotification(io, {
+          userId: h.user_id,
+          senderName: 'Otoritas Pengawas Bursa IPMC',
+          category: 'MARKET',
+          title: `⚠️ HAIRCUT PORTOFOLIO: Intervensi Saham ${comp.symbol}`,
+          message: `Otoritas Bursa IPMC & PNAF melakukan tindakan intervensi regulasi atas emiten ${comp.name} (${comp.symbol}). Harga saham dinormalisasi paksa dari IB ${oldPrice.toLocaleString('id-ID')} ke harga fundamental wajar IB ${parsedTarget.toLocaleString('id-ID')}. Portofolio Anda (${h.lots_owned} lot) mengalami penyesuaian nilai pasar wajar (haircut kerugian estimasi IB ${totalLoss.toLocaleString('id-ID')}). Lembar saham Anda tetap utuh.`,
+          referenceId: companyId
+        });
+        totalInvestorsNotified++;
+      }
+    }
+
+    // 4. Siarkan Berita Resmi Intervensi Pasar
+    const newsItem = {
+      id: uuidv4(),
+      title: `🚨 INTERVENSI PENGAWAS BURSA: Harga Saham ${comp.symbol} Resmi Dinormalisasi ke IB ${parsedTarget.toLocaleString('id-ID')}!`,
+      content: `Otoritas Moneter IPMC bersama Pengadilan Niaga PNAF menjatuhkan tindakan tegas terhadap saham ${comp.name} (${comp.symbol}). Terkait indikasi manipulasi goreng saham harga tidak wajar (puncak IB ${oldPrice.toLocaleString('id-ID')}), bursa mengembalikan kuotasi perdagangan ke level fundamental sehat. ${seizeManipulator ? 'Manajemen perseroan resmi disita oleh otoritas.' : 'Perdagangan reguler dibuka kembali.'}`,
+      affected_sector: comp.sector,
+      sentiment: 'BEARISH',
+      published_at: nowIso
+    };
+    await query.run(
+      'INSERT INTO news (id, title, content, affected_sector, sentiment, published_at) VALUES (?, ?, ?, ?, ?, ?)',
+      [newsItem.id, newsItem.title, newsItem.content, newsItem.affected_sector, newsItem.sentiment, newsItem.published_at]
+    );
+
+    // 5. Update Simulation In-Memory Cache
+    simulationEngine.forceNormalizeCompanyPrice(companyId, parsedTarget, {
+      isSuspended: false,
+      isSeized: isSeized === 1
+    });
+
+    // 6. Broadcast Real-time WebSockets
+    const updatedComp = await query.get('SELECT * FROM companies WHERE id = ?', [companyId]);
+    io.emit('company:price_normalized', {
+      companyId,
+      symbol: comp.symbol,
+      oldPrice,
+      targetPrice: parsedTarget,
+      isSeized: isSeized === 1
+    });
+    io.emit('company:updated', updatedComp);
+    io.emit('company:status_changed', { companyId, status: newStatus });
+    io.emit('market:news_broadcast', newsItem);
+    io.emit('market:overview', simulationEngine.getMarketOverview());
+
+    console.log(`⚡ [Admin] Saham ${comp.symbol} dinormalisasi: IB ${oldPrice} -> IB ${parsedTarget} (Seized: ${isSeized === 1})`);
+    res.json({
+      success: true,
+      message: `Harga saham ${comp.symbol} berhasil dinormalisasi ke IB ${parsedTarget.toLocaleString('id-ID')}. ${totalInvestorsNotified} investor telah menerima notifikasi haircut kerugian.`,
+      company: updatedComp,
+      oldPrice,
+      targetPrice: parsedTarget,
+      investorsNotified: totalInvestorsNotified
+    });
+  } catch (err) {
+    console.error('Error normalizing company price:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin: Normalisasi Massal Seluruh Saham Gorengan (> Threshold, e.g. > IB 20.000)
+app.post('/api/admin/companies/batch-normalize', async (req, res) => {
+  try {
+    const { thresholdPrice = 20000, targetFairPrice = 2500, seizeManipulators = false } = req.body;
+    const minThreshold = Math.max(5000, Number(thresholdPrice) || 20000);
+    const fairPrice = Math.max(500, Number(targetFairPrice) || 2500);
+
+    const overblown = await query.all(
+      'SELECT id, symbol, name, sector, current_price, fundamental_score, status, is_seized FROM companies WHERE current_price >= ?',
+      [minThreshold]
+    );
+
+    if (!overblown || overblown.length === 0) {
+      return res.json({
+        success: true,
+        message: `Tidak ada saham dengan harga di atas IB ${minThreshold.toLocaleString('id-ID')}. Kondisi bursa dalam batas wajar.`,
+        normalizedCount: 0
+      });
+    }
+
+    console.log(`⚡ [Batch Normalize] Menemukan ${overblown.length} saham gorengan di atas IB ${minThreshold.toLocaleString('id-ID')}. Memulai normalisasi...`);
+    const normalizedSymbols = [];
+
+    for (const comp of overblown) {
+      const fundFactor = Math.max(0.7, Math.min(1.5, (comp.fundamental_score || 70) / 70));
+      const adjustedFair = Math.round(fairPrice * fundFactor);
+      const oldPrice = Number(comp.current_price);
+
+      let newStatus = comp.status === 'SUSPENDED' ? 'HEALTHY' : comp.status;
+      let isSeized = comp.is_seized || 0;
+      if (seizeManipulators) {
+        isSeized = 1;
+        newStatus = 'CRITICAL';
+      }
+
+      await query.run(
+        `UPDATE companies
+         SET current_price = ?,
+             base_price = ?,
+             prev_close = ?,
+             daily_high = ?,
+             daily_low = ?,
+             uma_flag = 0,
+             uma_reason = NULL,
+             uma_direction = NULL,
+             suspended_at = NULL,
+             suspend_until = NULL,
+             suspend_reason = NULL,
+             status = ?,
+             is_seized = ?
+         WHERE id = ?`,
+        [adjustedFair, adjustedFair, adjustedFair, adjustedFair, adjustedFair, newStatus, isSeized, comp.id]
+      );
+
+      await query.run(
+        `DELETE FROM market_orders WHERE company_id = ? AND price > ?`,
+        [comp.id, adjustedFair * 1.8]
+      );
+
+      simulationEngine.forceNormalizeCompanyPrice(comp.id, adjustedFair, {
+        isSuspended: false,
+        isSeized: isSeized === 1
+      });
+
+      normalizedSymbols.push(`${comp.symbol} (IB ${oldPrice.toLocaleString('id-ID')} -> IB ${adjustedFair.toLocaleString('id-ID')})`);
+    }
+
+    const batchNews = {
+      id: uuidv4(),
+      title: `🚨 OPERASI STABILISASI PASAR: Otoritas IPMC Menormalkan ${overblown.length} Saham Gorengan!`,
+      content: `Pengawas Bursa Modal IPMC & PNAF menggelar operasi pembersihan manipulasi pasar massal. Sebanyak ${overblown.length} emiten dengan lonjakan harga ekstrem (> IB ${minThreshold.toLocaleString('id-ID')}) dinormalisasi ke valuasi fundamental wajar demi menjaga integritas sistem keuangan.`,
+      affected_sector: 'ALL',
+      sentiment: 'NEUTRAL',
+      published_at: new Date().toISOString()
+    };
+    await query.run(
+      'INSERT INTO news (id, title, content, affected_sector, sentiment, published_at) VALUES (?, ?, ?, ?, ?, ?)',
+      [batchNews.id, batchNews.title, batchNews.content, batchNews.affected_sector, batchNews.sentiment, batchNews.published_at]
+    );
+
+    io.emit('market:batch_price_normalized', { count: overblown.length });
+    io.emit('market:news_broadcast', batchNews);
+    io.emit('market:overview', simulationEngine.getMarketOverview());
+
+    res.json({
+      success: true,
+      message: `Sukses menormalisasi ${overblown.length} saham gorengan: ${normalizedSymbols.slice(0, 5).join(', ')}${overblown.length > 5 ? '...' : ''}`,
+      normalizedCount: overblown.length,
+      details: normalizedSymbols
+    });
+  } catch (err) {
+    console.error('Error in batch normalize:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PNAF Master Advokat & Retainer 24/7 API
+app.get('/api/court/lawyers', async (req, res) => {
+  try {
+    const lawyers = await query.all('SELECT * FROM lawyer_profiles ORDER BY current_fee_ib ASC');
+    res.json({ success: true, lawyers: lawyers || [] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Sewa Kontrak Advokat Retainer 24/7 (Kebal Mangkir/Verstek Saat Offline)
+app.post('/api/court/hire-retainer', async (req, res) => {
+  try {
+    let user = null;
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        const decoded = jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
+        if (decoded && decoded.id) user = decoded;
+      } catch (_) {}
+    }
+    if (!user) {
+      const uId = req.body?.userId || req.headers['x-user-id'] || req.query?.userId;
+      if (uId) {
+        user = await query.get('SELECT id, username FROM users WHERE id = ? OR username = ?', [uId, uId]);
+      }
+    }
+    if (!user) return res.status(401).json({ error: 'Harap login terlebih dahulu' });
+
+    const { lawyerId, durationDays = 7, paymentSource = 'PERSONAL' } = req.body;
+    const lawyer = await query.get('SELECT * FROM lawyer_profiles WHERE id = ?', [lawyerId]);
+    if (!lawyer) return res.status(404).json({ error: 'Profil Kantor Hukum / Advokat tidak ditemukan' });
+
+    const is30Days = Number(durationDays) === 30;
+    const fee = is30Days ? (lawyer.retainer_fee_30d_ib || 500000000) : (lawyer.retainer_fee_7d_ib || 150000000);
+    const daysToAdd = is30Days ? 30 : 7;
+
+    const dbUser = await query.get('SELECT balance_ib, company_balance_ib, retainer_lawyer_until FROM users WHERE id = ?', [user.id]);
+    const isComp = paymentSource === 'COMPANY';
+    const currentBal = isComp ? Number(dbUser.company_balance_ib || 0) : Number(dbUser.balance_ib || 0);
+
+    if (currentBal < fee) {
+      return res.status(400).json({
+        error: `Saldo ${isComp ? 'Kas Perusahaan (PT)' : 'Kas Pribadi'} tidak mencukupi untuk biaya retainer IB ${fee.toLocaleString('id-ID')}!`
+      });
+    }
+
+    const now = new Date();
+    let baseTime = now.getTime();
+    if (dbUser.retainer_lawyer_until) {
+      const existingUntil = new Date(dbUser.retainer_lawyer_until).getTime();
+      if (existingUntil > baseTime) baseTime = existingUntil;
+    }
+    const newUntil = new Date(baseTime + daysToAdd * 24 * 60 * 60 * 1000).toISOString();
+
+    if (isComp) {
+      await query.run('UPDATE users SET company_balance_ib = company_balance_ib - ? WHERE id = ?', [fee, user.id]);
+      await query.run('UPDATE companies SET company_balance_ib = company_balance_ib - ? WHERE owner_id = ?', [fee, user.id]);
+    } else {
+      await query.run('UPDATE users SET balance_ib = balance_ib - ? WHERE id = ?', [fee, user.id]);
+    }
+
+    await query.run(
+      `UPDATE users 
+       SET retainer_lawyer_id = ?, retainer_lawyer_name = ?, retainer_lawyer_until = ?, retainer_lawyer_fee_ib = ?
+       WHERE id = ?`,
+      [lawyer.id, lawyer.name, newUntil, fee, user.id]
+    );
+
+    await recordCashFlow({
+      userId: user.id,
+      accountType: isComp ? 'COMPANY' : 'PERSONAL',
+      category: 'LEGAL_FEE',
+      title: `Kontrak Kuasa Hukum Retainer 24/7 (${lawyer.name})`,
+      amountIb: fee,
+      direction: 'EXPENSE',
+      balanceAfter: currentBal - fee,
+      notes: `Perlindungan hukum otomatis saat offline di Pengadilan Niaga PNAF selama ${daysToAdd} hari.`
+    });
+
+    await dispatchInboxNotification(io, {
+      userId: user.id,
+      senderName: lawyer.firm_name,
+      category: 'COURT',
+      title: `🛡️ Kontrak Kuasa Hukum Tetap Aktif: ${lawyer.name}`,
+      message: `Selamat! Anda resmi menunjuk ${lawyer.name} (${lawyer.firm_name}) sebagai Kuasa Hukum Tetap 24/7 Anda hingga ${new Date(newUntil).toLocaleDateString('id-ID')}. Jika sewaktu-waktu perseroan Anda digugat saat Anda offline, tim advokat kami akan langsung hadir di persidangan PNAF, menepis putusan verstek, dan membela kepentingan bisnis Anda!`
+    });
+
+    io.emit('user:account_updated', { userId: user.id });
+
+    res.json({
+      success: true,
+      message: `Sukses menunjuk Kuasa Hukum Tetap ${lawyer.name} selama ${daysToAdd} hari (Aktif hingga ${new Date(newUntil).toLocaleDateString('id-ID')})!`,
+      retainerUntil: newUntil,
+      lawyerName: lawyer.name
+    });
+  } catch (err) {
+    console.error('Error hiring retainer lawyer:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Status Kuasa Hukum Retainer Pengguna
+app.get('/api/court/my-retainer', async (req, res) => {
+  try {
+    let user = null;
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        const decoded = jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
+        if (decoded && decoded.id) user = decoded;
+      } catch (_) {}
+    }
+    if (!user) {
+      const uId = req.query?.userId || req.headers['x-user-id'];
+      if (uId) {
+        user = await query.get('SELECT id, username FROM users WHERE id = ? OR username = ?', [uId, uId]);
+      }
+    }
+    if (!user) return res.status(401).json({ error: 'Harap login terlebih dahulu' });
+
+    const u = await query.get(
+      'SELECT retainer_lawyer_id, retainer_lawyer_name, retainer_lawyer_until, retainer_lawyer_fee_ib FROM users WHERE id = ?',
+      [user.id]
+    );
+
+    let isActive = false;
+    let remainingDays = 0;
+    if (u && u.retainer_lawyer_until) {
+      const untilMs = new Date(u.retainer_lawyer_until).getTime();
+      const nowMs = Date.now();
+      if (untilMs > nowMs) {
+        isActive = true;
+        remainingDays = Math.ceil((untilMs - nowMs) / (24 * 60 * 60 * 1000));
+      }
+    }
+
+    res.json({
+      success: true,
+      hasRetainer: isActive,
+      lawyerName: isActive ? u.retainer_lawyer_name : null,
+      lawyerId: isActive ? u.retainer_lawyer_id : null,
+      retainerUntil: isActive ? u.retainer_lawyer_until : null,
+      remainingDays
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/admin/users/:id/ban', async (req, res) => {
   try {
     const user = await query.get('SELECT * FROM users WHERE id = ?', [req.params.id]);
@@ -8380,18 +8766,18 @@ const bundledPublicApkPath = path.join(__dirname, '../public/downloads/Capital-F
 const directPublicApkPath = path.join(__dirname, '../public/downloads/capital-federation.apk');
 const localBuiltApkPath = path.join(__dirname, '../../mobile/build/app/outputs/flutter-apk/app-release.apk');
 
-const LATEST_RELEASE_NOTES_V200 = 'v2.0.0 (Build 46): Fitur Banding & Rekonvensi Peradilan PNAF (Gugat Balik Fitnah Pasar & Pencemaran Nama Baik Emiten), Audit Forensik Digital Database Server Bursa CFX, Pemulihan Status Sita Perseroan Seketika, Ganti Rugi Reputasi Pantastis (IB 5M - 25M), Pemilihan 3 Advokat Papan Atas (Puja Azzahra, Zahra Bintang, Khairul Sagala), serta Redesign Mewah & Elegan Dashboard Web Admin (Obsidian Futuristic Glassmorphism & Penyesuaian Nada Defisit Fiskal Kas Negara).';
+const LATEST_RELEASE_NOTES_V200 = 'v2.0.0 (Build 47): Kontrak Advokat Kuasa Hukum Tetap (Retainer Law Firm 24/7) Kebal Putusan Verstek Saat Offline, Dynamic Prestige Win-Rate Pricing untuk 3 Master Advokat (Puja Azzahra, Zahra Bintang, Khairul Sagala), Fitur Intervensi Regulasi Normalisasi Manipulasi Saham Gorengan (Tunggal & Massal > IB 20.000) dengan Haircut Loss Spekulan & Sita PNAF, serta Redesign Web Admin Direktori Emiten Bloomberg Terminal High-Density Compact Layout.';
 
 async function getApkSettingsMap() {
   const defaults = {
     apk_version: '2.0.0',
-    apk_build_number: '46',
+    apk_build_number: '47',
     apk_min_android: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
     apk_file_size_mb: '57.5 MB',
     apk_release_notes: LATEST_RELEASE_NOTES_V200,
     apk_external_url: '',
-    apk_download_count: '612',
-    apk_sha256: 'dcc801272685ab6905cf651407d84ba71e2bb9f3f71b8c97ca3dcd3f44480720',
+    apk_download_count: '638',
+    apk_sha256: 'fae315978b4fcce3e8ccae85b20841d292d914bedbbff89dfff6933da0862cad',
     apk_updated_at: new Date().toISOString(),
   };
   try {
@@ -8401,11 +8787,11 @@ async function getApkSettingsMap() {
         defaults[r.key] = String(r.value);
       }
     }
-    if (parseInt(defaults.apk_build_number || '0', 10) < 46 || defaults.apk_sha256 !== 'dcc801272685ab6905cf651407d84ba71e2bb9f3f71b8c97ca3dcd3f44480720') {
+    if (parseInt(defaults.apk_build_number || '0', 10) < 47 || defaults.apk_sha256 !== 'fae315978b4fcce3e8ccae85b20841d292d914bedbbff89dfff6933da0862cad') {
       defaults.apk_version = '2.0.0';
-      defaults.apk_build_number = '46';
+      defaults.apk_build_number = '47';
       defaults.apk_file_size_mb = '57.5 MB';
-      defaults.apk_sha256 = 'dcc801272685ab6905cf651407d84ba71e2bb9f3f71b8c97ca3dcd3f44480720';
+      defaults.apk_sha256 = 'fae315978b4fcce3e8ccae85b20841d292d914bedbbff89dfff6933da0862cad';
       defaults.apk_release_notes = LATEST_RELEASE_NOTES_V200;
       defaults.apk_updated_at = new Date().toISOString();
       // Persist directly to central_bank_settings so /api/settings, /api/admin/settings & /api/admin/overview match 100%!

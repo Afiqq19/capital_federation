@@ -574,7 +574,15 @@ async function initDb() {
   await safeAddColumn('court_cases', 'lawyer_fee_ib REAL DEFAULT 0.0');
   await safeAddColumn('court_cases', 'is_conservatoir_beslag INTEGER DEFAULT 0');
   await safeAddColumn('court_cases', 'beslag_amount_ib REAL DEFAULT 0.0');
+  await safeAddColumn('court_cases', 'defendant_lawyer_name TEXT');
+  await safeAddColumn('court_cases', 'defendant_lawyer_fee_ib REAL DEFAULT 0.0');
   await safeAddColumn('court_chat_messages', 'sender_user_id TEXT');
+
+  // Retainer 24/7 Offline Law Firm Representation
+  await safeAddColumn('users', 'retainer_lawyer_id TEXT');
+  await safeAddColumn('users', 'retainer_lawyer_name TEXT');
+  await safeAddColumn('users', 'retainer_lawyer_until TEXT');
+  await safeAddColumn('users', 'retainer_lawyer_fee_ib REAL DEFAULT 0.0');
 
   // Corporate Actions: Stock Split
   await safeAddColumn('companies', 'last_stock_split_at TEXT');
@@ -813,6 +821,26 @@ async function initDb() {
       notes TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (loan_id) REFERENCES loans(id) ON DELETE CASCADE
+    );
+
+    -- 7. Master Advokat & Kantor Hukum Federasi (PNAF Dynamic Win-Rate & Retainer)
+    CREATE TABLE IF NOT EXISTS lawyer_profiles (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      firm_name TEXT NOT NULL,
+      tier TEXT NOT NULL,
+      badge TEXT NOT NULL,
+      badge_color TEXT DEFAULT '#10B981',
+      specialty TEXT NOT NULL,
+      base_fee_ib REAL NOT NULL,
+      current_fee_ib REAL NOT NULL,
+      retainer_fee_7d_ib REAL NOT NULL,
+      retainer_fee_30d_ib REAL NOT NULL,
+      cases_handled INTEGER DEFAULT 0,
+      cases_won INTEGER DEFAULT 0,
+      win_rate REAL DEFAULT 0.0,
+      description TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
 
     CREATE INDEX IF NOT EXISTS idx_bonds_status ON sovereign_bonds(status);
@@ -1138,6 +1166,77 @@ async function initDb() {
       ]
     );
     console.log('🏗️ Initial Mega-Project Government Tenders seeded.');
+  }
+
+  // Seed Lawyer Profiles (PNAF Dynamic Win-Rate & Retainer Law Firm) if empty
+  const lawyerCount = await query.get('SELECT COUNT(*) as count FROM lawyer_profiles');
+  if (!lawyerCount || lawyerCount.count === 0) {
+    await query.run(
+      `INSERT INTO lawyer_profiles (id, name, firm_name, tier, badge, badge_color, specialty, base_fee_ib, current_fee_ib, retainer_fee_7d_ib, retainer_fee_30d_ib, cases_handled, cases_won, win_rate, description)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        'lawyer-azzahra',
+        'Advokat Puja Azzahra, S.H., LL.M.',
+        'Azzahra & Partners Law Firm',
+        'POPULER',
+        'POPULER',
+        '#10B981',
+        'Litigasi Komersial & Audit Perlindungan Investor',
+        50000000.0,
+        50000000.0,
+        150000000.0,
+        500000000.0,
+        45,
+        36,
+        80.0,
+        'Kantor hukum spesialis transaksi korporasi dan pembelaan sengketa perseroan. Efektif menangkal tuduhan wanprestasi sepihak dan memulihkan reputasi.'
+      ]
+    );
+
+    await query.run(
+      `INSERT INTO lawyer_profiles (id, name, firm_name, tier, badge, badge_color, specialty, base_fee_ib, current_fee_ib, retainer_fee_7d_ib, retainer_fee_30d_ib, cases_handled, cases_won, win_rate, description)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        'lawyer-bintang',
+        'Advokat Senior Zahra Bintang, S.H., M.H.',
+        'Bintang Law Office & Associates',
+        'PRESTISI',
+        'PRESTISI',
+        '#38BDF8',
+        'Sengketa Pasar Modal, Arbitrase & Permohonan Sita Jaminan (Conservatoir Beslag)',
+        150000000.0,
+        150000000.0,
+        450000000.0,
+        1500000000.0,
+        72,
+        64,
+        88.9,
+        'Kantor hukum berperingkat tinggi dengan spesialisasi kepatuhan emiten, pembekuan aset lawan, dan litigasi agresif di hadapan Majelis Hakim PNAF.'
+      ]
+    );
+
+    await query.run(
+      `INSERT INTO lawyer_profiles (id, name, firm_name, tier, badge, badge_color, specialty, base_fee_ib, current_fee_ib, retainer_fee_7d_ib, retainer_fee_30d_ib, cases_handled, cases_won, win_rate, description)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        'lawyer-sagala',
+        'Advokat Khairul Sagala, S.H., C.L.A.',
+        'Sagala & Partners (Sultan Tier)',
+        'SULTAN TIER',
+        'SULTAN TIER',
+        '#F59E0B',
+        'Likuidasi Hostile, Rekonvensi Ganti Rugi Ekstrem & Pertahanan Konglomerat 24/7',
+        500000000.0,
+        500000000.0,
+        1500000000.0,
+        5000000000.0,
+        120,
+        116,
+        96.7,
+        'Kantor hukum paling ditakuti di Federasi. Menguasai pasal-pasal sengketa modal, hukum kepailitan, dan pembelaan konglomerat tanpa kompromi.'
+      ]
+    );
+    console.log('⚖️ Master Lawyer Profiles (Puja Azzahra, Zahra Bintang, Khairul Sagala) initialized.');
   }
 
   // Ensure Default Admin Account always exists for IPMC / Bank Sentral Admin Console
@@ -1729,6 +1828,7 @@ const SYNC_TABLES_ORDER = [
   'government_tenders',
   'tender_bids',
   'debt_relief_records',
+  'lawyer_profiles',
   'market_orders',
   'market_oversight_log',
   'macro_events',

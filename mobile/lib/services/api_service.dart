@@ -98,8 +98,8 @@ class ApiService {
   }
 
   static const String currentAppVersion = '2.0.0';
-  static const int currentBuildNumber = 46;
-  static const String currentApkDisplayVersion = 'v2.0.0-CFX Production (Build 46)';
+  static const int currentBuildNumber = 47;
+  static const String currentApkDisplayVersion = 'v2.0.0-CFX Production (Build 47)';
 
   // Fetch Live Server Version & Update Detection Info
   static Future<Map<String, dynamic>?> getServerVersion() async {
@@ -1394,6 +1394,63 @@ class ApiService {
     } catch (e) {
       return {'error': 'Gagal mendaftarkan gugatan ke PNAF: Gangguan koneksi'};
     }
+  }
+
+  // Master Advokat & Catatan Kemenangan PNAF
+  static Future<List<Map<String, dynamic>>> getLawyerProfiles() async {
+    try {
+      final res = await http.get(Uri.parse('$baseUrl/api/court/lawyers')).timeout(const Duration(seconds: 10));
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data['lawyers'] != null) {
+          return List<Map<String, dynamic>>.from(data['lawyers']);
+        }
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  // Sewa Advokat Kuasa Hukum Tetap (Retainer 24/7 Siaga Offline)
+  static Future<Map<String, dynamic>> hireRetainerLawyer({
+    required String userId,
+    required String lawyerId,
+    int durationDays = 7,
+    String paymentSource = 'PERSONAL',
+  }) async {
+    try {
+      final res = await http.post(
+        Uri.parse('$baseUrl/api/court/hire-retainer'),
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': userId,
+        },
+        body: jsonEncode({
+          'userId': userId,
+          'lawyerId': lawyerId,
+          'durationDays': durationDays,
+          'paymentSource': paymentSource,
+        }),
+      ).timeout(const Duration(seconds: 10));
+      return jsonDecode(res.body);
+    } catch (e) {
+      return {'error': 'Gagal menyewa kuasa hukum tetap: Gangguan koneksi'};
+    }
+  }
+
+  // Cek Status Kuasa Hukum Retainer Pengguna
+  static Future<Map<String, dynamic>> getMyRetainer(String userId) async {
+    try {
+      final res = await http.get(
+        Uri.parse('$baseUrl/api/court/my-retainer?userId=$userId'),
+        headers: {
+          'x-user-id': userId,
+        },
+      ).timeout(const Duration(seconds: 10));
+      if (res.statusCode == 200) {
+        return jsonDecode(res.body);
+      }
+    } catch (_) {}
+    return {'hasRetainer': false};
   }
 
   // Transfer Sinergi Arus Kas Antar Perusahaan (Holding & Anak Perusahaan Konglomerasi)

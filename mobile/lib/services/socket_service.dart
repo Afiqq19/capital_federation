@@ -194,6 +194,14 @@ class SocketService {
         if (onConglomerateUpdated != null) onConglomerateUpdated(data);
       });
 
+      socket!.on('company:price_normalized', (data) {
+        if (onMarketRefreshRequested != null) onMarketRefreshRequested(data);
+      });
+
+      socket!.on('market:batch_price_normalized', (data) {
+        if (onMarketRefreshRequested != null) onMarketRefreshRequested(data);
+      });
+
       socket!.on('macro:event_triggered', (data) {
         if (onMarketRefreshRequested != null) onMarketRefreshRequested(data);
       });

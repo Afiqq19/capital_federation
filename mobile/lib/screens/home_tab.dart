@@ -2088,6 +2088,10 @@ class _HomeTabState extends State<HomeTab> {
             ),
           ],
         ),
+        const SizedBox(height: 12),
+
+        // Retainer Law Firm (Perlindungan Kuasa Hukum 24/7 Siaga Offline)
+        _buildRetainerLawyerBanner(context, provider, user, activeEntity),
         const SizedBox(height: 16),
 
         // Financial Cash Flow & Revenue Indicator
@@ -3394,6 +3398,610 @@ class _HomeTabState extends State<HomeTab> {
                                         }
                                       }
                                     },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // Banner Kuasa Hukum Retainer 24/7 (Kebal Verstek Saat Offline)
+  Widget _buildRetainerLawyerBanner(
+    BuildContext context,
+    GameProvider provider,
+    UserModel user,
+    Map<String, dynamic> activeEntity,
+  ) {
+    final bool hasRetainer = user.hasActiveRetainer;
+
+    return InkWell(
+      onTap: () => _showRetainerLawyerModal(context, provider, user, activeEntity),
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: hasRetainer
+                ? [
+                    const Color(0xFF065F46).withValues(alpha: 0.35),
+                    const Color(0xFF0F766E).withValues(alpha: 0.20),
+                  ]
+                : [
+                    const Color(0xFF1E1B4B).withValues(alpha: 0.35),
+                    const Color(0xFF0F172A).withValues(alpha: 0.45),
+                  ],
+          ),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: hasRetainer ? const Color(0xFF10B981).withValues(alpha: 0.6) : const Color(0xFF6366F1).withValues(alpha: 0.35),
+            width: hasRetainer ? 1.4 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(7),
+              decoration: BoxDecoration(
+                color: hasRetainer
+                    ? const Color(0xFF10B981).withValues(alpha: 0.2)
+                    : const Color(0xFF6366F1).withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: Icon(
+                hasRetainer ? Icons.verified_user_rounded : Icons.gavel_rounded,
+                color: hasRetainer ? const Color(0xFF34D399) : const Color(0xFFA5B4FC),
+                size: 18,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        hasRetainer ? 'Kuasa Hukum Tetap 24/7 (Siaga)' : 'Biro Hukum & Retainer Advokat 24/7',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: hasRetainer ? const Color(0xFF10B981).withValues(alpha: 0.2) : const Color(0xFF6366F1).withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: hasRetainer ? const Color(0xFF10B981) : const Color(0xFF6366F1),
+                            width: 0.6,
+                          ),
+                        ),
+                        child: Text(
+                          hasRetainer ? 'KEBAL VERSTEK' : 'OFFLINE DEFENSE',
+                          style: TextStyle(
+                            color: hasRetainer ? const Color(0xFF34D399) : const Color(0xFFA5B4FC),
+                            fontSize: 8,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 1.5),
+                  Text(
+                    hasRetainer
+                        ? '${user.retainerLawyerName} aktif mendampingi perseroan Anda.'
+                        : 'Sewa pengacara siaga membela perseroan otomatis jika digugat saat Anda tidak online.',
+                    style: TextStyle(
+                      color: hasRetainer ? const Color(0xFF6EE7B7) : const Color(0xFF94A3B8),
+                      fontSize: 9.5,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(
+              Icons.arrow_forward_ios_rounded,
+              color: hasRetainer ? const Color(0xFF34D399) : const Color(0xFF6366F1),
+              size: 13,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Modal Kontrak Kuasa Hukum Tetap (Retainer Law Firm 24/7)
+  void _showRetainerLawyerModal(
+    BuildContext context,
+    GameProvider provider,
+    UserModel user,
+    Map<String, dynamic> activeEntity,
+  ) {
+    int selectedDurationDays = 7;
+    int selectedLawyerIdx = 1;
+    String paymentSource = 'PERSONAL';
+    bool isSubmitting = false;
+
+    final defaultLawyers = [
+      {
+        'id': 'lawyer-azzahra',
+        'name': 'Advokat Puja Azzahra, S.H., LL.M.',
+        'firm': 'Azzahra & Partners Law Firm',
+        'badge': 'POPULER (80% WIN)',
+        'badgeColor': const Color(0xFF10B981),
+        'fee7d': 150000000.0,
+        'fee30d': 500000000.0,
+        'desc': 'Litigasi Niaga & Perlindungan Investor. Cepat memulihkan reputasi perseroan saat digugat fiktif.',
+      },
+      {
+        'id': 'lawyer-bintang',
+        'name': 'Advokat Senior Zahra Bintang, S.H., M.H.',
+        'firm': 'Bintang Law Office & Associates',
+        'badge': 'PRESTISI (88.9% WIN)',
+        'badgeColor': const Color(0xFF38BDF8),
+        'fee7d': 450000000.0,
+        'fee30d': 1500000000.0,
+        'desc': 'Sengketa Pasar Modal & Sita Jaminan. Menolak keras segala upaya hostile takeover dan verstek.',
+      },
+      {
+        'id': 'lawyer-sagala',
+        'name': 'Advokat Khairul Sagala, S.H., C.L.A.',
+        'firm': 'Sagala & Partners (Sultan Tier)',
+        'badge': 'SULTAN TIER (96.7% WIN)',
+        'badgeColor': const Color(0xFFF59E0B),
+        'fee7d': 1500000000.0,
+        'fee30d': 5000000000.0,
+        'desc': 'Biro hukum konglomerat terkuat Federasi. Menggugurkan gugatan lawan dan balik menuntut ganti rugi maksimal.',
+      },
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (modalCtx, setModalState) {
+            final activeLawyer = defaultLawyers[selectedLawyerIdx];
+            final double fee = selectedDurationDays == 30
+                ? (activeLawyer['fee30d'] as double)
+                : (activeLawyer['fee7d'] as double);
+
+            final double availableCash = paymentSource == 'COMPANY'
+                ? user.companyBalanceIb
+                : user.balanceIb;
+            final bool canAfford = availableCash >= fee;
+
+            return Container(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.90,
+              ),
+              decoration: const BoxDecoration(
+                color: Color(0xFF0B1322),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                border: Border(
+                  top: BorderSide(color: Color(0xFF38BDF8), width: 2),
+                ),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Center(
+                    child: Container(
+                      margin: const EdgeInsets.only(top: 10, bottom: 8),
+                      width: 44,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.white24,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(9),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF38BDF8).withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.4)),
+                          ),
+                          child: const Icon(Icons.shield_rounded, color: Color(0xFF38BDF8), size: 22),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'KONTRAK KUASA HUKUM TETAP',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                              Text(
+                                'Perlindungan Retainer 24/7 Siaga Saat Offline di PNAF',
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.6),
+                                  fontSize: 10.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(color: Color(0xFF1E293B), height: 1),
+
+                  Flexible(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (user.hasActiveRetainer) ...[
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              margin: const EdgeInsets.only(bottom: 16),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.4)),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.check_circle_rounded, color: Color(0xFF10B981), size: 18),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        const Text(
+                                          'KONTRAK AKTIF TERDAFTAR',
+                                          style: TextStyle(color: Color(0xFF34D399), fontSize: 10, fontWeight: FontWeight.bold),
+                                        ),
+                                        Text(
+                                          '${user.retainerLawyerName}',
+                                          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                                        ),
+                                        const Text(
+                                          'Perseroan Anda kebal putusan verstek jika digugat saat Anda sedang offline.',
+                                          style: TextStyle(color: Color(0xFF94A3B8), fontSize: 9.5),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0F172A),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: const Color(0xFF1E293B)),
+                            ),
+                            child: const Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(Icons.info_outline_rounded, color: Color(0xFF38BDF8), size: 14),
+                                    SizedBox(width: 6),
+                                    Text(
+                                      'KEUNTUNGAN KONTRAK RETAINER:',
+                                      style: TextStyle(color: Color(0xFF38BDF8), fontSize: 10, fontWeight: FontWeight.bold),
+                                    ),
+                                  ],
+                                ),
+                                SizedBox(height: 6),
+                                Text(
+                                  '• Mencegah Kalah Otomatis (Verstek): Jika digugat saat offline, pengacara Anda langsung hadir di persidangan PNAF membacakan eksepsi pembelaan.\n• Gugatan Balik Rekonvensi: Jika gugatan lawan mengada-ada, advokat Anda menuntut ganti rugi pencemaran nama baik untuk Kas Anda.\n• Jam Terbang & Reputasi: Semakin sering advokat menang, tarif dan win-rate mereka semakin naik prestisius!',
+                                  style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 10, height: 1.4),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+
+                          const Text(
+                            'PILIH DURASI PERLINDUNGAN:',
+                            style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: InkWell(
+                                  onTap: () => setModalState(() => selectedDurationDays = 7),
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(vertical: 10),
+                                    decoration: BoxDecoration(
+                                      color: selectedDurationDays == 7
+                                          ? const Color(0xFF0284C7).withValues(alpha: 0.25)
+                                          : const Color(0xFF0F172A),
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(
+                                        color: selectedDurationDays == 7
+                                            ? const Color(0xFF38BDF8)
+                                            : const Color(0xFF1E293B),
+                                        width: selectedDurationDays == 7 ? 1.5 : 1,
+                                      ),
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        '7 Hari Standby',
+                                        style: TextStyle(
+                                          color: selectedDurationDays == 7 ? Colors.white : const Color(0xFF94A3B8),
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: InkWell(
+                                  onTap: () => setModalState(() => selectedDurationDays = 30),
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(vertical: 10),
+                                    decoration: BoxDecoration(
+                                      color: selectedDurationDays == 30
+                                          ? const Color(0xFF0284C7).withValues(alpha: 0.25)
+                                          : const Color(0xFF0F172A),
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(
+                                        color: selectedDurationDays == 30
+                                            ? const Color(0xFF38BDF8)
+                                            : const Color(0xFF1E293B),
+                                        width: selectedDurationDays == 30 ? 1.5 : 1,
+                                      ),
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        '30 Hari Sultan Protection',
+                                        style: TextStyle(
+                                          color: selectedDurationDays == 30 ? Colors.white : const Color(0xFF94A3B8),
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+
+                          const Text(
+                            'PILIH KANTOR HUKUM:',
+                            style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 8),
+                          ...defaultLawyers.asMap().entries.map((entry) {
+                            final idx = entry.key;
+                            final l = entry.value;
+                            final isSel = selectedLawyerIdx == idx;
+                            final double lFee = selectedDurationDays == 30
+                                ? (l['fee30d'] as double)
+                                : (l['fee7d'] as double);
+
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              decoration: BoxDecoration(
+                                color: isSel ? const Color(0xFF0284C7).withValues(alpha: 0.15) : const Color(0xFF0F172A),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: isSel ? const Color(0xFF38BDF8) : const Color(0xFF1E293B),
+                                  width: isSel ? 1.5 : 1,
+                                ),
+                              ),
+                              child: ListTile(
+                                dense: true,
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                                leading: Icon(
+                                  isSel ? Icons.verified_rounded : Icons.person_outline_rounded,
+                                  color: isSel ? const Color(0xFF38BDF8) : const Color(0xFF64748B),
+                                  size: 20,
+                                ),
+                                title: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        l['name'] as String,
+                                        style: TextStyle(
+                                          color: isSel ? Colors.white : const Color(0xFFCBD5E1),
+                                          fontSize: 11.5,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: (l['badgeColor'] as Color).withValues(alpha: 0.15),
+                                        borderRadius: BorderRadius.circular(5),
+                                        border: Border.all(color: (l['badgeColor'] as Color).withValues(alpha: 0.4)),
+                                      ),
+                                      child: Text(
+                                        l['badge'] as String,
+                                        style: TextStyle(
+                                          color: l['badgeColor'] as Color,
+                                          fontSize: 8.5,
+                                          fontWeight: FontWeight.w900,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                subtitle: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(l['firm'] as String, style: const TextStyle(color: Color(0xFF64748B), fontSize: 10)),
+                                    const SizedBox(height: 2),
+                                    Text(l['desc'] as String, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 9.5)),
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      'Retainer: ${CurrencyFormatter.formatFull(lFee)}',
+                                      style: TextStyle(
+                                        color: availableCash >= lFee ? const Color(0xFF34D399) : const Color(0xFFEF4444),
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                onTap: () => setModalState(() => selectedLawyerIdx = idx),
+                              ),
+                            );
+                          }),
+                          const SizedBox(height: 12),
+
+                          const Text(
+                            'SUMBER PEMBAYARAN RETENSI:',
+                            style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10.5, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: InkWell(
+                                  onTap: () => setModalState(() => paymentSource = 'PERSONAL'),
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: paymentSource == 'PERSONAL'
+                                          ? const Color(0xFF0284C7).withValues(alpha: 0.20)
+                                          : const Color(0xFF0F172A),
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(
+                                        color: paymentSource == 'PERSONAL' ? const Color(0xFF38BDF8) : const Color(0xFF1E293B),
+                                      ),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        const Text('Kas Pribadi', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                                        Text(CurrencyFormatter.formatFull(user.balanceIb), style: const TextStyle(color: Color(0xFF34D399), fontSize: 10)),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: InkWell(
+                                  onTap: () => setModalState(() => paymentSource = 'COMPANY'),
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: paymentSource == 'COMPANY'
+                                          ? const Color(0xFF0284C7).withValues(alpha: 0.20)
+                                          : const Color(0xFF0F172A),
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(
+                                        color: paymentSource == 'COMPANY' ? const Color(0xFF38BDF8) : const Color(0xFF1E293B),
+                                      ),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        const Text('Kas Perusahaan (PT)', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                                        Text(CurrencyFormatter.formatFull(user.companyBalanceIb), style: const TextStyle(color: Color(0xFF34D399), fontSize: 10)),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 18),
+
+                          SizedBox(
+                            width: double.infinity,
+                            height: 44,
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: canAfford ? const Color(0xFF0284C7) : const Color(0xFF334155),
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                elevation: 0,
+                              ),
+                              onPressed: (!canAfford || isSubmitting)
+                                  ? null
+                                  : () async {
+                                      setModalState(() => isSubmitting = true);
+                                      final res = await ApiService.hireRetainerLawyer(
+                                        userId: user.id,
+                                        lawyerId: activeLawyer['id'] as String,
+                                        durationDays: selectedDurationDays,
+                                        paymentSource: paymentSource,
+                                      );
+                                      setModalState(() => isSubmitting = false);
+
+                                      if (!context.mounted) return;
+                                      if (res['error'] != null) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text('❌ ${res['error']}'),
+                                            backgroundColor: const Color(0xFFEF4444),
+                                          ),
+                                        );
+                                      } else {
+                                        Navigator.pop(ctx);
+                                        await provider.fetchUserData();
+                                        if (!context.mounted) return;
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text('🛡️ ${res['message'] ?? 'Kontrak Kuasa Hukum Tetap Aktif!'}'),
+                                            backgroundColor: const Color(0xFF10B981),
+                                            duration: const Duration(seconds: 4),
+                                          ),
+                                        );
+                                      }
+                                    },
+                              child: isSubmitting
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                    )
+                                  : Text(
+                                      canAfford
+                                          ? 'TANDATANGANI KONTRAK RETAINER (${CurrencyFormatter.formatFull(fee)})'
+                                          : 'SALDO TIDAK MENCUKUPI',
+                                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.4),
+                                    ),
                             ),
                           ),
                         ],

@@ -112,6 +112,25 @@ class MarketSimulationEngine {
     }
   }
 
+  forceNormalizeCompanyPrice(companyId, targetPrice, { isSuspended = undefined, isSeized = undefined } = {}) {
+    const comp = this.liveCompanyMap.get(companyId);
+    if (comp) {
+      comp.current_price = targetPrice;
+      comp.prev_close = targetPrice;
+      comp.base_price = targetPrice;
+      comp.daily_high = targetPrice;
+      comp.daily_low = targetPrice;
+      comp.price_change_pct = 0.0;
+      comp.uma_flag = 0;
+      comp.uma_direction = null;
+      if (isSuspended !== undefined) comp.status = isSuspended ? 'SUSPENDED' : (comp.status === 'SUSPENDED' ? 'HEALTHY' : comp.status);
+      if (isSeized !== undefined) comp.is_seized = isSeized ? 1 : 0;
+    }
+    this.pendingPriceUpdates.delete(companyId);
+    this.stockTrends.delete(companyId);
+    console.log(`⚡ [Simulation] In-memory price force-normalized for company ${companyId} -> IB ${targetPrice}`);
+  }
+
   setStockTrend(symbolOrId, trendBoost = 0) {
     if (!symbolOrId || !trendBoost) return;
     const current = this.stockTrends.get(symbolOrId);

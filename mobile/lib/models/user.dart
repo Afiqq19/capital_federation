@@ -28,12 +28,21 @@ class UserModel {
   final bool emailVerified;
   final String? role; // 'PLAYER', 'VIP', 'ADMIN'
   final String? creditTier; // 'STANDARD', 'BRONZE', 'SILVER', 'GOLD', 'PLATINUM'
+  final String? retainerLawyerName;
+  final String? retainerLawyerUntil;
 
   String get effectiveRole => role ?? 'PLAYER';
   String get effectiveCreditTier => creditTier ?? 'STANDARD';
 
   bool get isVip => (role ?? 'PLAYER').toUpperCase() == 'VIP';
   bool get isAdmin => (role ?? 'PLAYER').toUpperCase() == 'ADMIN';
+
+  bool get hasActiveRetainer {
+    if (retainerLawyerName == null || retainerLawyerName!.isEmpty) return false;
+    if (retainerLawyerUntil == null || retainerLawyerUntil!.isEmpty) return false;
+    final until = DateTime.tryParse(retainerLawyerUntil!);
+    return until != null && until.isAfter(DateTime.now());
+  }
 
   UserModel({
     required this.id,
@@ -65,6 +74,8 @@ class UserModel {
     this.emailVerified = false,
     this.role = 'PLAYER',
     this.creditTier = 'STANDARD',
+    this.retainerLawyerName,
+    this.retainerLawyerUntil,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -100,6 +111,8 @@ class UserModel {
       ptFounderName: json['pt_founder_name'] ?? json['ptFounderName'] ?? '',
       role: json['role'] ?? 'PLAYER',
       creditTier: json['credit_tier'] ?? json['creditTier'] ?? 'STANDARD',
+      retainerLawyerName: json['retainer_lawyer_name'] ?? json['retainerLawyerName'],
+      retainerLawyerUntil: json['retainer_lawyer_until'] ?? json['retainerLawyerUntil'],
     );
   }
 

@@ -304,6 +304,16 @@ export function AdminProvider({ children }) {
           const r = await adminApi.deleteCompany(companyId);
           return { message: r.message || 'Perusahaan dan seluruh saham investor berhasil dihapus permanen' };
         }, { refresh: [refreshCompanies, refreshOverview, refreshUsers] }),
+      normalizeCompanyPrice: (payload) =>
+        run(async () => {
+          const r = await adminApi.normalizeCompanyPrice(payload);
+          return { message: r.message || 'Harga emiten berhasil dinormalisasi ke nilai fundamental wajar!' };
+        }, { refresh: [refreshCompanies, refreshOverview] }),
+      batchNormalizeOverpriced: (payload) =>
+        run(async () => {
+          const r = await adminApi.batchNormalizeOverpriced(payload);
+          return { message: r.message || 'Operasi stabilisasi bursa massal berhasil dieksekusi!' };
+        }, { refresh: [refreshCompanies, refreshOverview] }),
       rolloverMarket: () =>
         run(async () => {
           const r = await adminApi.rolloverMarket();

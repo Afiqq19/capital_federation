@@ -243,6 +243,44 @@ async function dispatchInboxNotification(io, { userId, senderName, category, tit
 }
 
 /**
+ * Memperbarui jam terbang dan catatan kemenangan advokat secara dinamis.
+ * Kemenangan meningkatkan reputasi dan menaikkan tarif jasa secara otomatis!
+ */
+async function recordLawyerCaseOutcome(lawyerName, didWin) {
+  if (!lawyerName) return;
+  try {
+    let lawyerId = null;
+    if (lawyerName.includes('Sagala')) lawyerId = 'lawyer-sagala';
+    else if (lawyerName.includes('Bintang')) lawyerId = 'lawyer-bintang';
+    else if (lawyerName.includes('Azzahra')) lawyerId = 'lawyer-azzahra';
+
+    if (lawyerId) {
+      const row = await query.get('SELECT * FROM lawyer_profiles WHERE id = ?', [lawyerId]);
+      if (row) {
+        const newHandled = (row.cases_handled || 0) + 1;
+        const newWon = (row.cases_won || 0) + (didWin ? 1 : 0);
+        const newWinRate = Math.round((newWon / newHandled) * 1000) / 10;
+        // Jam terbang & kemenangan menaikkan prestige fee secara dinamis (+1.5% per kemenangan)
+        const prestigeFactor = Math.min(3.0, 1 + (newWon * 0.015));
+        const newCurrentFee = Math.round((row.base_fee_ib || 50000000) * prestigeFactor);
+        const newRetainer7d = Math.round((row.retainer_fee_7d_ib || 150000000) * prestigeFactor);
+        const newRetainer30d = Math.round((row.retainer_fee_30d_ib || 500000000) * prestigeFactor);
+
+        await query.run(
+          `UPDATE lawyer_profiles 
+           SET cases_handled = ?, cases_won = ?, win_rate = ?, current_fee_ib = ?, retainer_fee_7d_ib = ?, retainer_fee_30d_ib = ?
+           WHERE id = ?`,
+          [newHandled, newWon, newWinRate, newCurrentFee, newRetainer7d, newRetainer30d, lawyerId]
+        );
+        console.log(`⚖️ [Dynamic Lawyer] ${row.name} outcome: Win=${didWin}, Total=${newWon}/${newHandled} (${newWinRate}%), Fee=IB ${newCurrentFee.toLocaleString('id-ID')}`);
+      }
+    }
+  } catch (err) {
+    console.error('Error updating lawyer outcome:', err);
+  }
+}
+
+/**
  * Satu pintu eksekusi Ketuk Palu Putusan Pengadilan Niaga Federasi (PNAF)
  * Dipakai oleh:
  *  - Web Admin (/api/court/verdict & /api/court/room/verdict)
@@ -1166,6 +1204,31 @@ async function executeCourtVerdict(
     ]
   );
 
+  // Perbarui Rekor & Kemenangan Advokat Dinamis (Puja Azzahra, Zahra Bintang, Khairul Sagala)
+  const isPlaintiffWin = finalStatus === 'VERDICT_APPROVED' || finalType === 'APPROVED_PLAINTIFF_WIN';
+  const isDefendantWin = finalStatus === 'VERDICT_REJECTED' || finalType === 'GUGUR_DISMISSED';
+
+  if (c.lawyer_name) {
+    await recordLawyerCaseOutcome(c.lawyer_name, isPlaintiffWin);
+  }
+  if (c.defendant_lawyer_name) {
+    await recordLawyerCaseOutcome(c.defendant_lawyer_name, isDefendantWin);
+    if (c.defendant_user_id) {
+      await dispatchInboxNotification(io, {
+        userId: c.defendant_user_id,
+        senderName: c.defendant_lawyer_name,
+        category: 'COURT',
+        title: isDefendantWin 
+          ? `🛡️ Kemenangan Hukum: Gugatan Ditolak (${c.case_number})`
+          : `⚖️ Laporan Pembelaan Sidang PNAF (${c.case_number})`,
+        message: isDefendantWin
+          ? `Kuasa Hukum Tetap Anda (${c.defendant_lawyer_name}) sukses memenangkan perkara melawan ${c.plaintiff_name} di persidangan PNAF saat Anda sedang offline! Tuduhan lawan ditolak dan reputasi perseroan Anda terlindungi.`
+          : `Kuasa Hukum Tetap Anda (${c.defendant_lawyer_name}) telah hadir mendampingi perseroan Anda di persidangan PNAF melawan ${c.plaintiff_name}.`,
+        referenceId: caseId
+      });
+    }
+  }
+
   // Catat amar putusan resmi ke ruang chat sidang
   await appendCourtChat(io, {
     caseId,
@@ -1535,6 +1598,41 @@ class CourtJudgeBotService {
       }
     }
 
+    // 0B. Tergugat Pemain Asli Sedang Offline: Periksa Kontrak Kuasa Hukum Tetap (Retainer Law Firm 24/7)
+    if (!defPresent && !isBotOrInstitutionalDefendant && c.defendant_user_id) {
+      const defUser = await query.get(
+        'SELECT id, username, retainer_lawyer_name, retainer_lawyer_until FROM users WHERE id = ?',
+        [c.defendant_user_id]
+      );
+      const nowIso = new Date().toISOString();
+      if (defUser && defUser.retainer_lawyer_name && defUser.retainer_lawyer_until && defUser.retainer_lawyer_until > nowIso) {
+        defPresent = true;
+        const retainerLawyer = defUser.retainer_lawyer_name;
+        await query.run('UPDATE court_cases SET defendant_present = 1, defendant_lawyer_name = ? WHERE id = ?', [retainerLawyer, c.id]);
+        c.defendant_lawyer_name = retainerLawyer;
+        c.defendant_present = 1;
+
+        let retainerSpeech = '';
+        if (retainerLawyer.includes('Sagala')) {
+          retainerSpeech = `🛡️ [Advokat Khairul Sagala, S.H., C.L.A. - Sagala & Partners Sultan Tier (Kuasa Hukum Tetap Tergugat)]: "Interupsi Yang Mulia Majelis Hakim PNAF! Berdasarkan Surat Kuasa Khusus Retainer 24/7 No. RET/SGL/${c.id.slice(0, 6)}, kami berdiri mewakili Tergugat (${c.defendant_name}). Klien kami tidak mangkir, melainkan menyerahkan seluruh hak pembelaan hukum kepada kami! Kami memeriksa seluruh berkas gugatan Penggugat (${c.plaintiff_name}) dan menyatakan dalil ini cacat formil, manipulatif, dan mengada-ada! Kami menolak segala bentuk sita jaminan dan mendesak Majelis menolak gugatan seketika serta menghukum Penggugat membayar kerugian materiil dan immateriil!"`;
+        } else if (retainerLawyer.includes('Bintang')) {
+          retainerSpeech = `🛡️ [Advokat Senior Zahra Bintang, S.H., M.H. - Bintang Law Office (Kuasa Hukum Tetap Tergugat)]: "Yang Mulia Majelis Hakim PNAF yang terhormat! Kami hadir mewakili Tergugat (${c.defendant_name}) berdasarkan Kontrak Kuasa Hukum Tetap. Tidak ada dasar hukum untuk menjatuhkan putusan verstek! Klien kami beroperasi dengan kepatuhan penuh. Seluruh bukti Penggugat tidak memenuhi syarat materiel pembuktian perdata bursa. Kami mohon putusan bebas dan pemulihan reputasi perseroan Tergugat!"`;
+        } else if (retainerLawyer.includes('Azzahra')) {
+          retainerSpeech = `🛡️ [Advokat Puja Azzahra, S.H., LL.M. - Azzahra & Partners (Kuasa Hukum Tetap Tergugat)]: "Izin Yang Mulia Majelis Hakim PNAF! Selaku Kuasa Hukum Retainer Tergugat (${c.defendant_name}), kami menyatakan hadir mendampingi perkara. Kami telah menelaah audit transaksi dan menyatakan tuduhan Penggugat tidak berdasar. Kami memohon keadilan ditegakkan dengan menolak gugatan Penggugat demi asas kepastian hukum bisnis!"`;
+        } else {
+          retainerSpeech = `🛡️ [Advokat ${retainerLawyer} - Kuasa Hukum Retainer Tergugat]: "Yang Mulia Majelis Hakim PNAF, kami hadir mewakili Tergugat (${c.defendant_name}). Klien kami menolak seluruh dalil Penggugat dan memohon Majelis menolak gugatan ini!"`;
+        }
+
+        await appendCourtChat(this.io, {
+          caseId: c.id,
+          senderName: retainerLawyer,
+          senderRole: 'TERGUGAT',
+          senderUserId: c.defendant_user_id || 'counsel-defense',
+          message: retainerSpeech,
+        });
+      }
+    }
+
     // 1. Pledoi & Orasi Pembuka Penggugat (Advokat Resmi atau Penggugat Mandiri)
     if (c.lawyer_name) {
       let lawyerSpeech = '';
@@ -1893,6 +1991,47 @@ class CourtJudgeBotService {
         }
       } else {
         verdictNotes += ` (Didampingi Kuasa Hukum: ${c.lawyer_name})`;
+      }
+    }
+
+    // Evaluasi Efek Pengacara Tergugat (Retainer Law Firm 24/7 atau Kuasa Terpilih)
+    if (c.defendant_lawyer_name && !verdictNotes.includes('NE BIS IN IDEM')) {
+      const defIsSagala = c.defendant_lawyer_name.includes('Sagala');
+      const defIsBintang = c.defendant_lawyer_name.includes('Bintang');
+      const defPower = defIsSagala ? 96 : (defIsBintang ? 88 : 80);
+
+      if (!c.lawyer_name) {
+        // Penggugat Mandiri Tanpa Pengacara Lawan Pengacara Top Tergugat: Pertahanan sangat kokoh!
+        const defRoll = Math.random();
+        const defThreshold = defIsSagala ? 0.95 : (defIsBintang ? 0.85 : 0.75);
+        if (defRoll < defThreshold) {
+          verdictStatus = 'VERDICT_REJECTED';
+          verdictType = 'GUGUR_DISMISSED';
+          const defamationFine = Math.max(25000000, Math.min(250000000, Math.round(rawClaim * 0.15)));
+          customAwardedAmount = 0;
+          verdictNotes = `🛡️ GUGATAN DITOLAK PENUH & PERLINDUNGAN HUKUM RETENSI: Majelis Hakim PNAF mengabulkan seluruh eksepsi Kuasa Hukum Tergugat (${c.defendant_lawyer_name}). Tuduhan Penggugat (${c.plaintiff_name}) dinyatakan tidak berdasar secara materiel! Menghukum Penggugat membayar denda pencemaran nama baik sebesar IB ${defamationFine.toLocaleString('id-ID')} kepada Tergugat.`;
+        }
+      } else {
+        // Duel Advokat Tingkat Tinggi (Penggugat vs Tergugat)
+        const plIsSagala = c.lawyer_name.includes('Sagala');
+        const plIsBintang = c.lawyer_name.includes('Bintang');
+        const plPower = plIsSagala ? 96 : (plIsBintang ? 88 : 80);
+
+        const pPlWin = plPower / (plPower + defPower);
+        const clashRoll = Math.random();
+
+        if (clashRoll < pPlWin) {
+          verdictStatus = 'VERDICT_APPROVED';
+          verdictType = 'APPROVED_PLAINTIFF_WIN';
+          customAwardedAmount = rawClaim > 0 ? rawClaim : 50000000;
+          verdictNotes = `✅ PERKARA DIMENANGKAN PENGGUGAT DALAM DUEL ADVOKAT: Majelis Hakim PNAF mengabulkan dalil Kuasa Hukum Penggugat (${c.lawyer_name}) atas tangkisan Kuasa Hukum Tergugat (${c.defendant_lawyer_name}). Tergugat (${c.defendant_name}) dihukum membayar ganti rugi IB ${customAwardedAmount.toLocaleString('id-ID')}.`;
+        } else {
+          verdictStatus = 'VERDICT_REJECTED';
+          verdictType = 'GUGUR_DISMISSED';
+          customAwardedAmount = 0;
+          const defamationFine = Math.max(20000000, Math.min(150000000, Math.round(rawClaim * 0.10)));
+          verdictNotes = `🛡️ GUGATAN DITOLAK DALAM DUEL ADVOKAT: Majelis Hakim PNAF memenangkan pembelaan Kuasa Hukum Tergugat (${c.defendant_lawyer_name}) atas tuntutan Kuasa Hukum Penggugat (${c.lawyer_name}). Seluruh eksepsi Tergugat diterima dan nama baik perseroan dipulihkan (Penggugat dibebankan biaya perkara IB ${defamationFine.toLocaleString('id-ID')})!`;
+        }
       }
     }
 

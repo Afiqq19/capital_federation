@@ -28,6 +28,8 @@ export const adminApi = {
   liftSuspension: (companyId) => request('/api/admin/suspension/lift', { method: 'POST', body: { companyId } }),
   rolloverMarket: () => request('/api/admin/market/rollover', { method: 'POST' }),
   deleteCompany: (companyId) => request(`/api/admin/companies/${companyId}`, { method: 'DELETE' }),
+  normalizeCompanyPrice: (payload) => request('/api/admin/companies/normalize-price', { method: 'POST', body: payload }),
+  batchNormalizeOverpriced: (payload) => request('/api/admin/companies/batch-normalize', { method: 'POST', body: payload }),
 
   // ---- Pemain ----
   toggleBan: (userId) => request(`/api/admin/users/${userId}/ban`, { method: 'POST' }),
