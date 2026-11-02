@@ -213,79 +213,102 @@ export default function PublicDownloadLandingPage() {
     return true;
   }).slice(0, 24);
 
+  // Doubled ticker list for continuous endless smooth marquee (running to the left)
+  const tickerStocks = stockList.length > 0 ? stockList.slice(0, 30) : fallbackStocks;
+  const doubledTicker = [...tickerStocks, ...tickerStocks];
+
   return (
     <div className="min-h-screen bg-[#060913] text-slate-100 font-sans selection:bg-amber-400 selection:text-slate-950">
-      {/* Live Stock Ticker Ribbon */}
-      {topStocks.length > 0 && (
-        <div className="bg-[#0A0F1E] border-b border-slate-800/80 py-2 px-4 overflow-x-auto whitespace-nowrap text-xs">
-          <div className="max-w-7xl mx-auto flex items-center gap-6">
-            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 font-bold border border-emerald-500/30 text-[11px]">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-              BURSA CFX LIVE
-            </span>
-            {topStocks.map((s) => {
-              const change = s.base_price
-                ? (((s.current_price - s.base_price) / s.base_price) * 100).toFixed(1)
-                : '0.0';
-              const isUp = Number(change) >= 0;
+      {/* Live Running Stock Ticker Ribbon (Marquee Berjalan ke Kiri) */}
+      <div className="bg-[#070b16] border-b border-slate-800/80 py-1.5 relative overflow-hidden select-none">
+        {/* Pinned Left Badge */}
+        <div className="absolute left-0 top-0 bottom-0 z-20 flex items-center bg-[#070b16] px-3 sm:px-4 border-r border-slate-800/80 shadow-[4px_0_12px_rgba(0,0,0,0.7)]">
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 font-bold border border-emerald-500/30 text-[10.5px] font-mono whitespace-nowrap">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+            CFX LIVE
+          </span>
+        </div>
+
+        {/* Fade Edge Gradients */}
+        <div className="pointer-events-none absolute left-28 sm:left-32 top-0 bottom-0 w-8 bg-gradient-to-r from-[#070b16] to-transparent z-10" />
+        <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-16 bg-gradient-to-l from-[#070b16] to-transparent z-10" />
+
+        {/* Infinite Moving Marquee Track */}
+        <div className="pl-32 sm:pl-36 overflow-hidden">
+          <div className="animate-ticker-marquee flex items-center gap-4 sm:gap-6">
+            {doubledTicker.map((s, idx) => {
+              const change = s.pct !== undefined ? s.pct.toFixed(1) : '0.0';
+              const isUp = Number(change) > 0;
+              const isDown = Number(change) < 0;
               return (
-                <div key={s.id || s.symbol} className="inline-flex items-center gap-2 font-mono text-[11.5px]">
+                <div
+                  key={`${s.symbol}-${idx}`}
+                  className="inline-flex items-center gap-2 font-mono text-[11px] sm:text-xs whitespace-nowrap px-2.5 py-1 rounded-lg bg-slate-900/60 border border-slate-800 hover:border-slate-700 hover:bg-slate-800/80 transition cursor-default shadow-sm"
+                >
                   <span className="font-black text-sky-400">{s.symbol}</span>
                   <span className="text-slate-200 font-bold">
-                    {Number(s.current_price || 0).toLocaleString('id-ID')}
+                    {Number(s.cur || s.current_price || 0).toLocaleString('id-ID')}
                   </span>
-                  <span className={isUp ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
-                    {isUp ? `+${change}%` : `${change}%`}
+                  <span
+                    className={`font-black flex items-center text-[10.5px] ${
+                      isUp ? 'text-emerald-400' : isDown ? 'text-rose-400' : 'text-amber-400'
+                    }`}
+                  >
+                    {isUp ? `▲ +${change}%` : isDown ? `▼ ${change}%` : `0.0%`}
                   </span>
                 </div>
               );
             })}
           </div>
         </div>
-      )}
+      </div>
 
-      {/* Top Navigation */}
-      <header className="sticky top-0 z-40 bg-[#060913]/90 backdrop-blur-xl border-b border-slate-800/80">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      {/* Top Navigation Bar */}
+      <header className="sticky top-0 z-40 bg-[#060913]/95 backdrop-blur-xl border-b border-slate-800/80 shadow-lg shadow-black/20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+          {/* Logo & Brand Identity */}
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 via-amber-500 to-amber-600 flex items-center justify-center shadow-lg shadow-amber-500/25 text-slate-950 font-black text-base">
-              CF
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 via-amber-500 to-amber-600 p-[1.5px] shadow-lg shadow-amber-500/20 shrink-0">
+              <div className="w-full h-full rounded-[10px] bg-slate-950 flex items-center justify-center">
+                <span className="font-black text-amber-400 text-sm tracking-wider">CF</span>
+              </div>
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-black text-base tracking-tight text-white">
+                <span className="font-black text-sm sm:text-base tracking-tight text-white whitespace-nowrap">
                   CAPITAL FEDERATION
                 </span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 font-bold">
+                <span className="text-[9.5px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 font-bold whitespace-nowrap">
                   v{versionInfo.version} RESMI
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400 hidden sm:block">
-                Simulasi Bursa Saham, E-IPO & Konglomerasi Finansial Real-Time
+              <p className="text-[10.5px] text-slate-400 hidden lg:block tracking-tight">
+                Simulasi Bursa Saham, E-IPO &amp; Konglomerasi Finansial Real-Time
               </p>
             </div>
           </div>
 
-          <nav className="hidden md:flex items-center gap-6 text-xs font-bold text-slate-300">
+          {/* Navigation Links (Pill-Styled & Ultra-Clean) */}
+          <nav className="hidden md:flex items-center gap-1 lg:gap-2 text-xs font-bold">
             <button
               type="button"
               onClick={() => handleNavClick('tentang', '/tentang')}
-              className="hover:text-amber-400 transition cursor-pointer bg-transparent border-0 p-0 text-slate-300 font-bold text-xs"
+              className="px-3 py-1.5 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800/60 transition cursor-pointer bg-transparent border-0 font-bold text-xs"
             >
               Tentang Game
             </button>
             <button
               type="button"
               onClick={() => handleNavClick('trading-wall', '/bursa')}
-              className="hover:text-emerald-300 transition cursor-pointer bg-transparent border-0 p-0 text-emerald-400 font-black text-xs flex items-center gap-1.5"
+              className="px-3 py-1.5 rounded-xl text-emerald-300 hover:text-emerald-200 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 font-black text-xs flex items-center gap-1.5 transition cursor-pointer"
             >
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              Layar Bursa CFX (Live Wall)
+              Layar Bursa (Live Wall)
             </button>
             <button
               type="button"
               onClick={() => handleNavClick('peringkat', '/peringkat')}
-              className="hover:text-amber-300 transition cursor-pointer bg-transparent border-0 p-0 text-amber-300 font-black text-xs flex items-center gap-1.5"
+              className="px-3 py-1.5 rounded-xl text-amber-300 hover:text-amber-200 hover:bg-amber-500/10 transition cursor-pointer bg-transparent border-0 font-black text-xs flex items-center gap-1.5"
             >
               <Crown size={13} className="text-amber-400" />
               Top 12 Naga
@@ -293,25 +316,26 @@ export default function PublicDownloadLandingPage() {
             <button
               type="button"
               onClick={() => handleNavClick('fitur', '/fitur')}
-              className="hover:text-amber-400 transition cursor-pointer bg-transparent border-0 p-0 text-slate-300 font-bold text-xs"
+              className="px-3 py-1.5 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800/60 transition cursor-pointer bg-transparent border-0 font-bold text-xs"
             >
               Fitur Utama
             </button>
             <button
               type="button"
               onClick={() => handleNavClick('spesifikasi', '/spesifikasi')}
-              className="hover:text-amber-400 transition cursor-pointer bg-transparent border-0 p-0 text-slate-300 font-bold text-xs"
+              className="px-3 py-1.5 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800/60 transition cursor-pointer bg-transparent border-0 font-bold text-xs whitespace-nowrap"
             >
-              Sertifikasi &amp; Spesifikasi HP
+              Spesifikasi HP
             </button>
           </nav>
 
+          {/* Direct CTA Download Button */}
           <button
             type="button"
             onClick={handleDownloadApk}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs shadow-lg shadow-emerald-500/20 transition cursor-pointer"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs shadow-lg shadow-emerald-500/25 transition transform hover:scale-[1.02] cursor-pointer shrink-0"
           >
-            <Download size={15} />
+            <Download size={14} className="stroke-[2.5]" />
             <span>DOWNLOAD APK</span>
           </button>
         </div>
