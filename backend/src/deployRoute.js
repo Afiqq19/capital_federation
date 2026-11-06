@@ -206,6 +206,19 @@ router.get('/rescue-panel', async (req, res) => {
         report.mss_ttyd_root_error = tErr.message;
     }
 
+    // 5. Test login ke mss-backend
+    try {
+        const lResp = await fetch('http://mss-backend:8000/api/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({ email: 'admin@mepal.local', password: 'password123' })
+        });
+        report.test_login_status = lResp.status;
+        report.test_login_data = await lResp.json();
+    } catch (lErr) {
+        report.test_login_error = lErr.message;
+    }
+
     res.json(report);
 });
 
