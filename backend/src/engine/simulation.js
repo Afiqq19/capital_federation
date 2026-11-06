@@ -417,6 +417,49 @@ class MarketSimulationEngine {
           "SELECT value FROM central_bank_settings WHERE key = 'economic_state'"
         );
         this.cachedEconomicState = (econRow?.value || 'NORMAL').toUpperCase();
+
+        const triggerModeRow = await query.get(
+          "SELECT value FROM central_bank_settings WHERE key = 'crisis_trigger_mode'"
+        );
+        const crisisTriggerMode = (triggerModeRow?.value || 'MANUAL').toUpperCase();
+
+        if (crisisTriggerMode === 'AUTO_DEFICIT') {
+          const thresholdRow = await query.get(
+            "SELECT value FROM central_bank_settings WHERE key = 'crisis_deficit_threshold_ib'"
+          );
+          const deficitThreshold = parseFloat(thresholdRow?.value || '-100000000000');
+          const treasuryLedger = await query.get(`
+            SELECT 
+              COALESCE(SUM(CASE WHEN transaction_type = 'TAX_COLLECTION' THEN amount ELSE 0 END), 0) as total_tax,
+              COALESCE(SUM(CASE WHEN transaction_type = 'BAILOUT' THEN amount ELSE 0 END), 0) as total_bailout
+            FROM government_treasury_ledger
+          `).catch(() => ({ total_tax: 0, total_bailout: 0 }));
+          const BASE_FEDERATION_TREASURY_RESERVE = 500000000000.0;
+          const currentTreasury = BASE_FEDERATION_TREASURY_RESERVE + (parseFloat(treasuryLedger.total_tax) - parseFloat(treasuryLedger.total_bailout));
+          if (currentTreasury <= deficitThreshold && this.cachedEconomicState !== 'CRISIS') {
+            await query.run("INSERT OR REPLACE INTO central_bank_settings (key, value) VALUES ('economic_state', 'CRISIS')");
+            this.cachedEconomicState = 'CRISIS';
+            await query.run(`
+              INSERT INTO news (id, title, content, published_at, category, impact)
+              VALUES (?, ?, ?, datetime('now'), 'MACRO', 'CRISIS')
+            `, [
+              'news-crisis-' + Date.now(),
+              '🚨 PERINGATAN FISKAL: Kas Negara Menembus Batas Defisit, Krisis Ekonomi Global Aktif!',
+              `Cadangan kas negara telah berada di bawah batas ambang (${deficitThreshold.toLocaleString()} IB). Sektor ekonomi memasuki fase krisis darurat moneter.`
+            ]).catch(() => {});
+          } else if (currentTreasury > 0 && this.cachedEconomicState === 'CRISIS') {
+            await query.run("INSERT OR REPLACE INTO central_bank_settings (key, value) VALUES ('economic_state', 'NORMAL')");
+            this.cachedEconomicState = 'NORMAL';
+            await query.run(`
+              INSERT INTO news (id, title, content, published_at, category, impact)
+              VALUES (?, ?, ?, datetime('now'), 'MACRO', 'POSITIVE')
+            `, [
+              'news-recovery-' + Date.now(),
+              '✅ PEMULIHAN FISKAL: Kas Negara Kembali Surplus, Krisis Ekonomi Selesai!',
+              'Cadangan kas negara telah kembali positif. Kebijakan moneter dan pasar modal kembali ke siklus normal.'
+            ]).catch(() => {});
+          }
+        }
       }
       const activeEvents = this.cachedActiveEvents || [];
       const recentNews = this.cachedRecentNews || [];

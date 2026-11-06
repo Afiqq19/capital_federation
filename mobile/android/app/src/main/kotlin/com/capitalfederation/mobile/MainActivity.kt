@@ -41,6 +41,30 @@ class MainActivity : FlutterActivity() {
                 } else {
                     result.error("INVALID_PATH", "Path APK kosong", null)
                 }
+            } else if (call.method == "downloadViaSystem") {
+                val url = call.argument<String>("url")
+                val title = call.argument<String>("title") ?: "Capital Federation Update"
+                val desc = call.argument<String>("description") ?: "Mengunduh APK pembaruan..."
+                val fileName = call.argument<String>("fileName") ?: "Capital-Federation-CFX.apk"
+                if (url != null) {
+                    try {
+                        val downloadManager = getSystemService(DOWNLOAD_SERVICE) as android.app.DownloadManager
+                        val uri = Uri.parse(url)
+                        val request = android.app.DownloadManager.Request(uri)
+                            .setTitle(title)
+                            .setDescription(desc)
+                            .setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                            .setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_DOWNLOADS, fileName)
+                            .setAllowedOverMetered(true)
+                            .setAllowedOverRoaming(true)
+                        val downloadId = downloadManager.enqueue(request)
+                        result.success(downloadId)
+                    } catch (e: Exception) {
+                        result.error("DOWNLOAD_ERROR", e.message, null)
+                    }
+                } else {
+                    result.error("INVALID_URL", "URL kosong", null)
+                }
             } else {
                 result.notImplemented()
             }

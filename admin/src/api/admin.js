@@ -46,6 +46,7 @@ export const adminApi = {
   // ---- Pengadilan Niaga Federasi (PNAF) & Makro Federasi ----
   federationMacro: () => request('/api/federation/macro'),
   setFederationMacroState: (state) => request('/api/federation/macro/state', { method: 'POST', body: { economicState: state, state } }),
+  setFederationMacroPolicy: (payload) => request('/api/federation/macro/policy', { method: 'POST', body: payload }),
   courtCases: () => request('/api/court/cases'),
   fileCourtCase: (payload) => request('/api/court/file-case', { method: 'POST', body: payload }),
   issueVerdict: (payload) => request('/api/court/verdict', { method: 'POST', body: payload }),

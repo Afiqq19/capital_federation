@@ -85,7 +85,7 @@ router.get('/updatecapital', async (req, res) => {
         // 5. Kirim Respon Visual
         const htmlResponse = `
             <div style="background:#0f172a; color:#f8fafc; font-family:system-ui,sans-serif; min-height:100vh; padding:30px;">
-                <h1 style="color:#22c55e; margin-bottom:5px;">✅ Berhasil Update Sistem Capital Federation (v2.0.3 Build 52)!</h1>
+                <h1 style="color:#22c55e; margin-bottom:5px;">✅ Berhasil Update Sistem Capital Federation (v2.0.4 Build 53)!</h1>
                 <p style="color:#94a3b8; margin-top:0;">Dieksekusi langsung di Server Linux • Status Pasar & Emiten Mutakhir</p>
                 
                 <h3 style="color:#38bdf8;">Laporan Log Eksekusi (${repoDir}):</h3>

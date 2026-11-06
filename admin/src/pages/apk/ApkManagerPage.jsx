@@ -10,20 +10,20 @@ export default function ApkManagerPage({ showToast }) {
   const adminCtx = useAdmin();
   const toastFn = showToast || adminCtx?.notify;
   const [apkInfo, setApkInfo] = useState({
-    version: '2.0.3',
-    buildNumber: 52,
-    fileSizeMb: '57.5 MB',
+    version: '2.0.4',
+    buildNumber: 53,
+    fileSizeMb: '57.6 MB',
     minAndroid: 'Android 10.0 (API Level 29 / Q)',
     hasHostedApk: true,
-    downloadCount: 652,
-    releaseNotes: 'v2.0.3 (Build 52): Deteksi online/aktif real-time konglomerat di Web Admin (indikator hijau/merah). Perbaikan tuntas status suspensi kadaluarsa & sinkronisasi statistik orderbook (Prev, ARA, ARB).'
+    downloadCount: 685,
+    releaseNotes: 'v2.0.4 (Build 53): Fitur unduh pembaruan di latar belakang (notifikasi atas layar HP Android). Sinkronisasi penuh Kas Negara & Cadangan Devisa (+IB 371 Miliar) serta kendali krisis fiskal otomatis/manual.'
   });
   const [loading, setLoading] = useState(true);
   const [savingMeta, setSavingMeta] = useState(false);
 
   // Form metadata state
-  const [version, setVersion] = useState('2.0.3');
-  const [buildNumber, setBuildNumber] = useState(52);
+  const [version, setVersion] = useState('2.0.4');
+  const [buildNumber, setBuildNumber] = useState(53);
   const [minAndroid, setMinAndroid] = useState('Android 10.0 (API 29 / Q)');
   const [externalUrl, setExternalUrl] = useState('');
   const [releaseNotesText, setReleaseNotesText] = useState('');
@@ -40,8 +40,8 @@ export default function ApkManagerPage({ showToast }) {
     try {
       const res = await request('/api/version');
       setApkInfo(res);
-      setVersion(res.version || '2.0.3');
-      setBuildNumber(res.buildNumber || 52);
+      setVersion(res.version || '2.0.4');
+      setBuildNumber(res.buildNumber || 53);
       setMinAndroid(res.minAndroid || 'Android 10.0 (API 29 / Q)');
       setExternalUrl(res.externalUrl || '');
       if (Array.isArray(res.releaseNotes)) {

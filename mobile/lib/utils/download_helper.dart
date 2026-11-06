@@ -89,6 +89,61 @@ class DownloadHelper {
     }
   }
 
+  /// Unduh APK di Latar Belakang (System DownloadManager dengan notifikasi status bar)
+  static Future<bool> startBackgroundDownload(
+    BuildContext context, {
+    String? newVer,
+    int? newBuild,
+    String? customUrl,
+  }) async {
+    if (kIsWeb || !Platform.isAndroid) {
+      openDownload(context: context, preferDirectApk: true);
+      return false;
+    }
+    final downloadUrl = customUrl ?? directApkUrl;
+    final ver = newVer ?? '2.0.3';
+    final fileName = 'Capital-Federation-v$ver-CFX.apk';
+
+    try {
+      final res = await installerChannel.invokeMethod('downloadViaSystem', {
+        'url': downloadUrl,
+        'title': 'Capital Federation v$ver (Build $newBuild)',
+        'description': 'Mengunduh APK pembaruan di latar belakang...',
+        'fileName': fileName,
+      });
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.downloading, color: Color(0xFFF59E0B), size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Pembaruan v$ver sedang diunduh di bar notifikasi atas layar HP Anda.',
+                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFF0F172A),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+      return res != null;
+    } catch (e) {
+      debugPrint('Background download error: $e');
+      if (context.mounted) {
+        openDownload(context: context, preferDirectApk: true);
+      }
+      return false;
+    }
+  }
+
   /// Unduh APK langsung di dalam aplikasi (In-App Direct Download) dan picu instalasi otomatis
   static Future<void> startInAppUpdate(
     BuildContext context, {
@@ -259,26 +314,49 @@ class DownloadHelper {
               const SizedBox(height: 20),
 
               // Action Buttons
-              // 1. In-App Direct Download & Install
+              // 1. Background Download with System Notification (Recommended)
               SizedBox(
                 width: double.infinity,
                 height: 44,
                 child: ElevatedButton.icon(
                   onPressed: () {
                     Navigator.pop(ctx);
-                    startInAppUpdate(context, newVer: newVer, newBuild: newBuild);
+                    startBackgroundDownload(context, newVer: newVer, newBuild: newBuild);
                   },
-                  icon: const Icon(Icons.bolt_rounded, size: 20),
+                  icon: const Icon(Icons.downloading_rounded, size: 20),
                   label: const Text(
-                    'UPDATE OTOMATIS SEKARANG (INSTAN)',
-                    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
+                    'UNDUH DI LATAR BELAKANG (NOTIFIKASI HP)',
+                    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11.5),
                   ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFF59E0B),
-                    foregroundColor: const Color(0xFF1E1502),
+                    backgroundColor: const Color(0xFF0284C7),
+                    foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    elevation: 6,
-                    shadowColor: const Color(0xFFF59E0B).withValues(alpha: 0.5),
+                    elevation: 5,
+                    shadowColor: const Color(0xFF0284C7).withValues(alpha: 0.4),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+
+              // 2. In-App Direct Download & Install
+              SizedBox(
+                width: double.infinity,
+                height: 40,
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    startInAppUpdate(context, newVer: newVer, newBuild: newBuild);
+                  },
+                  icon: const Icon(Icons.bolt_rounded, size: 18),
+                  label: const Text(
+                    'Update Langsung (Lihat Progress Bar)',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFFF59E0B),
+                    side: const BorderSide(color: Color(0xFFF59E0B)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                 ),
               ),
@@ -344,6 +422,8 @@ class _InAppUpdateProgressDialogState extends State<_InAppUpdateProgressDialog> 
   int _totalBytes = 0;
   bool _isDownloading = true;
   String? _errorMessage;
+  http.Client? _client;
+  bool _isCancelled = false;
 
   @override
   void initState() {
@@ -351,17 +431,25 @@ class _InAppUpdateProgressDialogState extends State<_InAppUpdateProgressDialog> 
     _startDownloadAndInstall();
   }
 
+  @override
+  void dispose() {
+    _isCancelled = true;
+    _client?.close();
+    super.dispose();
+  }
+
   Future<void> _startDownloadAndInstall() async {
     try {
-      final client = http.Client();
+      _client = http.Client();
       final request = http.Request('GET', Uri.parse(widget.downloadUrl));
-      final response = await client.send(request);
+      final response = await _client!.send(request);
 
       if (response.statusCode != 200) {
         throw Exception('Server mengembalikan kode status ${response.statusCode}');
       }
 
       final contentLength = response.contentLength ?? 0;
+      if (_isCancelled) return;
       setState(() {
         _totalBytes = contentLength;
         _isDownloading = true;
@@ -377,6 +465,10 @@ class _InAppUpdateProgressDialogState extends State<_InAppUpdateProgressDialog> 
       int received = 0;
 
       await for (final chunk in response.stream) {
+        if (_isCancelled) {
+          await sink.close();
+          return;
+        }
         sink.add(chunk);
         received += chunk.length;
         if (mounted) {
@@ -391,7 +483,7 @@ class _InAppUpdateProgressDialogState extends State<_InAppUpdateProgressDialog> 
 
       await sink.flush();
       await sink.close();
-      client.close();
+      _client?.close();
 
       if (!mounted) return;
 
@@ -535,11 +627,44 @@ class _InAppUpdateProgressDialogState extends State<_InAppUpdateProgressDialog> 
                 ],
               ),
               const SizedBox(height: 14),
-              if (_isDownloading)
+              if (_isDownloading) ...[
+                SizedBox(
+                  width: double.infinity,
+                  height: 38,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      _isCancelled = true;
+                      _client?.close();
+                      Navigator.of(context, rootNavigator: true).pop();
+                      DownloadHelper.startBackgroundDownload(
+                        context,
+                        newVer: widget.newVer,
+                        newBuild: widget.newBuild,
+                        customUrl: widget.downloadUrl,
+                      );
+                    },
+                    icon: const Icon(Icons.download_rounded, size: 16),
+                    label: const Text(
+                      'Unduh di Latar Belakang (Notifikasi HP)',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0284C7),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
                 TextButton(
-                  onPressed: () => Navigator.of(context, rootNavigator: true).pop(),
+                  onPressed: () {
+                    _isCancelled = true;
+                    _client?.close();
+                    Navigator.of(context, rootNavigator: true).pop();
+                  },
                   child: const Text('Batalkan', style: TextStyle(color: Color(0xFF64748B), fontSize: 11)),
                 ),
+              ],
             ],
           ],
         ),

@@ -3489,11 +3489,34 @@ app.get('/api/federation/macro', async (req, res) => {
       countryName: mapped.country_name || 'Republik Federasi Indigo',
       marketIndexName: mapped.market_index_name || 'IPMC (Indigo Prime Monetary & Capital Exchange)',
       economicState: mapped.economic_state || 'NORMAL',
+      crisisTriggerMode: mapped.crisis_trigger_mode || 'MANUAL',
+      crisisDeficitThresholdIb: parseFloat(mapped.crisis_deficit_threshold_ib || '-100000000000'),
       interestRate: parseFloat(mapped.interest_rate || '6.5'),
       inflationRate: mapped.economic_state === 'CRISIS' ? 14.2 : (mapped.economic_state === 'RECESSION' ? 7.8 : 3.1),
       currencyName: 'IB (Indigo Billion)',
       courtAuthority: 'PNAF (Pengadilan Niaga Arbitrase Federasi)'
     });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update Kebijakan Pemicu Krisis Moneter/Fiskal (Manual vs Otomatis Defisit)
+app.post('/api/federation/macro/policy', async (req, res) => {
+  try {
+    const { crisisTriggerMode, crisisDeficitThresholdIb } = req.body || {};
+    if (crisisTriggerMode) {
+      const mode = String(crisisTriggerMode).toUpperCase();
+      if (!['MANUAL', 'AUTO_DEFICIT'].includes(mode)) {
+        return res.status(400).json({ error: 'Mode krisis tidak valid. Pilihan: MANUAL atau AUTO_DEFICIT' });
+      }
+      await query.run("INSERT OR REPLACE INTO central_bank_settings (key, value) VALUES ('crisis_trigger_mode', ?)", [mode]);
+    }
+    if (crisisDeficitThresholdIb !== undefined) {
+      await query.run("INSERT OR REPLACE INTO central_bank_settings (key, value) VALUES ('crisis_deficit_threshold_ib', ?)", [String(crisisDeficitThresholdIb)]);
+    }
+    io.emit('federation:macro_policy_changed', { crisisTriggerMode, crisisDeficitThresholdIb });
+    res.json({ success: true, message: 'Kebijakan pemicu krisis fiskal berhasil diperbarui!' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -8862,18 +8885,18 @@ const bundledPublicApkPath = path.join(__dirname, '../public/downloads/Capital-F
 const directPublicApkPath = path.join(__dirname, '../public/downloads/capital-federation.apk');
 const localBuiltApkPath = path.join(__dirname, '../../mobile/build/app/outputs/flutter-apk/app-release.apk');
 
-const LATEST_RELEASE_NOTES_V200 = 'v2.0.3 (Build 52): Deteksi online/aktif real-time konglomerat di Web Admin (indikator hijau/merah). Perbaikan tuntas status suspensi kadaluarsa & sinkronisasi statistik orderbook (Prev, ARA, ARB).';
+const LATEST_RELEASE_NOTES_V200 = 'v2.0.4 (Build 53): Fitur unduh pembaruan di latar belakang (notifikasi atas layar HP Android). Sinkronisasi penuh Kas Negara & Cadangan Devisa (+IB 371 Miliar) serta kendali krisis fiskal otomatis/manual.';
 
 async function getApkSettingsMap() {
   const defaults = {
-    apk_version: '2.0.3',
-    apk_build_number: '52',
+    apk_version: '2.0.4',
+    apk_build_number: '53',
     apk_min_android: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
-    apk_file_size_mb: '57.5 MB',
+    apk_file_size_mb: '57.6 MB',
     apk_release_notes: LATEST_RELEASE_NOTES_V200,
     apk_external_url: '',
-    apk_download_count: '652',
-    apk_sha256: '656d7181a8a0c50e7d664fc5e472e8ccd0ac39d57394be3c98bb5447224445d2',
+    apk_download_count: '685',
+    apk_sha256: 'b667611a1fcafd893a49e2fc2b9db044c77914e4ce69f786d4856ab1eadc97a5',
     apk_updated_at: new Date().toISOString(),
   };
   try {
@@ -8883,11 +8906,11 @@ async function getApkSettingsMap() {
         defaults[r.key] = String(r.value);
       }
     }
-    if (parseInt(defaults.apk_build_number || '0', 10) < 52 || defaults.apk_sha256 !== '656d7181a8a0c50e7d664fc5e472e8ccd0ac39d57394be3c98bb5447224445d2') {
-      defaults.apk_version = '2.0.3';
-      defaults.apk_build_number = '52';
-      defaults.apk_file_size_mb = '57.5 MB';
-      defaults.apk_sha256 = '656d7181a8a0c50e7d664fc5e472e8ccd0ac39d57394be3c98bb5447224445d2';
+    if (parseInt(defaults.apk_build_number || '0', 10) < 53 || defaults.apk_sha256 !== 'b667611a1fcafd893a49e2fc2b9db044c77914e4ce69f786d4856ab1eadc97a5') {
+      defaults.apk_version = '2.0.4';
+      defaults.apk_build_number = '53';
+      defaults.apk_file_size_mb = '57.6 MB';
+      defaults.apk_sha256 = 'b667611a1fcafd893a49e2fc2b9db044c77914e4ce69f786d4856ab1eadc97a5';
       defaults.apk_release_notes = LATEST_RELEASE_NOTES_V200;
       defaults.apk_updated_at = new Date().toISOString();
       // Persist directly to central_bank_settings so /api/settings, /api/admin/settings & /api/admin/overview match 100%!
@@ -8971,16 +8994,16 @@ app.get('/api/version', async (req, res) => {
     });
   } catch (err) {
     res.json({
-      version: '2.0.3',
-      buildNumber: 52,
-      apkVersion: 'v2.0.3-CFX Production (Build 52)',
-      adminVersion: 'v2.0.3 Sovereign Launch',
-      backendVersion: 'v2.0.3-CFX Production',
+      version: '2.0.4',
+      buildNumber: 53,
+      apkVersion: 'v2.0.4-CFX Production (Build 53)',
+      adminVersion: 'v2.0.4 Sovereign Launch',
+      backendVersion: 'v2.0.4-CFX Production',
       minAndroid: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
-      fileSizeMb: '57.5 MB',
+      fileSizeMb: '57.6 MB',
       hasHostedApk: Boolean(getActiveApkFilePath()),
       downloadUrl: '/api/download/apk',
-      downloadCount: 652,
+      downloadCount: 685,
       releaseNotes: LATEST_RELEASE_NOTES_V180,
       databaseProtection: 'SQLite Persistent Volume (Zero Reset on Update)'
     });

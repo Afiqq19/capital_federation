@@ -26,18 +26,18 @@ import {
 
 export default function PublicDownloadLandingPage() {
   const [versionInfo, setVersionInfo] = useState({
-    version: '2.0.3',
-    buildNumber: 52,
-    apkVersion: 'v2.0.3 (Build 52)',
+    version: '2.0.4',
+    buildNumber: 53,
+    apkVersion: 'v2.0.4 (Build 53)',
     minAndroid: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
-    fileSizeMb: '57.5 MB',
+    fileSizeMb: '57.6 MB',
     downloadUrl: '/api/download/apk',
-    downloadCount: 652,
+    downloadCount: 685,
     totalCompanies: 363,
     totalPlayers: 1053,
-    sha256: '656d7181a8a0c50e7d664fc5e472e8ccd0ac39d57394be3c98bb5447224445d2',
+    sha256: '',
     releaseNotes:
-      'v2.0.3 (Build 52): Deteksi online/aktif real-time konglomerat di Web Admin (indikator hijau/merah). Perbaikan tuntas status suspensi kadaluarsa & sinkronisasi statistik orderbook (Prev, ARA, ARB).',
+      'v2.0.4 (Build 53): Fitur unduh pembaruan di latar belakang (notifikasi atas layar HP Android). Sinkronisasi penuh Kas Negara & Cadangan Devisa (+IB 371 Miliar) serta kendali krisis fiskal otomatis/manual.',
   });
   const [topLeaders, setTopLeaders] = useState([]);
   const [topStocks, setTopStocks] = useState([]);

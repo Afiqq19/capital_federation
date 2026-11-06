@@ -18,6 +18,8 @@ import {
   Landmark,
   ShieldAlert,
   Sparkles,
+  Sliders,
+  ShieldCheck,
 } from 'lucide-react';
 
 const PRESETS = [
@@ -67,17 +69,39 @@ const PRESETS = [
 
 export default function MacroEventsPage() {
   const { actions, overview, notify } = useAdmin();
-
   // Federation Macro State
   const [macroData, setMacroData] = useState(null);
   const [isSwitchingMacro, setIsSwitchingMacro] = useState(false);
+  const [crisisTriggerMode, setCrisisTriggerMode] = useState('MANUAL');
+  const [crisisThresholdIb, setCrisisThresholdIb] = useState(-100000000000);
+  const [isSavingPolicy, setIsSavingPolicy] = useState(false);
 
   const fetchMacro = async () => {
     try {
       const data = await adminApi.federationMacro();
       setMacroData(data);
+      if (data) {
+        if (data.crisisTriggerMode) setCrisisTriggerMode(data.crisisTriggerMode);
+        if (data.crisisDeficitThresholdIb !== undefined) setCrisisThresholdIb(data.crisisDeficitThresholdIb);
+      }
     } catch (err) {
       console.warn('Gagal memuat status makro:', err);
+    }
+  };
+
+  const handleSavePolicy = async () => {
+    try {
+      setIsSavingPolicy(true);
+      const res = await adminApi.setFederationMacroPolicy({
+        crisisTriggerMode,
+        crisisDeficitThresholdIb: parseFloat(crisisThresholdIb)
+      });
+      await fetchMacro();
+      if (notify) notify(res?.message || 'Kebijakan pemicu krisis fiskal berhasil disimpan!', 'success');
+    } catch (err) {
+      if (notify) notify('Gagal menyimpan kebijakan: ' + err.message, 'error');
+    } finally {
+      setIsSavingPolicy(false);
     }
   };
 
@@ -257,6 +281,94 @@ export default function MacroEventsPage() {
               <div className="font-extrabold text-sm text-slate-100">CRISIS</div>
               <p className="text-[11px] text-slate-400 mt-1">Bunga BCF 18%, bursa crash, emiten krisis PNAF</p>
             </button>
+          </div>
+        </div>
+      </Card>
+
+      {/* 2. Mode Pemicu Krisis Moneter & Fiskal (Manual vs Auto Defisit) */}
+      <Card className="bg-slate-900/90 border-slate-800">
+        <CardHeader
+          title="Kebijakan Pemicu Krisis Moneter & Defisit Fiskal"
+          subtitle="Atur apakah krisis ekonomi berjalan 100% MANUAL (terkendali oleh Admin) atau OTOMATIS jika kas negara menembus defisit kritis"
+          icon={Sliders}
+          tone="var(--cyan)"
+          action={
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-400">Kas Negara Saat Ini:</span>
+              <Badge tone={(overview?.treasuryBalance ?? 0) >= 0 ? 'emerald' : 'rose'}>
+                {(overview?.treasuryBalance ?? 0) >= 0 ? 'SURPLUS' : 'DEFISIT'}: IB {((overview?.treasuryBalance ?? 371207734399) / 1e9).toFixed(1)} Miliar
+              </Badge>
+            </div>
+          }
+        />
+
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* MANUAL MODE */}
+            <div
+              onClick={() => setCrisisTriggerMode('MANUAL')}
+              className={`p-4 rounded-xl border cursor-pointer transition-all ${
+                crisisTriggerMode === 'MANUAL'
+                  ? 'bg-emerald-500/10 border-emerald-500 text-emerald-100 ring-1 ring-emerald-500/50'
+                  : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck size={18} className={crisisTriggerMode === 'MANUAL' ? 'text-emerald-400' : 'text-slate-500'} />
+                  <span className="font-bold text-sm text-slate-100">MODE MANUAL (Rekomendasi)</span>
+                </div>
+                {crisisTriggerMode === 'MANUAL' && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                    AKTIF DIPILIH
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                <strong className="text-emerald-300">100% Terkendali Aman:</strong> Krisis moneter global <strong className="text-slate-200">TIDAK AKAN PERNAH</strong> aktif sendiri meskipun kas negara sedang berfluktuasi atau defisit. Krisis hanya akan meledak jika Admin secara sengaja menekan tombol <em className="text-rose-400">"CRISIS"</em> atau meluncurkan skenario di bawah.
+              </p>
+            </div>
+
+            {/* AUTO DEFICIT MODE */}
+            <div
+              onClick={() => setCrisisTriggerMode('AUTO_DEFICIT')}
+              className={`p-4 rounded-xl border cursor-pointer transition-all ${
+                crisisTriggerMode === 'AUTO_DEFICIT'
+                  ? 'bg-rose-500/10 border-rose-500 text-rose-100 ring-1 ring-rose-500/50'
+                  : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <ShieldAlert size={18} className={crisisTriggerMode === 'AUTO_DEFICIT' ? 'text-rose-400' : 'text-slate-500'} />
+                  <span className="font-bold text-sm text-slate-100">MODE OTOMATIS DEFISIT</span>
+                </div>
+                {crisisTriggerMode === 'AUTO_DEFICIT' && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                    AKTIF DIPILIH
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                <strong className="text-rose-300">Pemicu Otomatis:</strong> Jika pengeluaran bailout dan subsidi negara melebihi batas ambang cadangan kas (defisit ekstrem), sistem secara otomatis memicu <strong className="text-slate-200">Krisis Moneter Global</strong> dan berita kepanikan pasar. Krisis pulih otomatis saat kas kembali surplus.
+              </p>
+            </div>
+          </div>
+
+          {/* Ambang batas & Simpan */}
+          <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="text-xs text-slate-300 flex items-center gap-2">
+              <span className="text-slate-400">Batas Toleransi Defisit Pemicu Auto-Krisis:</span>
+              <span className="font-mono font-bold text-amber-400">-IB 100.000.000.000 (-IB 100 Miliar)</span>
+            </div>
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={isSavingPolicy}
+              onClick={handleSavePolicy}
+            >
+              {isSavingPolicy ? 'Menyimpan Kebijakan...' : 'Terapkan Kebijakan Krisis'}
+            </Button>
           </div>
         </div>
       </Card>
