@@ -21,6 +21,19 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 
+function formatRelativeTime(iso) {
+  if (!iso) return '';
+  try {
+    const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+    if (diff < 60) return 'baru saja';
+    if (diff < 3600) return `${Math.floor(diff / 60)} mnt lalu`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)} jam lalu`;
+    return `${Math.floor(diff / 86400)} hari lalu`;
+  } catch (_) {
+    return '';
+  }
+}
+
 export default function UsersPage() {
   const { users, actions } = useAdmin();
   const [search, setSearch] = useState('');
@@ -48,6 +61,7 @@ export default function UsersPage() {
 
   const bannedCount = (users || []).filter((u) => u.is_banned).length;
   const realPlayersCount = (users || []).filter((u) => !isBotUser(u)).length;
+  const onlinePlayersCount = (users || []).filter((u) => u.is_online).length;
   const frozenBotsCount = (users || []).filter((u) => isBotUser(u) && u.is_banned).length;
   const activeBotsCount = (users || []).filter((u) => isBotUser(u) && !u.is_banned).length;
 
@@ -72,7 +86,11 @@ export default function UsersPage() {
 
     const rank = Number(u.rank) || 999;
     let matchesStatus = true;
-    if (statusFilter === 'REAL_PLAYERS') {
+    if (statusFilter === 'ONLINE') {
+      matchesStatus = Boolean(u.is_online);
+    } else if (statusFilter === 'OFFLINE') {
+      matchesStatus = !u.is_online;
+    } else if (statusFilter === 'REAL_PLAYERS') {
       matchesStatus = !isBotUser(u);
     } else if (statusFilter === 'BOTS_ONLY') {
       matchesStatus = isBotUser(u);
@@ -104,13 +122,28 @@ export default function UsersPage() {
   return (
     <div className="space-y-6 page-enter">
       {/* 1. Header Overview Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <StatCard
           label="Total Konglomerat"
           value={users?.length || 0}
           hint="Akun Pemain Terdaftar"
           icon={Users}
           tone="violet"
+        />
+        <StatCard
+          label="Konglomerat Online"
+          value={
+            <div className="flex items-center gap-2">
+              <span>{onlinePlayersCount}</span>
+              <span className="relative flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+              </span>
+            </div>
+          }
+          hint="Sedang Aktif Main APK"
+          icon={UserCheck}
+          tone="emerald"
         />
         <StatCard
           label="Total Likuiditas Pemain"
@@ -120,14 +153,14 @@ export default function UsersPage() {
           tone="gold"
         />
         <StatCard
-          label="Pemain Bebas Bertransaksi"
-          value={Math.max(0, (users?.length || 0) - bannedCount)}
-          hint="Status Akun Aktif"
+          label="Player Asli"
+          value={realPlayersCount}
+          hint="Bukan Bot Pasar"
           icon={UserCheck}
-          tone="emerald"
+          tone="sky"
         />
         <StatCard
-          label="Akun Dibekukan (Banned)"
+          label="Akun Dibekukan"
           value={bannedCount}
           hint="Pelanggaran Regulasi"
           icon={UserX}
@@ -181,6 +214,8 @@ export default function UsersPage() {
               className="select text-xs py-2 px-3 bg-slate-900 border-slate-800 rounded-xl w-full sm:w-auto text-slate-200"
             >
               <option value="ALL">Semua Akun ({users?.length || 0})</option>
+              <option value="ONLINE">🟢 Sedang Online Sekarang ({onlinePlayersCount})</option>
+              <option value="OFFLINE">🔴 Sedang Offline</option>
               <option value="REAL_PLAYERS">👤 Player Asli ({realPlayersCount})</option>
               <option value="BOTS_ONLY">🤖 Akun Bot ({activeBotsCount} Aktif / {frozenBotsCount} Beku)</option>
               <option value="12_NAGA">🐉 12 Naga (Rank 1 - 12)</option>
@@ -230,14 +265,29 @@ export default function UsersPage() {
                     <tr key={u.id} className="hover:bg-slate-900/60 transition-colors">
                       <td className="whitespace-nowrap">
                         <div className="flex items-center gap-3">
-                          <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs text-white shrink-0 shadow-md ${
-                            is12Naga
-                              ? 'bg-gradient-to-tr from-amber-500 to-amber-700 shadow-amber-500/20 text-slate-950 font-black'
-                              : (isTaipan
-                                  ? 'bg-gradient-to-tr from-sky-500 to-blue-700'
-                                  : 'bg-gradient-to-tr from-violet-600 to-indigo-600')
-                          }`}>
-                            {u.name ? u.name.charAt(0).toUpperCase() : u.username?.charAt(0).toUpperCase() || 'P'}
+                          <div className="relative shrink-0">
+                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs text-white shrink-0 shadow-md ${
+                              is12Naga
+                                ? 'bg-gradient-to-tr from-amber-500 to-amber-700 shadow-amber-500/20 text-slate-950 font-black'
+                                : (isTaipan
+                                    ? 'bg-gradient-to-tr from-sky-500 to-blue-700'
+                                    : 'bg-gradient-to-tr from-violet-600 to-indigo-600')
+                            }`}>
+                              {u.name ? u.name.charAt(0).toUpperCase() : u.username?.charAt(0).toUpperCase() || 'P'}
+                            </div>
+                            {/* Titik Indikator Online (Hijau) / Offline (Merah) Real-Time */}
+                            {!isBotUser(u) && (
+                              <span
+                                className={`absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-slate-950 flex items-center justify-center ${
+                                  u.is_online ? 'bg-emerald-500 shadow-emerald-500/60 shadow-sm' : 'bg-rose-500'
+                                }`}
+                                title={u.is_online ? 'Sedang Membuka APK (Live Online)' : 'Tidak Aktif (Offline)'}
+                              >
+                                {u.is_online && (
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                )}
+                              </span>
+                            )}
                           </div>
                           <div className="min-w-0">
                             <div className="font-semibold text-slate-100 flex items-center gap-1.5 flex-wrap">
@@ -285,8 +335,33 @@ export default function UsersPage() {
                       <td>
                         {u.is_banned ? (
                           <Badge tone="rose" pulse>DIBEKUKAN</Badge>
+                        ) : isBotUser(u) ? (
+                          <Badge tone="slate">BOT PASAR</Badge>
+                        ) : u.is_online ? (
+                          <div className="flex flex-col gap-1 items-start">
+                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-sm shadow-emerald-500/10">
+                              <span className="relative flex h-2 w-2">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                              </span>
+                              ONLINE
+                            </span>
+                            <span className="text-[10px] text-emerald-400 font-semibold">Sedang Main</span>
+                          </div>
                         ) : (
-                          <Badge tone="emerald">AKTIF</Badge>
+                          <div className="flex flex-col gap-0.5 items-start">
+                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-800/80 text-slate-400 border border-slate-700/60">
+                              <span className="h-2 w-2 rounded-full bg-rose-500"></span>
+                              OFFLINE
+                            </span>
+                            {u.last_active_at ? (
+                              <span className="text-[9.5px] text-slate-500 font-mono" title={new Date(u.last_active_at).toLocaleString('id-ID')}>
+                                {formatRelativeTime(u.last_active_at)}
+                              </span>
+                            ) : (
+                              <span className="text-[9px] text-slate-600 font-mono">Belum aktif</span>
+                            )}
+                          </div>
                         )}
                       </td>
 

@@ -62,7 +62,7 @@ class _TradingModalState extends State<TradingModal> {
         0;
 
     final cash = user?.balanceIb ?? 0.0;
-    final bool isSuspended = widget.company.status == 'SUSPENDED';
+    final bool isSuspended = widget.company.isSuspended;
     final int maxFloatingLots = widget.company.regularMarketQuotaLots;
     final double regularQuotaPct = widget.company.regularMarketQuotaPct;
     final int availableFloatingLots = max(0, maxFloatingLots - ownedLots);

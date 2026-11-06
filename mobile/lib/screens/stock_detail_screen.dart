@@ -373,7 +373,7 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
   }
 
   OrderbookModel _syncOrderbookWithQuota(OrderbookModel raw, CompanyModel c, int availableRegularLots) {
-    if (c.isPreIpo || c.status == 'SUSPENDED') return raw;
+    if (c.isPreIpo || c.isSuspended) return raw;
 
     if (availableRegularLots <= 0) {
       final int buyPct = raw.totalBidLots > 0 ? 100 : 50;
@@ -1048,7 +1048,7 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                     if (c.isSeized)
                       _buildCourtSeizedBanner(context, c)
                     else ...[
-                      if (c.status == 'SUSPENDED') _buildSuspendedBanner(context, c),
+                      if (c.isSuspended) _buildSuspendedBanner(context, c),
                       if (c.status == 'CRITICAL') _buildCriticalUmaBanner(context, c),
                     ],
 
@@ -1456,7 +1456,7 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                     ),
                   ),
                 )
-            else if (c.status == 'SUSPENDED')
+            else if (c.isSuspended)
               if (isOwner)
                 Container(
                   width: double.infinity,
@@ -2287,17 +2287,17 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
   }
 
   Widget _buildStockbitBursaStats(CompanyModel c, List<PricePoint> candlePoints) {
-    final double openPrice = candlePoints.isNotEmpty ? candlePoints.first.open : c.basePrice;
-    final double prevPrice = c.basePrice;
-    final double highPrice = candlePoints.isNotEmpty ? candlePoints.map((cp) => cp.high).reduce(max) : c.currentPrice * 1.05;
-    final double lowPrice = candlePoints.isNotEmpty ? candlePoints.map((cp) => cp.low).reduce(min) : c.currentPrice * 0.95;
+    final double prevPrice = c.prevClose > 0 ? c.prevClose : (c.basePrice > 0 ? c.basePrice : c.currentPrice);
+    final double openPrice = candlePoints.isNotEmpty ? candlePoints.first.open : prevPrice;
+    final double highPrice = candlePoints.isNotEmpty ? candlePoints.map((cp) => cp.high).reduce(max) : c.currentPrice;
+    final double lowPrice = candlePoints.isNotEmpty ? candlePoints.map((cp) => cp.low).reduce(min) : c.currentPrice;
 
     // Ketentuan Batas Auto Rejection Bursa Federasi IPMC (Mengacu pada Regulasi BEI):
     // • Harga <= 200: ARA +35%
     // • Harga 200 - 5.000: ARA +25%
     // • Harga > 5.000: ARA +20% s/d +25% (Saham Fundamental Sehat)
     // • ARB Simetris: -35.00%
-    final double ref = c.basePrice > 0 ? c.basePrice : c.currentPrice;
+    final double ref = prevPrice;
     final double araPct = ref <= 200 ? 35.0 : (ref <= 5000 ? 25.0 : (c.status == 'HEALTHY' || c.fundamentalScore >= 75 ? 25.0 : 20.0));
     final double araPrice = (ref * (1 + (araPct / 100.0))).roundToDouble();
     final double arbPrice = (ref * 0.65).roundToDouble(); // ARB Simetris -35%

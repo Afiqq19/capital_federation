@@ -190,7 +190,18 @@ class CompanyModel {
 
   int get controllingLockedLots => (controllingLockedShares / 100).floor();
 
-  bool get isSuspended => status == 'SUSPENDED' || (suspendUntil != null && suspendUntil!.isNotEmpty);
+  bool get isSuspended {
+    if (status == 'SUSPENDED') return true;
+    if (suspendUntil != null && suspendUntil!.trim().isNotEmpty) {
+      try {
+        final until = DateTime.parse(suspendUntil!.trim());
+        return until.isAfter(DateTime.now());
+      } catch (_) {
+        return false;
+      }
+    }
+    return false;
+  }
 
   bool get isPreIpo => listingStatus == 'PRE_IPO' || status == 'PRE_IPO';
 

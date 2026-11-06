@@ -4704,6 +4704,13 @@ app.get('/api/companies', async (req, res) => {
     sql += ' ORDER BY c.current_price DESC';
     const companies = await query.all(sql, params);
     const enriched = companies.map((c, idx) => {
+      if (c.suspend_until && new Date(c.suspend_until) <= new Date()) {
+        c.suspend_until = null;
+        c.suspended_at = null;
+        c.suspend_reason = null;
+        if (c.status === 'SUSPENDED') c.status = 'HEALTHY';
+      }
+
       let resolvedOwner = (c.owner_username || c.founder_name || '').trim();
       if (!resolvedOwner || resolvedOwner === 'Bot/Publik' || resolvedOwner.startsWith('bot-user-') || resolvedOwner.startsWith('user-bot-')) {
         const fallbackName = (NATURAL_USERNAMES && NATURAL_USERNAMES.length > 0)
@@ -4743,6 +4750,17 @@ app.get('/api/companies/:id', async (req, res) => {
       [req.params.id, req.params.id.toUpperCase()]
     );
     if (!company) return res.status(404).json({ error: 'Company not found' });
+
+    if (company.suspend_until && new Date(company.suspend_until) <= new Date()) {
+      company.suspend_until = null;
+      company.suspended_at = null;
+      company.suspend_reason = null;
+      if (company.status === 'SUSPENDED') company.status = 'HEALTHY';
+      await query.run(
+        'UPDATE companies SET suspended_at = NULL, suspend_until = NULL, suspend_reason = NULL, status = CASE WHEN status = "SUSPENDED" THEN "HEALTHY" ELSE status END WHERE id = ?',
+        [company.id]
+      ).catch(() => {});
+    }
 
     let resolvedOwner = (company.owner_username || company.founder_name || '').trim();
     if (!resolvedOwner || resolvedOwner === 'Bot/Publik' || resolvedOwner.startsWith('bot-user-') || resolvedOwner.startsWith('user-bot-')) {
@@ -5045,9 +5063,28 @@ app.post('/api/trade/order', async (req, res) => {
       });
     }
 
-    if (company.status === 'SUSPENDED') {
+    // Auto-clean expired temporary suspension
+    if (company.suspend_until && new Date(company.suspend_until) <= new Date()) {
+      await query.run(
+        'UPDATE companies SET suspended_at = NULL, suspend_until = NULL, suspend_reason = NULL, status = CASE WHEN status = "SUSPENDED" THEN "HEALTHY" ELSE status END WHERE id = ?',
+        [company.id]
+      ).catch(() => {});
+      company.suspend_until = null;
+      company.suspended_at = null;
+      company.suspend_reason = null;
+      if (company.status === 'SUSPENDED') company.status = 'HEALTHY';
+    }
+
+    const isSuspended = company.status === 'SUSPENDED' || (company.suspend_until && new Date(company.suspend_until) > new Date());
+    if (isSuspended) {
       return res.status(400).json({
-        error: `⛔ Perdagangan saham ${company.symbol} sedang di-SUSPENSI oleh bursa IPMC demi perlindungan investor. Silakan selesaikan denda administrasi pemulihan suspensi terlebih dahulu.`
+        error: `⛔ Perdagangan saham ${company.symbol} sedang di-SUSPENSI oleh bursa IPMC demi perlindungan investor. Seluruh order beli dan jual dibekukan sementara.`
+      });
+    }
+
+    if (company.is_seized === 1) {
+      return res.status(400).json({
+        error: `⛔ Saham ${company.symbol} sedang dalam status SITA SENGKETA oleh Pengadilan Arbitrase PNAF. Perdagangan dibekukan.`
       });
     }
 
@@ -7405,7 +7442,7 @@ app.get('/api/admin/users', async (req, res) => {
       query.all(`
         SELECT id, username, email, role, pt_name, pt_symbol, sector, has_pt, is_ipo,
                balance_ib, company_balance_ib, pt_level, rd_level, credit_score, credit_tier,
-               is_blue_chip, is_banned, created_at
+               is_blue_chip, is_banned, last_active_at, created_at
         FROM users
         WHERE role != 'ADMIN'
         ORDER BY CASE WHEN id NOT LIKE 'bot-user-%' AND id NOT LIKE 'user-bot-%' THEN 0 ELSE 1 END ASC,
@@ -7635,8 +7672,11 @@ app.get('/api/admin/users', async (req, res) => {
         else syncedCreditTier = 'STANDARD';
       }
 
+      const isOnline = !isBotAccount && !u.is_banned && (onlineUsersMap.has(u.id) || (u.last_active_at && (nowMs - new Date(u.last_active_at).getTime() < 120000)));
       users.push({
         ...u,
+        is_online: Boolean(isOnline),
+        last_active_at: u.last_active_at || null,
         is_bot_account: isBotAccount,
         rank: userRank,
         badge,
@@ -8822,18 +8862,18 @@ const bundledPublicApkPath = path.join(__dirname, '../public/downloads/Capital-F
 const directPublicApkPath = path.join(__dirname, '../public/downloads/capital-federation.apk');
 const localBuiltApkPath = path.join(__dirname, '../../mobile/build/app/outputs/flutter-apk/app-release.apk');
 
-const LATEST_RELEASE_NOTES_V200 = 'v2.0.2 (Build 51): Format jam bursa & intraday sinkron penuh WIB Jakarta (UTC+7). Perbaikan badge selisih nominal bursa (+-), peningkatan valuasi & market cap otomatis saat upgrade R&D, Tim Direksi & Karyawan, serta pembukaan plafon sesi bursa baru.';
+const LATEST_RELEASE_NOTES_V200 = 'v2.0.3 (Build 52): Deteksi online/aktif real-time konglomerat di Web Admin (indikator hijau/merah). Perbaikan tuntas status suspensi kadaluarsa & sinkronisasi statistik orderbook (Prev, ARA, ARB).';
 
 async function getApkSettingsMap() {
   const defaults = {
-    apk_version: '2.0.2',
-    apk_build_number: '51',
+    apk_version: '2.0.3',
+    apk_build_number: '52',
     apk_min_android: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
     apk_file_size_mb: '57.5 MB',
     apk_release_notes: LATEST_RELEASE_NOTES_V200,
     apk_external_url: '',
     apk_download_count: '652',
-    apk_sha256: 'f07e1f488732a047b13957746c06d4f4acc0a8df54416b8ecab47ff135cdae86',
+    apk_sha256: '656d7181a8a0c50e7d664fc5e472e8ccd0ac39d57394be3c98bb5447224445d2',
     apk_updated_at: new Date().toISOString(),
   };
   try {
@@ -8843,11 +8883,11 @@ async function getApkSettingsMap() {
         defaults[r.key] = String(r.value);
       }
     }
-    if (parseInt(defaults.apk_build_number || '0', 10) < 51 || defaults.apk_sha256 !== 'f07e1f488732a047b13957746c06d4f4acc0a8df54416b8ecab47ff135cdae86') {
-      defaults.apk_version = '2.0.2';
-      defaults.apk_build_number = '51';
+    if (parseInt(defaults.apk_build_number || '0', 10) < 52 || defaults.apk_sha256 !== '656d7181a8a0c50e7d664fc5e472e8ccd0ac39d57394be3c98bb5447224445d2') {
+      defaults.apk_version = '2.0.3';
+      defaults.apk_build_number = '52';
       defaults.apk_file_size_mb = '57.5 MB';
-      defaults.apk_sha256 = 'f07e1f488732a047b13957746c06d4f4acc0a8df54416b8ecab47ff135cdae86';
+      defaults.apk_sha256 = '656d7181a8a0c50e7d664fc5e472e8ccd0ac39d57394be3c98bb5447224445d2';
       defaults.apk_release_notes = LATEST_RELEASE_NOTES_V200;
       defaults.apk_updated_at = new Date().toISOString();
       // Persist directly to central_bank_settings so /api/settings, /api/admin/settings & /api/admin/overview match 100%!
@@ -8928,16 +8968,16 @@ app.get('/api/version', async (req, res) => {
     });
   } catch (err) {
     res.json({
-      version: '1.8.0',
-      buildNumber: 25,
-      apkVersion: 'v1.8.0-CFX Production (Build 25)',
-      adminVersion: 'v1.8.0 Sovereign Launch',
-      backendVersion: 'v1.8.0-CFX Production',
+      version: '2.0.3',
+      buildNumber: 52,
+      apkVersion: 'v2.0.3-CFX Production (Build 52)',
+      adminVersion: 'v2.0.3 Sovereign Launch',
+      backendVersion: 'v2.0.3-CFX Production',
       minAndroid: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
-      fileSizeMb: '56.3 MB',
+      fileSizeMb: '57.5 MB',
       hasHostedApk: Boolean(getActiveApkFilePath()),
       downloadUrl: '/api/download/apk',
-      downloadCount: 320,
+      downloadCount: 652,
       releaseNotes: LATEST_RELEASE_NOTES_V180,
       databaseProtection: 'SQLite Persistent Volume (Zero Reset on Update)'
     });
@@ -9232,11 +9272,68 @@ if (fs.existsSync(publicDir)) {
   });
 }
 
+// Real-Time Online Presence Tracking (Konglomerat Live Presence)
+const activeUserSockets = new Map(); // socket.id -> userId
+const onlineUsersMap = new Map();    // userId -> { lastSeen: number, socketId: string, username: string }
+
+function touchUserActive(userId, username) {
+  if (!userId || String(userId).startsWith('bot-user-') || String(userId).startsWith('user-bot-')) return;
+  const wasOnline = onlineUsersMap.has(userId);
+  onlineUsersMap.set(userId, {
+    lastSeen: Date.now(),
+    username: username || onlineUsersMap.get(userId)?.username || ''
+  });
+  if (!wasOnline) {
+    io.emit('admin:user_presence', { userId, isOnline: true, lastSeen: Date.now() });
+  }
+}
+
 // Socket connection
 io.on('connection', (socket) => {
   socket.on('join_user', (userId) => {
     socket.join(userId);
+    if (userId && !String(userId).startsWith('bot-user-') && !String(userId).startsWith('user-bot-')) {
+      activeUserSockets.set(socket.id, userId);
+      touchUserActive(userId);
+      query.run('UPDATE users SET last_active_at = CURRENT_TIMESTAMP WHERE id = ?', [userId]).catch(() => {});
+    }
   });
+
+  socket.on('user_ping', (data) => {
+    const uid = (data && data.userId) ? data.userId : activeUserSockets.get(socket.id);
+    if (uid) {
+      touchUserActive(uid, data?.username);
+      query.run('UPDATE users SET last_active_at = CURRENT_TIMESTAMP WHERE id = ?', [uid]).catch(() => {});
+    }
+  });
+
+  socket.on('user_offline', (data) => {
+    const uid = (data && data.userId) ? data.userId : activeUserSockets.get(socket.id);
+    if (uid) {
+      activeUserSockets.delete(socket.id);
+      onlineUsersMap.delete(uid);
+      io.emit('admin:user_presence', { userId: uid, isOnline: false, lastSeen: Date.now() });
+    }
+  });
+
+  socket.on('disconnect', () => {
+    const userId = activeUserSockets.get(socket.id);
+    if (userId) {
+      activeUserSockets.delete(socket.id);
+      let hasOtherSocket = false;
+      for (const [sId, uId] of activeUserSockets.entries()) {
+        if (uId === userId) {
+          hasOtherSocket = true;
+          break;
+        }
+      }
+      if (!hasOtherSocket) {
+        onlineUsersMap.delete(userId);
+        io.emit('admin:user_presence', { userId, isOnline: false, lastSeen: Date.now() });
+      }
+    }
+  });
+
   socket.on('join_court_room', (caseId) => {
     socket.join(`court:${caseId}`);
   });
@@ -9356,6 +9453,18 @@ async function start() {
   try {
     // 1. Optimasi indeks SQLite & pembersihan log spam bot lama (100% data player asli terjaga!)
     await optimizeAndPruneDatabase();
+
+    try {
+      await query.run('ALTER TABLE users ADD COLUMN last_active_at TEXT');
+    } catch (_) {}
+
+    // Bersihkan seluruh suspensi sementara yang telah melewati batas waktu (expired)
+    await query.run(`
+      UPDATE companies 
+      SET suspended_at = NULL, suspend_until = NULL, suspend_reason = NULL,
+          status = CASE WHEN status = 'SUSPENDED' THEN 'HEALTHY' ELSE status END
+      WHERE suspend_until IS NOT NULL AND datetime(suspend_until) <= datetime('now')
+    `).catch(() => {});
 
     // Auto-seed 100 emiten bursa HANYA saat pertama kali server baru di-launching (database masih 0 emiten)
     // Saat ada update kodingan berikutnya, database TIDAK AKAN PERNAH di-seed ulang atau di-reset!

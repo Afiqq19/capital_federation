@@ -38,7 +38,25 @@ class GameProvider extends ChangeNotifier {
   List<Map<String, dynamic>> _activeSubsidies = [];
   List<Map<String, dynamic>> _governmentTenders = [];
   Timer? _bgSyncTimer;
+  Timer? _presenceHeartbeatTimer;
   DateTime? _lastBgPortfolioSync;
+
+  void _startPresenceHeartbeat() {
+    _presenceHeartbeatTimer?.cancel();
+    if (_user == null) return;
+    SocketService.pingUser(_user!.username);
+    _presenceHeartbeatTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (_user != null) {
+        SocketService.pingUser(_user!.username);
+      }
+    });
+  }
+
+  void _stopPresenceHeartbeat() {
+    _presenceHeartbeatTimer?.cancel();
+    _presenceHeartbeatTimer = null;
+    SocketService.offlineUser();
+  }
 
   void _scheduleSilentPortfolioSync({Duration delay = const Duration(milliseconds: 2500)}) {
     if (_user == null) return;
@@ -223,6 +241,7 @@ class GameProvider extends ChangeNotifier {
       _initSocket();
       if (_user != null) {
         SocketService.joinUser(_user!.id);
+        _startPresenceHeartbeat();
       }
       await loadInitialData();
     } catch (e) {
@@ -667,6 +686,7 @@ class GameProvider extends ChangeNotifier {
         await loadInitialData();
         if (_user != null) {
           SocketService.joinUser(_user!.id);
+          _startPresenceHeartbeat();
           NotificationService.syncUserToken(_user!.id);
         }
         return null;
@@ -695,6 +715,7 @@ class GameProvider extends ChangeNotifier {
         await loadInitialData();
         if (_user != null) {
           SocketService.joinUser(_user!.id);
+          _startPresenceHeartbeat();
           NotificationService.syncUserToken(_user!.id);
         }
         notifyListeners();
@@ -719,6 +740,7 @@ class GameProvider extends ChangeNotifier {
       await loadInitialData();
       if (_user != null) {
         SocketService.joinUser(_user!.id);
+        _startPresenceHeartbeat();
         NotificationService.syncUserToken(_user!.id);
       }
     }
@@ -726,6 +748,7 @@ class GameProvider extends ChangeNotifier {
 
   // Logout / Switch Account
   Future<void> logout() async {
+    _stopPresenceHeartbeat();
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('saved_username');
     await prefs.remove('saved_password');

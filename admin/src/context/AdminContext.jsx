@@ -166,6 +166,16 @@ export function AdminProvider({ children }) {
       scheduleSilent('users', refreshUsers, 4000);
       scheduleSilent('overview', refreshOverview, 4000);
     };
+    const onUserPresence = (data) => {
+      if (!data?.userId) return;
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === data.userId
+            ? { ...u, is_online: Boolean(data.isOnline), last_active_at: new Date(data.lastSeen).toISOString() }
+            : u
+        )
+      );
+    };
     const onTreasury = () => {
       scheduleSilent('overview', refreshOverview, 4000);
       scheduleSilent('bank', refreshBank, 4000);
@@ -185,6 +195,7 @@ export function AdminProvider({ children }) {
     socket.on('user:balance_updated', onUserUpdate);
     socket.on('user:conglomerate_updated', onUserUpdate);
     socket.on('user:account_status_changed', onUserUpdate);
+    socket.on('admin:user_presence', onUserPresence);
     socket.on('admin:bots_freeze_updated', onUserUpdate);
     socket.on('treasury:updated', onTreasury);
     socket.on('market:breaking_news', onNews);
@@ -208,6 +219,7 @@ export function AdminProvider({ children }) {
       socket.off('user:balance_updated', onUserUpdate);
       socket.off('user:conglomerate_updated', onUserUpdate);
       socket.off('user:account_status_changed', onUserUpdate);
+      socket.off('admin:user_presence', onUserPresence);
       socket.off('admin:bots_freeze_updated', onUserUpdate);
       socket.off('treasury:updated', onTreasury);
       socket.off('market:breaking_news', onNews);

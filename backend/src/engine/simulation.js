@@ -429,6 +429,13 @@ class MarketSimulationEngine {
       if (this.liveCompanyMap.size === 0 || this.tickCount % 8 === 1) {
         const rows = await query.all("SELECT * FROM companies WHERE (listing_status = 'LISTED' OR (listing_status IS NULL AND is_bot = 1)) AND (listing_status != 'PRE_IPO' AND listing_status != 'UNLISTED')");
         for (const c of rows) {
+          // Bersihkan suspensi expired secara otomatis
+          if (c.suspend_until && new Date(c.suspend_until) <= new Date()) {
+            c.suspend_until = null;
+            c.suspended_at = null;
+            c.suspend_reason = null;
+            if (c.status === 'SUSPENDED') c.status = 'HEALTHY';
+          }
           const existing = this.liveCompanyMap.get(c.id);
           if (existing && existing.current_price) {
             c.current_price = existing.current_price;
@@ -1197,6 +1204,23 @@ class MarketSimulationEngine {
     try {
       console.log('🔄 [Bursa] Menjalankan Rollover Sesi Baru Perdagangan Bursa...');
       const companies = await query.all('SELECT id, name, symbol, current_price, status, fundamental_score FROM companies WHERE status != "SUSPENDED"');
+      // Bersihkan seluruh suspensi sementara yang telah melewati batas waktu (expired)
+      await query.run(`
+        UPDATE companies 
+        SET suspended_at = NULL, suspend_until = NULL, suspend_reason = NULL,
+            status = CASE WHEN status = 'SUSPENDED' THEN 'HEALTHY' ELSE status END
+        WHERE suspend_until IS NOT NULL AND datetime(suspend_until) <= datetime('now')
+      `).catch(() => {});
+
+      for (const [cid, mComp] of this.liveCompanyMap.entries()) {
+        if (mComp.suspend_until && new Date(mComp.suspend_until) <= new Date()) {
+          mComp.suspend_until = null;
+          mComp.suspended_at = null;
+          mComp.suspend_reason = null;
+          if (mComp.status === 'SUSPENDED') mComp.status = 'HEALTHY';
+        }
+      }
+
       for (const comp of companies) {
         const newRef = comp.current_price > 0 ? comp.current_price : 1000;
         await query.run(
@@ -1940,6 +1964,23 @@ class MarketSimulationEngine {
       const companies = await query.all('SELECT * FROM companies');
       const updatedList = [];
       const impactRatio = parseFloat(priceImpactPct) / 100.0;
+
+      // Bersihkan seluruh suspensi sementara yang telah melewati batas waktu (expired)
+      await query.run(`
+        UPDATE companies 
+        SET suspended_at = NULL, suspend_until = NULL, suspend_reason = NULL,
+            status = CASE WHEN status = 'SUSPENDED' THEN 'HEALTHY' ELSE status END
+        WHERE suspend_until IS NOT NULL AND datetime(suspend_until) <= datetime('now')
+      `).catch(() => {});
+
+      for (const [cid, mComp] of this.liveCompanyMap.entries()) {
+        if (mComp.suspend_until && new Date(mComp.suspend_until) <= new Date()) {
+          mComp.suspend_until = null;
+          mComp.suspended_at = null;
+          mComp.suspend_reason = null;
+          if (mComp.status === 'SUSPENDED') mComp.status = 'HEALTHY';
+        }
+      }
 
       for (const comp of companies) {
         if (affectedSector === 'ALL' || affectedSector === comp.sector) {

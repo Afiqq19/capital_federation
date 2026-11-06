@@ -132,7 +132,7 @@ export default function PublicDownloadLandingPage() {
       downloadCount: (Number(prev.downloadCount) || 148) + 1,
     }));
     const baseDownload = versionInfo.downloadUrl || '/api/download/apk';
-    const buster = `?v=${versionInfo.buildNumber || 51}&t=${Date.now()}`;
+    const buster = `?v=${versionInfo.buildNumber || 52}&t=${Date.now()}`;
     window.location.href = baseDownload + buster;
     setTimeout(() => setIsDownloading(false), 3000);
   };
@@ -513,7 +513,7 @@ export default function PublicDownloadLandingPage() {
                     <div className="text-[10px] text-emerald-400 mt-0.5">Kode Saham 4-Huruf Resmi</div>
                   </div>
                   <div className="p-3.5 rounded-2xl bg-slate-950/90 border border-slate-800/80">
-                    <div className="text-[11px] text-slate-400">Konglomerat & Bot</div>
+                    <div className="text-[11px] text-slate-400">Konglomerat </div>
                     <div className="text-xl font-black text-amber-400 mt-0.5">
                       {versionInfo.totalPlayers}+ Investor
                     </div>

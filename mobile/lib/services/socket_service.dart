@@ -291,6 +291,18 @@ class SocketService {
     }
   }
 
+  static void pingUser([String? username]) {
+    if (_currentUserId != null && socket != null && socket!.connected) {
+      socket!.emit('user_ping', {'userId': _currentUserId, 'username': username});
+    }
+  }
+
+  static void offlineUser() {
+    if (_currentUserId != null && socket != null && socket!.connected) {
+      socket!.emit('user_offline', {'userId': _currentUserId});
+    }
+  }
+
   static void disconnect() {
     socket?.disconnect();
   }
