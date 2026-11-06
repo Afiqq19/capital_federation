@@ -8,8 +8,8 @@ module.exports = function(io, simulationEngine) {
   router.get('/summary', async (req, res) => {
     try {
       const rows = await query.all('SELECT source_type, direction, SUM(amount_ib) as total FROM state_treasury_ledger GROUP BY source_type, direction');
-      
-      let baseReserve = 500000000000.0; // Cadangan Kas Devisa Awal Negara Federasi IB 500 Miliar
+      const reserveRow = await query.get("SELECT value FROM central_bank_settings WHERE key = 'sovereign_base_reserve_ib'");
+      let baseReserve = reserveRow?.value ? parseFloat(reserveRow.value) : 1000000000000.0; // Cadangan Devisa Awal Negara Federasi 1 Triliun IB
       let totalIncome = 0.0;
       let totalExpense = 0.0;
       let finesTotal = 0.0;

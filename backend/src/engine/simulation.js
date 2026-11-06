@@ -434,7 +434,7 @@ class MarketSimulationEngine {
               COALESCE(SUM(CASE WHEN transaction_type = 'BAILOUT' THEN amount ELSE 0 END), 0) as total_bailout
             FROM government_treasury_ledger
           `).catch(() => ({ total_tax: 0, total_bailout: 0 }));
-          const BASE_FEDERATION_TREASURY_RESERVE = 500000000000.0;
+          const BASE_FEDERATION_TREASURY_RESERVE = 1000000000000.0;
           const currentTreasury = BASE_FEDERATION_TREASURY_RESERVE + (parseFloat(treasuryLedger.total_tax) - parseFloat(treasuryLedger.total_bailout));
           if (currentTreasury <= deficitThreshold && this.cachedEconomicState !== 'CRISIS') {
             await query.run("INSERT OR REPLACE INTO central_bank_settings (key, value) VALUES ('economic_state', 'CRISIS')");

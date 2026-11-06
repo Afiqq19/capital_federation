@@ -296,7 +296,7 @@ export default function MacroEventsPage() {
             <div className="flex items-center gap-2">
               <span className="text-xs text-slate-400">Kas Negara Saat Ini:</span>
               <Badge tone={(overview?.treasuryBalance ?? 0) >= 0 ? 'emerald' : 'rose'}>
-                {(overview?.treasuryBalance ?? 0) >= 0 ? 'SURPLUS' : 'DEFISIT'}: IB {((overview?.treasuryBalance ?? 371207734399) / 1e9).toFixed(1)} Miliar
+                {(overview?.treasuryBalance ?? 0) >= 0 ? 'SURPLUS' : 'DEFISIT'}: IB {((overview?.treasuryBalance ?? 471413400083) / 1e9).toFixed(1)} Miliar
               </Badge>
             </div>
           }
