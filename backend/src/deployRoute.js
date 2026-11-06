@@ -171,7 +171,7 @@ router.get('/rescue-panel', async (req, res) => {
             database: 'mss_panel',
             connectTimeout: 4000
         });
-        const [rows] = await conn.execute('SELECT id, name, email, username FROM users');
+        const [rows] = await conn.execute('SELECT id, name, email FROM users');
         report.users = rows;
         await conn.end();
     } catch (dbErr) {
