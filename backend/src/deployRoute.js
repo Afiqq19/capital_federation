@@ -159,6 +159,24 @@ router.get('/rescue-panel', async (req, res) => {
     } catch (tErr) {
         report.mss_ttyd_error = tErr.message;
     }
+
+    // 4. Periksa akun user di database mss_panel
+    try {
+        const mysql = require('mysql2/promise');
+        const conn = await mysql.createConnection({
+            host: process.env.DB_HOST || 'mss-db',
+            port: parseInt(process.env.DB_PORT || '3306'),
+            user: process.env.DB_USERNAME || 'root',
+            password: process.env.DB_PASSWORD || 'root_secret_pass',
+            database: 'mss_panel',
+            connectTimeout: 4000
+        });
+        const [rows] = await conn.execute('SELECT id, name, email, username FROM users');
+        report.users = rows;
+        await conn.end();
+    } catch (dbErr) {
+        report.db_users_error = dbErr.message;
+    }
     try {
         const tResp2 = await fetch('http://mss-ttyd:7681/', {
             signal: AbortSignal.timeout(4000)
