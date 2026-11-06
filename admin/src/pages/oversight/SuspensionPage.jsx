@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useAdmin } from '../../context/AdminContext';
 import Card, { CardHeader } from '../../components/ui/Card';
 import StatCard from '../../components/ui/StatCard';
@@ -26,24 +26,29 @@ export default function SuspensionPage() {
 
   const suspensionList = oversight?.suspensionList || [];
 
-  const filteredSuspended = suspensionList.filter((c) => {
-    if (!search) return true;
+  const filteredSuspended = useMemo(() => {
+    if (!search) return suspensionList;
     const q = search.toLowerCase();
-    return (
-      (c.symbol && c.symbol.toLowerCase().includes(q)) ||
-      (c.name && c.name.toLowerCase().includes(q)) ||
-      (c.suspended_reason && c.suspended_reason.toLowerCase().includes(q))
-    );
-  });
+    return suspensionList.filter((c) => {
+      return (
+        (c.symbol && c.symbol.toLowerCase().includes(q)) ||
+        (c.name && c.name.toLowerCase().includes(q)) ||
+        (c.suspended_reason && c.suspended_reason.toLowerCase().includes(q))
+      );
+    });
+  }, [suspensionList, search]);
 
-  const filteredAll = (companies || []).filter((c) => {
-    if (!search) return true;
+  const filteredAll = useMemo(() => {
+    const list = companies || [];
+    if (!search) return list;
     const q = search.toLowerCase();
-    return (
-      (c.symbol && c.symbol.toLowerCase().includes(q)) ||
-      (c.name && c.name.toLowerCase().includes(q))
-    );
-  });
+    return list.filter((c) => {
+      return (
+        (c.symbol && c.symbol.toLowerCase().includes(q)) ||
+        (c.name && c.name.toLowerCase().includes(q))
+      );
+    });
+  }, [companies, search]);
 
   return (
     <div className="space-y-6 page-enter">

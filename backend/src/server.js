@@ -8885,12 +8885,12 @@ const bundledPublicApkPath = path.join(__dirname, '../public/downloads/Capital-F
 const directPublicApkPath = path.join(__dirname, '../public/downloads/capital-federation.apk');
 const localBuiltApkPath = path.join(__dirname, '../../mobile/build/app/outputs/flutter-apk/app-release.apk');
 
-const LATEST_RELEASE_NOTES_V200 = 'v2.0.4 (Build 53): Fitur unduh pembaruan di latar belakang (notifikasi atas layar HP Android). Sinkronisasi penuh Kas Negara & Cadangan Devisa (+IB 371 Miliar) serta kendali krisis fiskal otomatis/manual.';
+const LATEST_RELEASE_NOTES_V200 = 'v2.0.5 (Build 54): Optimasi performa pencarian PT & stabilitas form PNAF dan Suspensi Saham (anti refresh saat mengetik). Integrasi kredit bot Bank Sentral BIF.';
 
 async function getApkSettingsMap() {
   const defaults = {
-    apk_version: '2.0.4',
-    apk_build_number: '53',
+    apk_version: '2.0.5',
+    apk_build_number: '54',
     apk_min_android: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
     apk_file_size_mb: '57.6 MB',
     apk_release_notes: LATEST_RELEASE_NOTES_V200,
@@ -8906,9 +8906,9 @@ async function getApkSettingsMap() {
         defaults[r.key] = String(r.value);
       }
     }
-    if (parseInt(defaults.apk_build_number || '0', 10) < 53 || defaults.apk_sha256 !== 'b667611a1fcafd893a49e2fc2b9db044c77914e4ce69f786d4856ab1eadc97a5') {
-      defaults.apk_version = '2.0.4';
-      defaults.apk_build_number = '53';
+    if (parseInt(defaults.apk_build_number || '0', 10) < 54 || defaults.apk_sha256 !== 'b667611a1fcafd893a49e2fc2b9db044c77914e4ce69f786d4856ab1eadc97a5') {
+      defaults.apk_version = '2.0.5';
+      defaults.apk_build_number = '54';
       defaults.apk_file_size_mb = '57.6 MB';
       defaults.apk_sha256 = 'b667611a1fcafd893a49e2fc2b9db044c77914e4ce69f786d4856ab1eadc97a5';
       defaults.apk_release_notes = LATEST_RELEASE_NOTES_V200;
@@ -8994,17 +8994,17 @@ app.get('/api/version', async (req, res) => {
     });
   } catch (err) {
     res.json({
-      version: '2.0.4',
-      buildNumber: 53,
-      apkVersion: 'v2.0.4-CFX Production (Build 53)',
-      adminVersion: 'v2.0.4 Sovereign Launch',
-      backendVersion: 'v2.0.4-CFX Production',
+      version: '2.0.5',
+      buildNumber: 54,
+      apkVersion: 'v2.0.5-CFX Production (Build 54)',
+      adminVersion: 'v2.0.5 Sovereign Launch',
+      backendVersion: 'v2.0.5-CFX Production',
       minAndroid: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
       fileSizeMb: '57.6 MB',
       hasHostedApk: Boolean(getActiveApkFilePath()),
       downloadUrl: '/api/download/apk',
       downloadCount: 685,
-      releaseNotes: LATEST_RELEASE_NOTES_V180,
+      releaseNotes: LATEST_RELEASE_NOTES_V200,
       databaseProtection: 'SQLite Persistent Volume (Zero Reset on Update)'
     });
   }

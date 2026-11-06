@@ -25,8 +25,21 @@ export function AdminProvider({ children }) {
   const mounted = useRef(true);
 
   // ---------- Notifikasi ----------
+  const feedQueue = useRef([]);
+  const feedTimer = useRef(null);
+
   const pushFeed = useCallback((text, type = 'info') => {
-    setFeed((prev) => [{ id: `${Date.now()}-${Math.random()}`, text, type, time: new Date().toISOString() }, ...prev].slice(0, 30));
+    feedQueue.current.push({ id: `${Date.now()}-${Math.random()}`, text, type, time: new Date().toISOString() });
+    if (!feedTimer.current) {
+      feedTimer.current = setTimeout(() => {
+        if (mounted.current && feedQueue.current.length > 0) {
+          const newItems = [...feedQueue.current];
+          feedQueue.current = [];
+          setFeed((prev) => [...newItems, ...prev].slice(0, 30));
+        }
+        feedTimer.current = null;
+      }, 3000);
+    }
   }, []);
 
   const notify = useCallback((text, type = 'info') => {
@@ -66,7 +79,7 @@ export function AdminProvider({ children }) {
   useEffect(() => {
     mounted.current = true;
     refreshAll();
-    const t = setInterval(refreshAll, 30000);
+    const t = setInterval(refreshAll, 45000);
     return () => {
       mounted.current = false;
       clearInterval(t);
@@ -79,7 +92,15 @@ export function AdminProvider({ children }) {
     if (throttleTimers.current[key]) return;
     throttleTimers.current[key] = setTimeout(() => {
       delete throttleTimers.current[key];
-      if (mounted.current) fn();
+      if (!mounted.current) return;
+      // Jangan timpa data jika user sedang aktif mengetik di input/textarea
+      const isUserTyping = typeof document !== 'undefined' && document.activeElement && 
+        (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA');
+      if (isUserTyping) {
+        scheduleSilent(key, fn, 4000);
+        return;
+      }
+      fn();
     }, delayMs);
   }, []);
 
@@ -92,6 +113,12 @@ export function AdminProvider({ children }) {
     let pendingTicker = null;
     let tickerTimer = null;
     const flushTicker = () => {
+      const isUserTyping = typeof document !== 'undefined' && document.activeElement && 
+        (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA');
+      if (isUserTyping) {
+        tickerTimer = setTimeout(flushTicker, 3000);
+        return;
+      }
       if (pendingTicker && mounted.current) {
         const updated = pendingTicker;
         pendingTicker = null;

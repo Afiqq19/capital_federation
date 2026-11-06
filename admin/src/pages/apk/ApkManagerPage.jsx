@@ -10,13 +10,13 @@ export default function ApkManagerPage({ showToast }) {
   const adminCtx = useAdmin();
   const toastFn = showToast || adminCtx?.notify;
   const [apkInfo, setApkInfo] = useState({
-    version: '2.0.4',
-    buildNumber: 53,
+    version: '2.0.5',
+    buildNumber: 54,
     fileSizeMb: '57.6 MB',
     minAndroid: 'Android 10.0 (API Level 29 / Q)',
     hasHostedApk: true,
-    downloadCount: 685,
-    releaseNotes: 'v2.0.4 (Build 53): Fitur unduh pembaruan di latar belakang (notifikasi atas layar HP Android). Sinkronisasi penuh Kas Negara & Cadangan Devisa (+IB 371 Miliar) serta kendali krisis fiskal otomatis/manual.'
+    downloadCount: 710,
+    releaseNotes: 'v2.0.5 (Build 54): Optimasi performa pencarian PT & stabilitas form PNAF dan Suspensi Saham (anti refresh saat mengetik). Integrasi kredit bot Bank Sentral BIF.'
   });
   const [loading, setLoading] = useState(true);
   const [savingMeta, setSavingMeta] = useState(false);

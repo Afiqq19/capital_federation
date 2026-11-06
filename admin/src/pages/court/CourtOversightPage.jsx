@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import Card, { CardHeader } from '../../components/ui/Card';
 import StatCard from '../../components/ui/StatCard';
 import Button from '../../components/ui/Button';
@@ -191,9 +191,25 @@ export default function CourtOversightPage() {
   const [selectedCaseForSummons, setSelectedCaseForSummons] = useState(null);
   const [selectedCaseForLiveRoom, setSelectedCaseForLiveRoom] = useState(null);
 
+  const isAnyModalOpenRef = useRef(false);
+  isAnyModalOpenRef.current = Boolean(
+    isFileModalOpen ||
+    verdictModalCase ||
+    selectedCaseForSchedule ||
+    selectedCaseForSummons ||
+    selectedCaseForLiveRoom
+  );
+
   const fetchCasesAndStatus = async (silent = false) => {
     try {
-      if (!silent) setLoading(true);
+      if (silent) {
+        if (isAnyModalOpenRef.current) return;
+        const isUserTyping = typeof document !== 'undefined' && document.activeElement && 
+          (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA');
+        if (isUserTyping) return;
+      } else {
+        setLoading(true);
+      }
       const [data, botState] = await Promise.all([
         adminApi.courtCases(),
         adminApi.courtAutoJudgeStatus().catch(() => null),
@@ -214,7 +230,16 @@ export default function CourtOversightPage() {
   useEffect(() => {
     fetchCasesAndStatus();
 
-    const onCaseChange = () => fetchCasesAndStatus(true);
+    let caseTimer = null;
+    const onCaseChange = () => {
+      if (isAnyModalOpenRef.current) return;
+      if (caseTimer) return;
+      caseTimer = setTimeout(() => {
+        caseTimer = null;
+        if (!isAnyModalOpenRef.current) fetchCasesAndStatus(true);
+      }, 5000);
+    };
+
     const onBotUpdate = (payload) => {
       if (payload) setAutoJudge(payload);
     };
@@ -225,6 +250,7 @@ export default function CourtOversightPage() {
     socket.on('court:auto_judge_updated', onBotUpdate);
 
     return () => {
+      if (caseTimer) clearTimeout(caseTimer);
       socket.off('court:new_case', onCaseChange);
       socket.off('court:verdict', onCaseChange);
       socket.off('court:case_updated', onCaseChange);
@@ -377,53 +403,57 @@ export default function CourtOversightPage() {
     return matchesSearch && matchesType && matchesStatus;
   });
 
-  const filteredCompaniesForPlaintiff = (companies || [])
-    .filter((c) => {
-      if (!plaintiffSearchQuery) return true;
-      const q = plaintiffSearchQuery.toLowerCase();
+  const filteredCompaniesForPlaintiff = useMemo(() => {
+    const list = companies || [];
+    if (!plaintiffSearchQuery) return list.slice(0, 15);
+    const q = plaintiffSearchQuery.toLowerCase().trim();
+    return list.filter((c) => {
       return (
         (c.name && c.name.toLowerCase().includes(q)) ||
         (c.symbol && c.symbol.toLowerCase().includes(q)) ||
         (c.owner_username && c.owner_username.toLowerCase().includes(q)) ||
         (c.sector && c.sector.toLowerCase().includes(q))
       );
-    })
-    .slice(0, 15);
+    }).slice(0, 15);
+  }, [companies, plaintiffSearchQuery]);
 
-  const filteredUsersForPlaintiff = (users || [])
-    .filter((u) => {
-      if (!plaintiffSearchQuery) return true;
-      const q = plaintiffSearchQuery.toLowerCase();
+  const filteredUsersForPlaintiff = useMemo(() => {
+    const list = users || [];
+    if (!plaintiffSearchQuery) return list.slice(0, 8);
+    const q = plaintiffSearchQuery.toLowerCase().trim();
+    return list.filter((u) => {
       return (
         (u.username && u.username.toLowerCase().includes(q)) ||
         (u.pt_name && u.pt_name.toLowerCase().includes(q))
       );
-    })
-    .slice(0, 8);
+    }).slice(0, 8);
+  }, [users, plaintiffSearchQuery]);
 
-  const filteredCompaniesForDef = (companies || [])
-    .filter((c) => {
-      if (!defSearchQuery) return true;
-      const q = defSearchQuery.toLowerCase();
+  const filteredCompaniesForDef = useMemo(() => {
+    const list = companies || [];
+    if (!defSearchQuery) return list.slice(0, 15);
+    const q = defSearchQuery.toLowerCase().trim();
+    return list.filter((c) => {
       return (
         (c.name && c.name.toLowerCase().includes(q)) ||
         (c.symbol && c.symbol.toLowerCase().includes(q)) ||
         (c.owner_username && c.owner_username.toLowerCase().includes(q)) ||
         (c.sector && c.sector.toLowerCase().includes(q))
       );
-    })
-    .slice(0, 15);
+    }).slice(0, 15);
+  }, [companies, defSearchQuery]);
 
-  const filteredUsersForDef = (users || [])
-    .filter((u) => {
-      if (!defSearchQuery) return true;
-      const q = defSearchQuery.toLowerCase();
+  const filteredUsersForDef = useMemo(() => {
+    const list = users || [];
+    if (!defSearchQuery) return list.slice(0, 8);
+    const q = defSearchQuery.toLowerCase().trim();
+    return list.filter((u) => {
       return (
         (u.username && u.username.toLowerCase().includes(q)) ||
         (u.pt_name && u.pt_name.toLowerCase().includes(q))
       );
-    })
-    .slice(0, 8);
+    }).slice(0, 8);
+  }, [users, defSearchQuery]);
 
   return (
     <div className="space-y-6 page-enter">
@@ -1249,6 +1279,7 @@ export default function CourtOversightPage() {
                       {filteredCompaniesForPlaintiff.map((comp) => (
                         <div
                           key={comp.id}
+                          onMouseDown={(e) => e.preventDefault()}
                           onClick={() => handleSelectPlaintiffCompany(comp)}
                           className="flex items-center justify-between p-2 hover:bg-slate-800/80 rounded-lg cursor-pointer transition-colors border border-transparent hover:border-slate-700"
                         >
@@ -1280,6 +1311,7 @@ export default function CourtOversightPage() {
                           {filteredUsersForPlaintiff.map((u) => (
                             <div
                               key={u.id}
+                              onMouseDown={(e) => e.preventDefault()}
                               onClick={() => handleSelectPlaintiffUser(u)}
                               className="flex items-center justify-between p-2 hover:bg-slate-800/80 rounded-lg cursor-pointer transition-colors"
                             >
@@ -1414,6 +1446,7 @@ export default function CourtOversightPage() {
                       {filteredCompaniesForDef.map((comp) => (
                         <div
                           key={comp.id}
+                          onMouseDown={(e) => e.preventDefault()}
                           onClick={() => handleSelectCompany(comp)}
                           className="flex items-center justify-between p-2 hover:bg-slate-800/80 rounded-lg cursor-pointer transition-colors border border-transparent hover:border-slate-700"
                         >
@@ -1451,6 +1484,7 @@ export default function CourtOversightPage() {
                           {filteredUsersForDef.map((u) => (
                             <div
                               key={u.id}
+                              onMouseDown={(e) => e.preventDefault()}
                               onClick={() => handleSelectUser(u)}
                               className="flex items-center justify-between p-2 hover:bg-slate-800/80 rounded-lg cursor-pointer transition-colors"
                             >
