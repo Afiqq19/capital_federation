@@ -5098,7 +5098,9 @@ app.post('/api/trade/order', async (req, res) => {
       if (company.status === 'SUSPENDED') company.status = 'HEALTHY';
     }
 
-    const isSuspended = company.status === 'SUSPENDED' || (company.suspend_until && new Date(company.suspend_until) > new Date());
+    const isSuspended = company.status === 'SUSPENDED'
+      || Boolean(company.suspended_at && (!company.suspend_until || new Date(company.suspend_until) > new Date()))
+      || Boolean(company.suspend_until && new Date(company.suspend_until) > new Date());
     if (isSuspended) {
       return res.status(400).json({
         error: `⛔ Perdagangan saham ${company.symbol} sedang di-SUSPENSI oleh bursa IPMC demi perlindungan investor. Seluruh order beli dan jual dibekukan sementara.`
@@ -7778,6 +7780,240 @@ app.get('/api/admin/companies', async (req, res) => {
       ORDER BY market_cap DESC
     `);
     res.json(list);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin: Pengawasan Bursa (UMA, Suspensi, & Log Regulasi)
+app.get('/api/admin/oversight', async (req, res) => {
+  try {
+    const [cfgRows, umaRows, suspRows] = await Promise.all([
+      query.all("SELECT key, value FROM central_bank_settings WHERE key LIKE 'uma_%'"),
+      query.all(`
+        SELECT c.*,
+               COALESCE(u.username, c.founder_name) as owner_username,
+               ROUND(((c.current_price - CASE WHEN c.prev_close > 0 THEN c.prev_close ELSE c.base_price END) / 
+                      CASE WHEN c.prev_close > 0 THEN c.prev_close ELSE c.base_price END) * 100, 2) AS price_change_pct
+        FROM companies c
+        LEFT JOIN users u ON c.owner_id = u.id
+        WHERE c.uma_flag = 1
+        ORDER BY c.current_price DESC
+      `),
+      query.all(`
+        SELECT c.*,
+               COALESCE(u.username, c.founder_name) as owner_username,
+               c.suspend_until as suspended_until,
+               c.suspend_reason as suspended_reason,
+               ROUND(((c.current_price - CASE WHEN c.prev_close > 0 THEN c.prev_close ELSE c.base_price END) / 
+                      CASE WHEN c.prev_close > 0 THEN c.prev_close ELSE c.base_price END) * 100, 2) AS price_change_pct
+        FROM companies c
+        LEFT JOIN users u ON c.owner_id = u.id
+        WHERE c.status = 'SUSPENDED' OR (c.suspend_until IS NOT NULL AND datetime(c.suspend_until) > datetime('now'))
+        ORDER BY c.suspended_at DESC
+      `)
+    ]);
+
+    const cfgMap = {};
+    for (const r of cfgRows || []) {
+      cfgMap[r.key] = r.value;
+    }
+
+    res.json({
+      config: {
+        autoEnabled: cfgMap.uma_auto_enabled !== 'false',
+        thresholdPct: Number(cfgMap.uma_threshold_pct) || 15,
+        clearPct: Number(cfgMap.uma_clear_pct) || 7
+      },
+      umaList: umaRows || [],
+      suspensionList: (suspRows || []).map((s) => ({
+        ...s,
+        suspended_until: s.suspended_until || s.suspend_until,
+        suspended_reason: s.suspended_reason || s.suspend_reason || 'Penyelidikan bursa'
+      })),
+      log: []
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin: Tandai Emiten ke Radar UMA (Manual Flag UMA)
+app.post('/api/admin/uma/flag', async (req, res) => {
+  try {
+    const { companyId, reason, direction } = req.body;
+    if (!companyId) return res.status(400).json({ error: 'Company ID harus diisi' });
+
+    const comp = await query.get('SELECT * FROM companies WHERE id = ?', [companyId]);
+    if (!comp) return res.status(404).json({ error: 'Emiten tidak ditemukan' });
+
+    const nowIso = new Date().toISOString();
+    const umaReason = reason || 'Pergerakan harga saham di luar kebiasaan (Unusual Market Activity).';
+    const umaDirection = direction || (comp.current_price >= (comp.prev_close || comp.base_price) ? 'UP' : 'DOWN');
+
+    await query.run(
+      'UPDATE companies SET uma_flag = 1, uma_direction = ?, uma_reason = ?, uma_source = "MANUAL", uma_at = ? WHERE id = ?',
+      [umaDirection, umaReason, nowIso, companyId]
+    );
+
+    const newsItem = {
+      id: uuidv4(),
+      title: `⚠️ RADAR UMA BURSA IPMC: ${comp.symbol} Terpantau Bergerak Tidak Wajar`,
+      content: umaReason,
+      affected_sector: comp.sector,
+      sentiment: umaDirection === 'UP' ? 'BULLISH' : 'BEARISH',
+      published_at: nowIso
+    };
+
+    await query.run(
+      'INSERT INTO news (id, title, content, affected_sector, sentiment, published_at) VALUES (?, ?, ?, ?, ?, ?)',
+      [newsItem.id, newsItem.title, newsItem.content, newsItem.affected_sector, newsItem.sentiment, newsItem.published_at]
+    );
+
+    io.emit('market:news_broadcast', newsItem);
+    io.emit('company:status_changed', {
+      companyId: comp.id,
+      symbol: comp.symbol,
+      uma_flag: 1,
+      uma_direction: umaDirection,
+      uma_reason: umaReason,
+      uma_at: nowIso
+    });
+
+    res.json({
+      success: true,
+      message: `Saham ${comp.symbol} berhasil dimasukkan ke Radar UMA.`,
+      companyId
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin: Bersihkan Radar UMA (Clear UMA)
+app.post('/api/admin/uma/clear', async (req, res) => {
+  try {
+    const { companyId } = req.body;
+    if (!companyId) return res.status(400).json({ error: 'Company ID harus diisi' });
+
+    const comp = await query.get('SELECT * FROM companies WHERE id = ?', [companyId]);
+    if (!comp) return res.status(404).json({ error: 'Emiten tidak ditemukan' });
+
+    await query.run(
+      'UPDATE companies SET uma_flag = 0, uma_reason = NULL, uma_source = NULL, uma_at = NULL WHERE id = ?',
+      [companyId]
+    );
+
+    io.emit('company:status_changed', {
+      companyId: comp.id,
+      symbol: comp.symbol,
+      uma_flag: 0
+    });
+
+    res.json({
+      success: true,
+      message: `Peringatan UMA untuk saham ${comp.symbol} berhasil dinetralisir.`,
+      companyId
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin: Bekukan Saham (Suspensi Baru)
+app.post('/api/admin/suspension/apply', async (req, res) => {
+  try {
+    const { companyId, until, reason } = req.body;
+    if (!companyId) return res.status(400).json({ error: 'Company ID harus diisi' });
+
+    const company = await query.get('SELECT * FROM companies WHERE id = ?', [companyId]);
+    if (!company) return res.status(404).json({ error: 'Emiten tidak ditemukan' });
+
+    const suspendedAt = new Date().toISOString();
+    const suspendUntil = until ? new Date(until).toISOString() : null;
+    const suspendReason = reason || 'Penghentian sementara perdagangan (Cooling Down) oleh Otoritas Bursa IPMC demi perlindungan investor.';
+
+    await query.run(
+      'UPDATE companies SET status = "SUSPENDED", suspended_at = ?, suspend_until = ?, suspend_reason = ? WHERE id = ?',
+      [suspendedAt, suspendUntil, suspendReason, companyId]
+    );
+
+    const newsItem = {
+      id: uuidv4(),
+      title: `⛔ BURSA IPMC: Perdagangan Saham ${company.symbol} Resmi Disuspensi`,
+      content: suspendReason,
+      affected_sector: company.sector,
+      sentiment: 'BEARISH',
+      published_at: suspendedAt
+    };
+
+    await query.run(
+      'INSERT INTO news (id, title, content, affected_sector, sentiment, published_at) VALUES (?, ?, ?, ?, ?, ?)',
+      [newsItem.id, newsItem.title, newsItem.content, newsItem.affected_sector, newsItem.sentiment, newsItem.published_at]
+    );
+
+    io.emit('market:news_broadcast', newsItem);
+    io.emit('company:status_changed', {
+      companyId: company.id,
+      symbol: company.symbol,
+      status: 'SUSPENDED',
+      suspendedAt,
+      suspendUntil,
+      suspendReason
+    });
+
+    res.json({
+      success: true,
+      message: `Saham ${company.symbol} (${company.name}) berhasil disuspensi hingga ${suspendUntil || 'pemberitahuan lebih lanjut'}.`,
+      company: { ...company, status: 'SUSPENDED', suspended_at: suspendedAt, suspend_until: suspendUntil, suspend_reason: suspendReason }
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin: Cabut Suspensi Saham (Buka Perdagangan Normal)
+app.post('/api/admin/suspension/lift', async (req, res) => {
+  try {
+    const { companyId } = req.body;
+    if (!companyId) return res.status(400).json({ error: 'Company ID harus diisi' });
+
+    const company = await query.get('SELECT * FROM companies WHERE id = ?', [companyId]);
+    if (!company) return res.status(404).json({ error: 'Emiten tidak ditemukan' });
+
+    await query.run(
+      'UPDATE companies SET status = "HEALTHY", suspended_at = NULL, suspend_until = NULL, suspend_reason = NULL WHERE id = ?',
+      [companyId]
+    );
+
+    const newsItem = {
+      id: uuidv4(),
+      title: `🎉 BURSA IPMC: Suspensi Saham ${company.symbol} Resmi Dicabut`,
+      content: `Otoritas Pengawas Bursa IPMC resmi mencabut status suspensi perdagangan saham ${company.name} (${company.symbol}). Perdagangan aktif normal kembali!`,
+      affected_sector: company.sector,
+      sentiment: 'BULLISH',
+      published_at: new Date().toISOString()
+    };
+
+    await query.run(
+      'INSERT INTO news (id, title, content, affected_sector, sentiment, published_at) VALUES (?, ?, ?, ?, ?, ?)',
+      [newsItem.id, newsItem.title, newsItem.content, newsItem.affected_sector, newsItem.sentiment, newsItem.published_at]
+    );
+
+    io.emit('market:news_broadcast', newsItem);
+    io.emit('company:status_changed', {
+      companyId: company.id,
+      symbol: company.symbol,
+      status: 'HEALTHY',
+      suspendedAt: null,
+      suspendUntil: null
+    });
+
+    res.json({
+      success: true,
+      message: `Suspensi saham ${company.symbol} berhasil dicabut. Perdagangan aktif kembali.`,
+      companyId
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

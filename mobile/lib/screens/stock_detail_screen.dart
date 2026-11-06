@@ -433,6 +433,8 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
             basePrice: liveCompany.basePrice,
             priceChangePct: liveCompany.priceChangePct,
             status: liveCompany.status,
+            suspendedAt: liveCompany.suspendedAt,
+            suspendUntil: liveCompany.suspendUntil,
             orderbook: liveCompany.orderbook ?? _detailedCompany!.orderbook,
             shareholders: _detailedCompany!.shareholders.isNotEmpty
                 ? _detailedCompany!.shareholders

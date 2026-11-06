@@ -118,6 +118,7 @@ class CompanyModel {
   final String? seizedAt;
   final String? seizeReason;
   final bool isBumn;
+  final String? suspendedAt;
   final String? suspendUntil;
   final String? suspendReason;
   final String? ownerId;
@@ -158,6 +159,7 @@ class CompanyModel {
     this.seizedAt,
     this.seizeReason,
     this.isBumn = false,
+    this.suspendedAt,
     this.suspendUntil,
     this.suspendReason,
     this.ownerId,
@@ -192,6 +194,15 @@ class CompanyModel {
 
   bool get isSuspended {
     if (status == 'SUSPENDED') return true;
+    if (suspendedAt != null && suspendedAt!.trim().isNotEmpty) {
+      if (suspendUntil == null || suspendUntil!.trim().isEmpty) return true;
+      try {
+        final until = DateTime.parse(suspendUntil!.trim());
+        return until.isAfter(DateTime.now());
+      } catch (_) {
+        return true;
+      }
+    }
     if (suspendUntil != null && suspendUntil!.trim().isNotEmpty) {
       try {
         final until = DateTime.parse(suspendUntil!.trim());
@@ -266,6 +277,7 @@ class CompanyModel {
       seizedAt: json['seized_at']?.toString(),
       seizeReason: json['seize_reason']?.toString(),
       isBumn: bumnFlag,
+      suspendedAt: json['suspended_at']?.toString(),
       suspendUntil: json['suspend_until']?.toString(),
       suspendReason: json['suspend_reason']?.toString(),
       ownerId: json['owner_id']?.toString() ?? json['ownerId']?.toString(),
@@ -297,6 +309,8 @@ class CompanyModel {
     bool? isSeized,
     String? seizeReason,
     bool? isBumn,
+    String? suspendedAt,
+    String? suspendUntil,
     List<Map<String, dynamic>>? shareholders,
   }) {
     return CompanyModel(
@@ -328,6 +342,7 @@ class CompanyModel {
       seizedAt: seizedAt,
       seizeReason: seizeReason ?? this.seizeReason,
       isBumn: isBumn ?? this.isBumn,
+      suspendedAt: suspendedAt ?? this.suspendedAt,
       suspendUntil: suspendUntil,
       suspendReason: suspendReason,
       ownerId: ownerId,
