@@ -1254,6 +1254,100 @@ async function initDb() {
     await query.run("UPDATE users SET role = 'ADMIN' WHERE username = 'admin'");
   }
 
+  // Seed Bank Sentral Corporate Loans if active loans are low
+  const activeLoansCount = await query.get("SELECT COUNT(*) as count FROM loans WHERE status = 'ACTIVE'");
+  if (!activeLoansCount || activeLoansCount.count < 3) {
+    const candidateBots = await query.all(`
+      SELECT id, username, pt_name FROM users
+      WHERE (id LIKE 'bot-user-%' OR id LIKE 'user-bot-%') AND pt_name IS NOT NULL
+      LIMIT 8
+    `);
+    if (candidateBots && candidateBots.length > 0) {
+      const nowMs = Date.now();
+      const sampleLoans = [
+        {
+          id: 'loan-bif-001',
+          bot: candidateBots[0],
+          principal: 3000000000.0,
+          remaining: 1800000000.0,
+          paid: 1200000000.0,
+          status: 'ACTIVE',
+          tenorDays: 14,
+          dueOffsetDays: 9,
+          collateral: 'Sertifikat Pabrik Manufaktur & Brankas Saham'
+        },
+        {
+          id: 'loan-bif-002',
+          bot: candidateBots[1] || candidateBots[0],
+          principal: 5000000000.0,
+          remaining: 4200000000.0,
+          paid: 800000000.0,
+          status: 'ACTIVE',
+          tenorDays: 21,
+          dueOffsetDays: 15,
+          collateral: 'Armada Kapal Kargo & Izin Usaha Pelayaran'
+        },
+        {
+          id: 'loan-bif-003',
+          bot: candidateBots[2] || candidateBots[0],
+          principal: 1500000000.0,
+          remaining: 1500000000.0,
+          paid: 0.0,
+          status: 'ACTIVE',
+          tenorDays: 7,
+          dueOffsetDays: -2, // Overdue 2 hari (Debitur Macet / NPL)
+          collateral: 'Gedung Perkantoran & Piutang Dagang'
+        },
+        {
+          id: 'loan-bif-004',
+          bot: candidateBots[3] || candidateBots[0],
+          principal: 2000000000.0,
+          remaining: 0.0,
+          paid: 2120000000.0,
+          status: 'PAID',
+          tenorDays: 7,
+          dueOffsetDays: -5,
+          collateral: 'Paten Teknologi Cloud & AI Engine'
+        },
+        {
+          id: 'loan-bif-005',
+          bot: candidateBots[4] || candidateBots[0],
+          principal: 4500000000.0,
+          remaining: 3200000000.0,
+          paid: 1300000000.0,
+          status: 'ACTIVE',
+          tenorDays: 14,
+          dueOffsetDays: 6,
+          collateral: 'Konsesi Tambang Batubara & Aset Alat Berat'
+        }
+      ];
+
+      for (let i = 0; i < sampleLoans.length; i++) {
+        const item = sampleLoans[i];
+        const dueDate = new Date(nowMs + item.dueOffsetDays * 86400000).toISOString();
+        const dailyInst = Math.round(item.principal / item.tenorDays);
+        const totalInt = Math.round(item.principal * 0.065 * (item.tenorDays / 30));
+        await query.run(`
+          INSERT OR REPLACE INTO loans (id, user_id, principal_amount, remaining_amount, interest_rate, collateral_type, status, due_date, tenor_days, installment_interval_days, daily_installment_ib, total_interest_ib, paid_amount)
+          VALUES (?, ?, ?, ?, 6.5, ?, ?, ?, ?, 1, ?, ?, ?)
+        `, [
+          item.id,
+          item.bot.id,
+          item.principal,
+          item.remaining,
+          item.collateral,
+          item.status,
+          dueDate,
+          item.tenorDays,
+          dailyInst,
+          totalInt,
+          item.paid
+        ]);
+      }
+      console.log('🏛️ Bank Sentral BIF Active Corporate Credit Facilities verified & seeded.');
+    }
+  }
+
   await syncAllToMariaDb();
 
   console.log('Database tables verified / created with dual accounts (Personal & Company).');

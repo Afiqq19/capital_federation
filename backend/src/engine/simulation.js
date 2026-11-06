@@ -461,6 +461,34 @@ class MarketSimulationEngine {
           }
         }
       }
+
+      // 1.5. Dynamic Bot Credit Facility Circulation (Perputaran Kredit & Bunga Bank Sentral)
+      if (this.tickCount % 24 === 5) {
+        try {
+          const activeLoan = await query.get(
+            "SELECT * FROM loans WHERE status = 'ACTIVE' AND remaining_amount > 0 ORDER BY RANDOM() LIMIT 1"
+          );
+          if (activeLoan) {
+            const installment = Math.min(activeLoan.remaining_amount, Math.max(50000000, Number(activeLoan.daily_installment_ib || 100000000)));
+            const newRemaining = Math.max(0, activeLoan.remaining_amount - installment);
+            const newPaid = (activeLoan.paid_amount || 0) + installment;
+            const newStatus = newRemaining <= 0 ? 'PAID' : 'ACTIVE';
+            await query.run(
+              'UPDATE loans SET remaining_amount = ?, paid_amount = ?, status = ? WHERE id = ?',
+              [newRemaining, newPaid, newStatus, activeLoan.id]
+            );
+            // Bagian bunga kredit masuk ke Kas Negara (state_treasury_ledger)
+            const interestIncome = Math.round(installment * 0.065);
+            if (interestIncome > 0) {
+              const ledgerId = 'trs-int-' + Date.now();
+              await query.run(`
+                INSERT INTO state_treasury_ledger (id, source_type, title, amount_ib, direction, reference_id, notes)
+                VALUES (?, 'BANK_INTEREST_INCOME', 'Penerimaan Bunga Fasilitas Kredit Bank Sentral BIF', ?, 'INCOME', ?, 'Bunga cicilan fasilitas pinjaman likuiditas korporasi')
+              `, [ledgerId, interestIncome, activeLoan.id]).catch(() => {});
+            }
+          }
+        } catch (_) {}
+      }
       const activeEvents = this.cachedActiveEvents || [];
       const recentNews = this.cachedRecentNews || [];
       const isAutoIntervention = !!this.cachedIsAutoIntervention;
