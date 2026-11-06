@@ -5,6 +5,72 @@ const BOT_JUDGE_NAME = 'Prof. Dr. Bagas Daniswara, S.H., M.H. (Ketua Majelis Hak
 const BOT_CLERK_NAME = 'R. Arya Wicaksana, S.H. (Panitera Sidang Niaga PNAF)';
 const AUTO_JUDGE_SETTING_KEY = 'court_bot_auto_judge';
 
+// Rehabilitasi total emiten setelah banding/rekonvensi dikabulkan:
+// cabut sita/pembekuan/UMA/suspensi, hapus denda & defisit kas negatif, dan buka kembali operasional.
+async function rehabilitateCompanyAfterAppeal(io, companyId, ownerId, caseNumber) {
+  if (!companyId) return null;
+  const comp = await query.get('SELECT * FROM companies WHERE id = ?', [companyId]);
+  if (!comp) return null;
+  if (ownerId && comp.owner_id && comp.owner_id !== ownerId) return null; // Jangan pernah merehabilitasi milik orang lain
+
+  const owner = comp.owner_id ? await query.get('SELECT * FROM users WHERE id = ?', [comp.owner_id]) : null;
+  const isPrimary = Boolean(
+    owner && ((owner.pt_symbol && owner.pt_symbol === comp.symbol) || (owner.pt_name && owner.pt_name === comp.name))
+  );
+
+  const compBal = Number(comp.company_balance_ib || 0);
+  const ownerCompBal = owner ? Number(owner.company_balance_ib || 0) : 0;
+  const deficitComp = compBal < 0 ? Math.abs(compBal) : 0;
+  const deficitOwner = isPrimary && ownerCompBal < 0 ? Math.abs(ownerCompBal) : 0;
+  const clearedDeficitIb = Math.max(deficitComp, deficitOwner);
+
+  await query.run(
+    `UPDATE companies
+     SET uma_flag = 0, uma_reason = NULL, suspended_at = NULL, suspend_until = NULL, suspend_reason = NULL,
+         is_seized = 0, is_auction_ready = 0, seize_reason = NULL, seized_at = NULL, seized_by = NULL, seizure_deadline = NULL,
+         status = 'HEALTHY',
+         company_balance_ib = CASE WHEN COALESCE(company_balance_ib, 0) < 0 THEN 0 ELSE company_balance_ib END
+     WHERE id = ?`,
+    [comp.id]
+  );
+  if (isPrimary && ownerCompBal < 0) {
+    await query.run('UPDATE users SET company_balance_ib = 0 WHERE id = ?', [owner.id]);
+  }
+
+  if (owner) {
+    try {
+      await recordCashFlow({
+        userId: owner.id,
+        companyId: comp.id,
+        accountType: 'COMPANY',
+        category: 'COURT_VERDICT',
+        title: `Rehabilitasi Putusan Banding PNAF (${caseNumber || '-'})`,
+        amountIb: clearedDeficitIb,
+        direction: 'INCOME',
+        balanceAfter: Math.max(0, compBal),
+        notes: clearedDeficitIb > 0
+          ? `Banding dikabulkan: denda/defisit IB ${clearedDeficitIb.toLocaleString('id-ID')} dihapus & sita dicabut.`
+          : 'Banding dikabulkan: sita & pembekuan dicabut.',
+      });
+    } catch (_) {}
+  }
+
+  if (io) {
+    io.emit('company:seized_status', { companyId: comp.id, isSeized: false, reason: 'Rehabilitasi Putusan Banding PNAF' });
+    io.emit('company:status_changed', { companyId: comp.id, status: 'HEALTHY' });
+    if (owner) {
+      io.emit('user:balance_updated', {
+        userId: owner.id,
+        companyId: comp.id,
+        companyBalance: Math.max(0, isPrimary ? ownerCompBal : compBal),
+        company_balance_ib: Math.max(0, isPrimary ? ownerCompBal : compBal),
+      });
+      io.emit('user:portfolio_updated', { userId: owner.id });
+    }
+  }
+  return { companyName: comp.name, clearedDeficitIb };
+}
+
 function getWibParts(date = new Date()) {
   const wibMs = date.getTime() + 7 * 3600 * 1000;
   const wib = new Date(wibMs);
@@ -495,13 +561,19 @@ async function executeCourtVerdict(
         let plBal = Number(plUser.balance_ib || 0);
         let plCompBal = Number(plUser.company_balance_ib || 0);
         let deductPersonal = Math.min(plBal, defamationFine);
-        let deductComp = defamationFine - deductPersonal;
+        // Denda tidak boleh menyeret kas PT ke zona defisit/bangkrut: hanya dipotong sebatas kas PT yang positif
+        let deductComp = Math.min(Math.max(0, plCompBal), defamationFine - deductPersonal);
         let newPlBal = Math.max(0, plBal - deductPersonal);
         let newPlCompBal = plCompBal - deductComp;
 
         await query.run('UPDATE users SET balance_ib = ?, company_balance_ib = ? WHERE id = ?', [newPlBal, newPlCompBal, plUser.id]);
         if (deductComp > 0) {
-          await query.run('UPDATE companies SET company_balance_ib = company_balance_ib - ? WHERE owner_id = ?', [deductComp, plUser.id]);
+          await query.run(
+            `UPDATE companies SET company_balance_ib = company_balance_ib - ?
+             WHERE id = (SELECT c.id FROM companies c JOIN users u ON u.id = c.owner_id
+                         WHERE c.owner_id = ? ORDER BY (c.symbol = u.pt_symbol OR c.name = u.pt_name) DESC LIMIT 1)`,
+            [deductComp, plUser.id]
+          );
         }
 
         const newDefBal = Number(defUser.balance_ib || 0) + defamationFine;
@@ -677,8 +749,11 @@ async function executeCourtVerdict(
         );
 
         // Jika Tergugat memiliki baris di companies, sinkronkan juga kas PT-nya
+        // Sinkronkan kas PT Utama saja (jangan menimpa saldo seluruh anak perusahaan milik Tergugat!)
         await query.run(
-          'UPDATE companies SET company_balance_ib = ? WHERE owner_id = ?',
+          `UPDATE companies SET company_balance_ib = ?
+           WHERE id = (SELECT c.id FROM companies c JOIN users u ON u.id = c.owner_id
+                       WHERE c.owner_id = ? ORDER BY (c.symbol = u.pt_symbol OR c.name = u.pt_name) DESC LIMIT 1)`,
           [newDefComp, defUser.id]
         );
 
@@ -1141,6 +1216,17 @@ async function executeCourtVerdict(
         const extendedIso = new Date((Number.isNaN(baseMs) ? Date.now() : Math.max(Date.now(), baseMs)) + 7 * 86400000).toISOString();
         await query.run('UPDATE loans SET due_date = ? WHERE id = ?', [extendedIso, ln.id]);
       }
+      // PKPU debitur dikabulkan: rehabilitasi emiten yang dibekukan agar langsung terbuka
+      if (/BCF|Bank Sentral|PKPU|Restrukturisasi/i.test(`${c.defendant_name} ${c.title}`) && finalStatus === 'VERDICT_APPROVED') {
+        const frozenComps = await query.all(
+          "SELECT id FROM companies WHERE owner_id = ? AND (is_seized = 1 OR status IN ('BANKRUPT','CRITICAL') OR COALESCE(company_balance_ib, 0) < 0)",
+          [plaintiffId]
+        );
+        for (const fc of frozenComps || []) {
+          const rehab = await rehabilitateCompanyAfterAppeal(io, fc.id, plaintiffId, c.case_number);
+          if (rehab) finalNotes += ` [REHABILITASI ${rehab.companyName}: pembekuan dicabut & defisit IB ${rehab.clearedDeficitIb.toLocaleString('id-ID')} dihapus.]`;
+        }
+      }
     }
     if (c.case_type === 'REGULATORY' && finalStatus === 'VERDICT_APPROVED') {
       // Jika penggugat mengajukan banding pemulihan suspensi/UMA atas emitennya sendiri
@@ -1156,23 +1242,27 @@ async function executeCourtVerdict(
     }
     if ((c.case_type === 'DEFAMATION' || c.case_type === 'RECONVENTION') && finalStatus === 'VERDICT_APPROVED') {
       // Pemulihan nama baik emiten & pembatalan status sita PNAF / UMA jika gugatan banding & rekonvensi dikabulkan
-      let plCompId = c.plaintiff_company_id;
-      if (!plCompId && plaintiffId) {
-        const seizedPlComp = await query.get('SELECT id FROM companies WHERE owner_id = ? AND is_seized = 1 LIMIT 1', [plaintiffId]);
-        if (seizedPlComp) plCompId = seizedPlComp.id;
-        else {
+      // Kumpulkan emiten yang direhabilitasi: emiten yang dirujuk perkara + SEMUA emiten penggugat yang sedang disita/bangkrut/defisit
+      const rehabIds = new Set();
+      if (c.plaintiff_company_id) rehabIds.add(c.plaintiff_company_id);
+      if (plaintiffId) {
+        const frozenComps = await query.all(
+          "SELECT id FROM companies WHERE owner_id = ? AND (is_seized = 1 OR status IN ('BANKRUPT','CRITICAL') OR COALESCE(company_balance_ib, 0) < 0)",
+          [plaintiffId]
+        );
+        for (const fc of frozenComps || []) rehabIds.add(fc.id);
+        if (rehabIds.size === 0) {
           const anyPlComp = await query.get('SELECT id FROM companies WHERE owner_id = ? LIMIT 1', [plaintiffId]);
-          if (anyPlComp) plCompId = anyPlComp.id;
+          if (anyPlComp) rehabIds.add(anyPlComp.id);
         }
       }
-      if (plCompId) {
-        await query.run(
-          "UPDATE companies SET uma_flag = 0, uma_reason = NULL, suspended_at = NULL, suspend_until = NULL, suspend_reason = NULL, is_seized = 0, is_auction_ready = 0, seize_reason = NULL, seized_at = NULL, seized_by = NULL, seizure_deadline = NULL, status = 'HEALTHY' WHERE id = ?",
-          [plCompId]
-        );
-        if (io) {
-          io.emit('company:seized_status', { companyId: plCompId, isSeized: false, reason: 'Rehabilitasi Putusan Banding PNAF' });
-          io.emit('company:status_changed', { companyId: plCompId, status: 'HEALTHY' });
+      for (const rid of rehabIds) {
+        const rehab = await rehabilitateCompanyAfterAppeal(io, rid, plaintiffId, c.case_number);
+        if (!rehab) continue;
+        if (rehab.clearedDeficitIb > 0) {
+          finalNotes += ` [REHABILITASI TOTAL ${rehab.companyName}: sita dicabut, denda/defisit IB ${rehab.clearedDeficitIb.toLocaleString('id-ID')} dihapus, perseroan dibuka kembali & operasional berjalan normal.]`;
+        } else {
+          finalNotes += ` [REHABILITASI TOTAL ${rehab.companyName}: sita & pembekuan dicabut, perseroan dibuka kembali & operasional berjalan normal.]`;
         }
       }
     }

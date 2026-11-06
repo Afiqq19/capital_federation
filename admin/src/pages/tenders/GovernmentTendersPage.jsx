@@ -776,7 +776,7 @@ export default function GovernmentTendersPage() {
       {/* Footer Versi Web Admin */}
       <div className="pt-6 pb-2 text-center text-xs text-slate-500 border-t border-slate-800/60 flex flex-col sm:flex-row items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <Badge tone="amber">Web Admin Console v2.0.0 (Build 48)</Badge>
+          <Badge tone="amber">Web Admin Console v2.0.1 (Build 50)</Badge>
           <span>Capital Federation Sovereign Launch Console</span>
         </div>
         <div className="font-mono text-[11px] text-slate-500">

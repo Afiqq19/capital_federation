@@ -132,7 +132,7 @@ export default function PublicDownloadLandingPage() {
       downloadCount: (Number(prev.downloadCount) || 148) + 1,
     }));
     const baseDownload = versionInfo.downloadUrl || '/api/download/apk';
-    const buster = `?v=${versionInfo.buildNumber || 49}&t=${Date.now()}`;
+    const buster = `?v=${versionInfo.buildNumber || 50}&t=${Date.now()}`;
     window.location.href = baseDownload + buster;
     setTimeout(() => setIsDownloading(false), 3000);
   };

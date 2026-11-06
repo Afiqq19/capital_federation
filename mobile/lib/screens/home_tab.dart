@@ -3451,6 +3451,7 @@ class _HomeTabState extends State<HomeTab> {
                                       final res = await ApiService.fileCourtCase(
                                         plaintiffName: plName,
                                         plaintiffUserId: user.id,
+                                        plaintiffCompanyId: activeEntity['id']?.toString(),
                                         defendantName: accuser,
                                         caseType: 'DEFAMATION',
                                         title: 'Banding & Rekonvensi Pencemaran Nama Baik atas Putusan No. $caseNo',
@@ -5452,6 +5453,26 @@ class _HomeTabState extends State<HomeTab> {
                     ),
                   ),
                 ],
+              ),
+            ),
+          ],
+
+          // Penjelasan transparan: proyeksi laba vs status beku/defisit
+          if (activeEntity['isSeized'] == true || activeEntity['status'] == 'BANKRUPT' || _resolveEntityCash(user, activeEntity, isPrimary: isPrimary) < 0) ...[
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E3A8A).withValues(alpha: 0.22),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.45)),
+              ),
+              child: Text(
+                isProfit
+                    ? 'ℹ️ Angka di bawah adalah PROYEKSI potensi per siklus, bukan kas riil. Perseroan ini sedang DIBEKUKAN sehingga laba siklus tidak masuk ke kas. Kas negatif BUKAN karena operasional rugi, melainkan akibat denda/ganti rugi putusan PNAF atau biaya yang memotong kas. Menangkan banding atau suntik modal untuk membuka kembali.'
+                    : 'ℹ️ Perseroan sedang DIBEKUKAN. Beban operasional & gaji melampaui omzet sehingga kas menyusut hingga batas -IB 50 Juta. Naikkan R&D/Marketing atau suntik modal agar kembali sehat.',
+                style: const TextStyle(color: Color(0xFFBAE6FD), fontSize: 9.5, height: 1.4, fontWeight: FontWeight.w600),
               ),
             ),
           ],

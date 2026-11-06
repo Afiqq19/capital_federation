@@ -192,7 +192,7 @@ export default function Sidebar({ currentPage, onNavigate, adminUser, onLogout, 
         </div>
 
         <div className="text-[10px] text-amber-400 font-mono font-semibold truncate">
-          v2.0.0 (Build 48) • IPMC Terminal Pro
+          v2.0.1 (Build 50) • IPMC Terminal Pro
         </div>
       </div>
     </aside>

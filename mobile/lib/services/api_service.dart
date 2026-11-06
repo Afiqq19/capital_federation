@@ -97,9 +97,9 @@ class ApiService {
     return null;
   }
 
-  static const String currentAppVersion = '2.0.0';
-  static const int currentBuildNumber = 49;
-  static const String currentApkDisplayVersion = 'v2.0.0-CFX Production (Build 49)';
+  static const String currentAppVersion = '2.0.1';
+  static const int currentBuildNumber = 50;
+  static const String currentApkDisplayVersion = 'v2.0.1-CFX Production (Build 50)';
 
   // Fetch Live Server Version & Update Detection Info
   static Future<Map<String, dynamic>?> getServerVersion() async {
@@ -1356,6 +1356,7 @@ class ApiService {
   static Future<Map<String, dynamic>> fileCourtCase({
     required String plaintiffName,
     String? plaintiffUserId,
+    String? plaintiffCompanyId,
     required String defendantName,
     String? defendantUserId,
     String? defendantCompanyId,
@@ -1376,6 +1377,7 @@ class ApiService {
         body: jsonEncode({
           'plaintiffName': plaintiffName,
           if (plaintiffUserId != null) 'plaintiffUserId': plaintiffUserId,
+          if (plaintiffCompanyId != null && plaintiffCompanyId.isNotEmpty) 'plaintiffCompanyId': plaintiffCompanyId,
           'defendantName': defendantName,
           if (defendantUserId != null) 'defendantUserId': defendantUserId,
           if (defendantCompanyId != null) 'defendantCompanyId': defendantCompanyId,
