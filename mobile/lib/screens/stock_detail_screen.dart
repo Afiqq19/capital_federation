@@ -440,8 +440,9 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
           )
         : liveCompany;
 
-    final isUp = c.priceChangePct >= 0;
-    final nominalDiff = (c.currentPrice - c.basePrice).round();
+    final refPrice = c.prevClose > 0 ? c.prevClose : (c.basePrice > 0 ? c.basePrice : c.currentPrice);
+    final nominalDiff = (c.currentPrice - refPrice).round();
+    final isUp = nominalDiff >= 0;
     final candlePoints = _getCandlePoints(c);
     final chartPoints = candlePoints.map((e) => e.close).toList();
 
@@ -794,7 +795,7 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                           child: Text(
                             c.isPreIpo
                                 ? '0 (0.00%)'
-                                : '${isUp ? '+' : ''}${CurrencyFormatter.formatNumberOnly(nominalDiff)} (${CurrencyFormatter.formatPercentage(c.priceChangePct)})',
+                                : '${nominalDiff > 0 ? '+' : (nominalDiff < 0 ? '-' : '')}${CurrencyFormatter.formatNumberOnly(nominalDiff.abs())} (${c.priceChangePct > 0 ? '+' : (c.priceChangePct < 0 ? '-' : '')}${CurrencyFormatter.formatPercentage(c.priceChangePct.abs())})',
                             style: TextStyle(
                               color: c.isPreIpo
                                   ? const Color(0xFF94A3B8)

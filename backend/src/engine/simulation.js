@@ -2,6 +2,24 @@ const { v4: uuidv4 } = require('uuid');
 const { query, recordCashFlow } = require('../db');
 const { BOT_ROSTER } = require('../botData');
 
+// Konversi Waktu Real-Time ke Waktu Indonesia Barat (WIB / Asia/Jakarta: UTC+7)
+function getWibDate(date = new Date()) {
+  const d = (date instanceof Date) ? date : new Date(date);
+  return new Date(d.getTime() + 7 * 3600 * 1000);
+}
+
+function getWibTimeParts(date = new Date()) {
+  const wib = getWibDate(date);
+  const hh = String(wib.getUTCHours()).padStart(2, '0');
+  const mm = String(wib.getUTCMinutes()).padStart(2, '0');
+  const ss = String(wib.getUTCSeconds()).padStart(2, '0');
+  return {
+    hh, mm, ss,
+    timeHm: `${hh}:${mm}`,
+    timeHms: `${hh}:${mm}:${ss}`,
+  };
+}
+
 class MarketSimulationEngine {
   constructor(io) {
     this.io = io;
@@ -165,13 +183,19 @@ class MarketSimulationEngine {
   _generateInitialIpmcHistory(targetPoints = 7385.40, openPoints = 7350.00) {
     const history = [];
     const pointsCount = 36;
-    const startTime = new Date();
-    startTime.setHours(9, 0, 0, 0);
+    const wibNow = getWibDate(new Date());
+    const startWib = new Date(wibNow);
+    startWib.setUTCHours(9, 0, 0, 0);
+
+    const nowWibDecimal = wibNow.getUTCHours() + wibNow.getUTCMinutes() / 60;
+    const endWibDecimal = Math.max(9.5, Math.min(nowWibDecimal, 16.0));
+    const spanMinutes = Math.max(45, (endWibDecimal - 9.0) * 60);
+    const stepMin = spanMinutes / (pointsCount - 1);
 
     for (let i = 0; i < pointsCount; i++) {
-      const stepTime = new Date(startTime.getTime() + i * 11 * 60 * 1000); // 11-minute steps
-      const hh = String(stepTime.getHours()).padStart(2, '0');
-      const mm = String(stepTime.getMinutes()).padStart(2, '0');
+      const stepTime = new Date(startWib.getTime() + i * stepMin * 60 * 1000);
+      const hh = String(stepTime.getUTCHours()).padStart(2, '0');
+      const mm = String(stepTime.getUTCMinutes()).padStart(2, '0');
       
       const t = i / (pointsCount - 1);
       // Hermite smooth interpolation between open and target
@@ -241,13 +265,10 @@ class MarketSimulationEngine {
 
       if (dbTrades && dbTrades.length > 0) {
         this.runningTrades = dbTrades.map(t => {
-          const d = new Date(t.created_at);
-          const hh = String(d.getHours()).padStart(2, '0');
-          const mm = String(d.getMinutes()).padStart(2, '0');
-          const ss = String(d.getSeconds()).padStart(2, '0');
+          const tp = getWibTimeParts(t.created_at);
           return {
             id: t.id,
-            time: `${hh}:${mm}:${ss}`,
+            time: tp.timeHms,
             symbol: t.symbol,
             price: t.price,
             lots: t.lots,
@@ -486,6 +507,27 @@ class MarketSimulationEngine {
           tickDeltaPct -= 0.0025;
         }
 
+        // Fundamental Score & Skala Korporasi (R&D, Direksi, Staf) Valuation Power
+        const fundScore = Number(comp.fundamental_score || 70);
+        if (fundScore >= 80) {
+          const fundAlpha = ((fundScore - 75) / 25) * 0.0022; // Positive alpha boost
+          tickDeltaPct += fundAlpha;
+          // Target trend terangkat otomatis ke zona apresiasi
+          if (baseTrend < 15.0) {
+            this.stockTrends.set(comp.id, Math.min(30.0, baseTrend + 0.35));
+          }
+        } else if (fundScore < 50) {
+          tickDeltaPct -= 0.0015;
+        }
+
+        // R&D & Skala Perseroan: Inovasi & Kapasitas mendorong akumulasi pasar
+        const rdLvl = Number(comp.rd_level || 1);
+        const ptLvl = Number(comp.pt_level || comp.operational_level || 1);
+        if (rdLvl > 3 || ptLvl > 2) {
+          const scaleBonus = Math.min(0.0040, (rdLvl * 0.0001) + (ptLvl * 0.00015));
+          tickDeltaPct += scaleBonus;
+        }
+
         // Active Event bias (e.g. Resesi, Perang, Pandemi, Krisis Minyak)
         for (const ev of activeEvents) {
           if (ev.affected_sector === 'ALL' || ev.affected_sector === comp.sector) {
@@ -668,13 +710,11 @@ class MarketSimulationEngine {
       }
       this.foreignNetIb = this.foreignBuyIb - this.foreignSellIb;
 
-      // Update IPMC History buffer every 2 ticks
+      // Update IPMC History buffer every 2 ticks (WIB)
       if (this.tickCount % 2 === 0) {
-        const nowDate = new Date();
-        const hh = String(nowDate.getHours()).padStart(2, '0');
-        const mm = String(nowDate.getMinutes()).padStart(2, '0');
+        const tp = getWibTimeParts(new Date());
         this.ipmcHistory.push({
-          time: `${hh}:${mm}`,
+          time: tp.timeHm,
           points: this.ipmcPoints,
         });
         if (this.ipmcHistory.length > 50) {
@@ -692,11 +732,8 @@ class MarketSimulationEngine {
       if (tradeableList.length > 0) {
         const activeBots = await this._getActiveBots();
         const tradesCount = Math.floor(Math.random() * 2) + 1;
-        const nowObj = new Date();
-        const hh = String(nowObj.getHours()).padStart(2, '0');
-        const mm = String(nowObj.getMinutes()).padStart(2, '0');
-        const ss = String(nowObj.getSeconds()).padStart(2, '0');
-        const timeStr = `${hh}:${mm}:${ss}`;
+        const tp = getWibTimeParts(new Date());
+        const timeStr = tp.timeHms;
 
         let tickBotTaxIb = 0;
         let lastBotTraderName = 'haziq';
@@ -962,14 +999,12 @@ class MarketSimulationEngine {
           [newFilledLots, newStatus, order.id]
         );
 
-        // Siarkan transaksi ke pita Running Trade bursa
+        // Siarkan transaksi ke pita Running Trade bursa (WIB)
         const nowM = new Date();
-        const hhM = String(nowM.getHours()).padStart(2, '0');
-        const mmM = String(nowM.getMinutes()).padStart(2, '0');
-        const ssM = String(nowM.getSeconds()).padStart(2, '0');
+        const tpM = getWibTimeParts(nowM);
         this.recordTrade({
           id: uuidv4(),
-          time: `${hhM}:${mmM}:${ssM}`,
+          time: tpM.timeHms,
           symbol: order.symbol,
           price: execPrice,
           lots: fillAmount,
@@ -1082,12 +1117,86 @@ class MarketSimulationEngine {
     }
   }
 
+  // Peningkatan Valuasi & Kapitalisasi Pasar Seketika Pasca Aksi Korporasi (R&D, Direksi, Staf)
+  async boostCompanyValuation(companyId, details = {}) {
+    try {
+      if (!companyId) return;
+      const comp = this.liveCompanyMap.get(companyId);
+      if (!comp) return;
+
+      const fund = details.fundamentalScore || 85;
+      comp.fundamental_score = fund;
+      if (details.rdLevel) comp.rd_level = details.rdLevel;
+      if (details.ptLevel) {
+        comp.pt_level = details.ptLevel;
+        comp.operational_level = details.ptLevel;
+      }
+
+      // 1. Sentimen Bullish Kuat: Naikkan target trend saham ke zona bullish
+      const curTrend = this.stockTrends.get(companyId) || 5.0;
+      const trendBoost = details.type === 'ceo' ? 14.0 : (details.type === 'rd' ? 10.0 : 6.0);
+      this.stockTrends.set(companyId, Math.min(35.0, curTrend + trendBoost));
+
+      // 2. Apresiasi Harga Saham Langsung Pasca Aksi Korporasi (Corporate Action Valuation Bump)
+      const isFrozen = comp.status === 'SUSPENDED' || comp.is_seized === 1 || comp.status === 'BANKRUPT';
+      if (!isFrozen) {
+        const refPrice = comp.prev_close > 0 ? comp.prev_close : comp.base_price;
+        const araCeiling = Math.round(refPrice * 1.25);
+        
+        // Kenaikan valuasi pasar langsung (+3% s/d +7%)
+        const bumpPct = Math.min(0.07, Math.max(0.025, 0.02 * (1 + (details.level || 1) * 0.04)));
+        let targetPrice = Math.round(comp.current_price * (1 + bumpPct));
+        
+        // Jika sudah mentok di batas ARA sesi sebelumnya, relaksasikan batas (buka plafon baru)
+        if (targetPrice >= araCeiling) {
+          comp.prev_close = comp.current_price;
+          const newCeiling = Math.round(comp.prev_close * 1.25);
+          targetPrice = Math.min(newCeiling, targetPrice);
+        }
+
+        comp.current_price = targetPrice;
+        comp.daily_high = Math.max(comp.daily_high || targetPrice, targetPrice);
+        const changePct = parseFloat((((targetPrice - comp.prev_close) / comp.prev_close) * 100).toFixed(2));
+        comp.price_change_pct = changePct;
+
+        // Stage price update to DB
+        this.pendingPriceUpdates.set(companyId, [targetPrice, comp.daily_high, comp.daily_low, companyId]);
+        await query.run(
+          'UPDATE companies SET current_price = ?, daily_high = ?, prev_close = ?, fundamental_score = ? WHERE id = ?',
+          [targetPrice, comp.daily_high, comp.prev_close, fund, companyId]
+        ).catch(() => {});
+      }
+
+      // 3. Simulasikan Order Pembelian Institusi / Ritel Masuk ke Running Trade (WIB)
+      const tp = getWibTimeParts(new Date());
+      const lots = Math.floor(250 + Math.random() * 500);
+      this.runningTrades.unshift({
+        id: uuidv4(),
+        time: tp.timeHms,
+        symbol: comp.symbol,
+        price: comp.current_price,
+        lots,
+        type: 'BUY',
+        buyer: 'Konsorsium Investasi & Ritel',
+        seller: 'Market Maker'
+      });
+      if (this.runningTrades.length > 30) this.runningTrades.pop();
+
+      this.io.emit('market:running_trade', this.runningTrades[0]);
+      this.io.emit('market:ticker', Array.from(this.liveCompanyMap.values()));
+      this.io.emit('market:overview', this.getMarketOverview());
+      console.log(`🚀 [Valuasi] ${comp.symbol} berhasil di-boost pasca aksi korporasi ${details.type || 'upgrade'}: Harga baru IB ${comp.current_price.toLocaleString('id-ID')}, Market Cap IB ${(comp.current_price * (comp.total_shares || 1000000000)).toLocaleString('id-ID')}`);
+    } catch (e) {
+      console.error('Error boosting valuation:', e);
+    }
+  }
+
   // Rollover Sesi Baru Perdagangan Bursa Efek (Daily Session Rollover)
   // Menyegarkan harga penutupan kemarin (prev_close) ke harga saat ini, membuka ruang ARA/ARB baru
   async rolloverDailySession(manualTrigger = false) {
     try {
       console.log('🔄 [Bursa] Menjalankan Rollover Sesi Baru Perdagangan Bursa...');
-      const companies = await query.all('SELECT id, name, symbol, current_price, status FROM companies WHERE status != "SUSPENDED"');
+      const companies = await query.all('SELECT id, name, symbol, current_price, status, fundamental_score FROM companies WHERE status != "SUSPENDED"');
       for (const comp of companies) {
         const newRef = comp.current_price > 0 ? comp.current_price : 1000;
         await query.run(
@@ -1099,6 +1208,22 @@ class MarketSimulationEngine {
            WHERE id = ?`,
           [newRef, newRef, newRef, comp.id]
         );
+
+        // Update in-memory liveCompanyMap so prices and ceilings are refreshed immediately
+        const memComp = this.liveCompanyMap.get(comp.id);
+        if (memComp) {
+          memComp.prev_close = newRef;
+          memComp.daily_high = newRef;
+          memComp.daily_low = newRef;
+          memComp.price_change_pct = 0.0;
+          if (memComp.status === 'ARA' || memComp.status === 'ARB') {
+            memComp.status = 'HEALTHY';
+          }
+          const fund = Number(memComp.fundamental_score || comp.fundamental_score || 70);
+          if (fund >= 85) {
+            this.stockTrends.set(comp.id, Math.min(30.0, 8.0 + ((fund - 85) * 1.5)));
+          }
+        }
       }
       
       // Update IPMC composite base
@@ -1879,10 +2004,8 @@ class MarketSimulationEngine {
       this.ipmcLow = Math.min(this.ipmcLow, this.ipmcPoints);
       this.ipmcHigh = Math.max(this.ipmcHigh, this.ipmcPoints);
 
-      const now = new Date();
-      const hh = String(now.getHours()).padStart(2, '0');
-      const mm = String(now.getMinutes()).padStart(2, '0');
-      this.ipmcHistory.push({ time: `${hh}:${mm}`, points: this.ipmcPoints });
+      const tpShock = getWibTimeParts(new Date());
+      this.ipmcHistory.push({ time: tpShock.timeHm, points: this.ipmcPoints });
       if (this.ipmcHistory.length > 40) this.ipmcHistory.shift();
 
       this.io.emit('market:macro_shock', {

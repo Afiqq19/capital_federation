@@ -252,6 +252,7 @@ class GameProvider extends ChangeNotifier {
             return c.copyWith(
               currentPrice: (data['current_price'] ?? c.currentPrice).toDouble(),
               basePrice: (data['base_price'] ?? c.basePrice).toDouble(),
+              prevClose: (data['prev_close'] ?? c.prevClose).toDouble(),
               priceChangePct: (data['price_change_pct'] ?? c.priceChangePct).toDouble(),
               status: data['status'] ?? c.status,
               orderbook: ob ?? c.orderbook,

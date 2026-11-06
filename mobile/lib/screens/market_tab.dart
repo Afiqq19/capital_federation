@@ -1518,7 +1518,7 @@ class _MarketTabState extends State<MarketTab> {
                                           boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 4)],
                                         ),
                                         child: Text(
-                                          '${(chartPoints[_scrubIndex!]['points'] as num).toDouble().toStringAsFixed(2)} • ${chartPoints[_scrubIndex!]['time']}',
+                                          '${(chartPoints[_scrubIndex!]['points'] as num).toDouble().toStringAsFixed(2)} • ${chartPoints[_scrubIndex!]['time']} WIB',
                                           style: const TextStyle(
                                             color: Colors.white,
                                             fontSize: 10,
@@ -1535,16 +1535,16 @@ class _MarketTabState extends State<MarketTab> {
                         ),
                       ),
 
-                      // Time Axis Labels (like real IHSG chart: 09:00, 11:30, 13:30, 15:45)
+                      // Time Axis Labels (WIB Jakarta: sinkron 100% pergerakan intraday)
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(chartPoints.isNotEmpty ? chartPoints.first['time'] : '09:00', style: const TextStyle(color: Color(0xFF64748B), fontSize: 9)),
-                            const Text('11:30', style: TextStyle(color: Color(0xFF64748B), fontSize: 9)),
-                            const Text('13:30', style: TextStyle(color: Color(0xFF64748B), fontSize: 9)),
-                            Text(chartPoints.isNotEmpty ? chartPoints.last['time'] : '15:45', style: const TextStyle(color: Color(0xFF64748B), fontSize: 9)),
+                            Text(chartPoints.isNotEmpty ? chartPoints.first['time'] : '09:00', style: const TextStyle(color: Color(0xFF64748B), fontSize: 9, fontWeight: FontWeight.w600)),
+                            Text(chartPoints.length > 4 ? chartPoints[(chartPoints.length * 0.33).round()]['time'] : '11:30', style: const TextStyle(color: Color(0xFF64748B), fontSize: 9, fontWeight: FontWeight.w600)),
+                            Text(chartPoints.length > 4 ? chartPoints[(chartPoints.length * 0.66).round()]['time'] : '13:30', style: const TextStyle(color: Color(0xFF64748B), fontSize: 9, fontWeight: FontWeight.w600)),
+                            Text(chartPoints.isNotEmpty ? '${chartPoints.last['time']} WIB' : '16:00 WIB', style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 9, fontWeight: FontWeight.w700)),
                           ],
                         ),
                       ),

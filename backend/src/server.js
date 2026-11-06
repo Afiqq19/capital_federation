@@ -41,6 +41,20 @@ function hashString(str) {
   return hash;
 }
 
+// Konversi Waktu Real-Time ke Waktu Indonesia Barat (WIB / Asia/Jakarta: UTC+7)
+function getWibTimeParts(date = new Date()) {
+  const d = (date instanceof Date) ? date : new Date(date);
+  const wib = new Date(d.getTime() + 7 * 3600 * 1000);
+  const hh = String(wib.getUTCHours()).padStart(2, '0');
+  const mm = String(wib.getUTCMinutes()).padStart(2, '0');
+  const ss = String(wib.getUTCSeconds()).padStart(2, '0');
+  return {
+    hh, mm, ss,
+    timeHm: `${hh}:${mm}`,
+    timeHms: `${hh}:${mm}:${ss}`,
+  };
+}
+
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -1763,6 +1777,15 @@ app.post('/api/company/upgrade', async (req, res) => {
       invalidateMarketCaches();
       io.emit('user:balance_updated', { userId, newBalance: user.balance_ib, companyBalance: newBalance });
 
+      if (primaryComp && simulationEngine) {
+        simulationEngine.boostCompanyValuation(primaryComp.id, {
+          type,
+          level: nextLvl,
+          ptLevel: nextPtLvl,
+          fundamentalScore: boostFundamental
+        });
+      }
+
       return res.json({
         success: true,
         message: `Upgrade ${type.toUpperCase()} ke level ${nextLvl} berhasil! Pendapatan pasif PT meningkat.`,
@@ -1827,6 +1850,15 @@ app.post('/api/company/upgrade', async (req, res) => {
 
       invalidateMarketCaches();
       io.emit('user:balance_updated', { userId, companyId, newBalance: user.balance_ib, companyBalance: newBalance });
+
+      if (simulationEngine) {
+        simulationEngine.boostCompanyValuation(companyId, {
+          type,
+          level: nextLvl,
+          ptLevel: nextPtLvl,
+          fundamentalScore: boostFundamental
+        });
+      }
 
       return res.json({
         success: true,
@@ -1905,6 +1937,14 @@ app.post('/api/company/staff/hire', async (req, res) => {
       const updated = await query.get('SELECT * FROM companies WHERE id = ?', [companyId]);
       invalidateMarketCaches();
       io.emit('user:balance_updated', { userId, companyId, companyBalance: updated.company_balance_ib });
+
+      if (simulationEngine) {
+        simulationEngine.boostCompanyValuation(companyId, {
+          type,
+          fundamentalScore: updated.fundamental_score
+        });
+      }
+
       return res.json({
         success: true,
         message: successMsg,
@@ -1983,6 +2023,13 @@ app.post('/api/company/staff/hire', async (req, res) => {
 
     invalidateMarketCaches();
     io.emit('user:balance_updated', { userId, newBalance: user.balance_ib, companyBalance: nextBalance });
+
+    if (primaryComp && simulationEngine) {
+      simulationEngine.boostCompanyValuation(primaryComp.id, {
+        type,
+        fundamentalScore: nextFund
+      });
+    }
 
     res.json({
       success: true,
@@ -2461,12 +2508,10 @@ app.post('/api/company/ipo', async (req, res) => {
 
       // Record initial trade tape entry
       const nowD = new Date();
-      const hh = String(nowD.getHours()).padStart(2, '0');
-      const mm = String(nowD.getMinutes()).padStart(2, '0');
-      const ss = String(nowD.getSeconds()).padStart(2, '0');
+      const wib = getWibTimeParts(nowD);
       simulationEngine.recordTrade({
         id: uuidv4(),
-        time: `${hh}:${mm}:${ss}`,
+        time: wib.timeHms,
         symbol: cleanSymbol,
         price: numIpoPrice,
         lots: Math.round(publicShares / 100),
@@ -2630,12 +2675,10 @@ app.post('/api/company/ipo', async (req, res) => {
       );
 
       const nowD = new Date();
-      const hh = String(nowD.getHours()).padStart(2, '0');
-      const mm = String(nowD.getMinutes()).padStart(2, '0');
-      const ss = String(nowD.getSeconds()).padStart(2, '0');
+      const wib = getWibTimeParts(nowD);
       simulationEngine.recordTrade({
         id: uuidv4(),
-        time: `${hh}:${mm}:${ss}`,
+        time: wib.timeHms,
         symbol: cleanSymbol,
         price: numIpoPrice,
         lots: Math.round(publicShares / 100),
@@ -4154,13 +4197,10 @@ app.get('/api/market/running-trade', async (req, res) => {
     }
 
     const mappedDb = (dbUserTrades || []).map(t => {
-      const d = new Date(t.created_at);
-      const hh = String(d.getHours()).padStart(2, '0');
-      const mm = String(d.getMinutes()).padStart(2, '0');
-      const ss = String(d.getSeconds()).padStart(2, '0');
+      const wib = getWibTimeParts(t.created_at);
       return {
         id: t.id,
-        time: `${hh}:${mm}:${ss}`,
+        time: wib.timeHms,
         symbol: t.symbol,
         price: t.price,
         lots: t.lots,
@@ -4211,9 +4251,7 @@ app.get('/api/market/running-trade', async (req, res) => {
         const tick = baseP >= 5000 ? 25 : (baseP >= 2000 ? 10 : 5);
         for (let i = merged.length; i < 25; i++) {
           const tradeTime = new Date(nowD - i * 65000 - Math.floor(Math.random() * 20000));
-          const hh = String(tradeTime.getHours()).padStart(2, '0');
-          const mm = String(tradeTime.getMinutes()).padStart(2, '0');
-          const ss = String(tradeTime.getSeconds()).padStart(2, '0');
+          const wibT = getWibTimeParts(tradeTime);
           const isBuy = (i % 2 === 0) || Math.random() > 0.45;
           const priceOffset = (Math.floor(Math.random() * 5) - 2) * tick;
           const trPrice = Math.max(50, baseP + priceOffset);
@@ -4222,7 +4260,7 @@ app.get('/api/market/running-trade', async (req, res) => {
           const sBroker = brokers[Math.floor(Math.random() * brokers.length)];
           merged.push({
             id: `sim-trade-${symbolFilter}-${i}`,
-            time: `${hh}:${mm}:${ss}`,
+            time: wibT.timeHms,
             symbol: symbolFilter,
             price: trPrice,
             lots: trLots,
@@ -4369,12 +4407,10 @@ app.post('/api/ipo/order', async (req, res) => {
 
     // Add to running trades
     const nowD = new Date();
-    const hh = String(nowD.getHours()).padStart(2, '0');
-    const mm = String(nowD.getMinutes()).padStart(2, '0');
-    const ss = String(nowD.getSeconds()).padStart(2, '0');
+    const wib = getWibTimeParts(nowD);
     simulationEngine.recordTrade({
       id: transId,
-      time: `${hh}:${mm}:${ss}`,
+      time: wib.timeHms,
       symbol: ipo.symbol,
       price: ipo.offering_price,
       lots: numLots,
@@ -5173,12 +5209,10 @@ app.post('/api/trade/order', async (req, res) => {
 
       // Broadcast and record trade in Running Trade stream
       const nowBuy = new Date();
-      const hhB = String(nowBuy.getHours()).padStart(2, '0');
-      const mmB = String(nowBuy.getMinutes()).padStart(2, '0');
-      const ssB = String(nowBuy.getSeconds()).padStart(2, '0');
+      const wibBuy = getWibTimeParts(nowBuy);
       simulationEngine.recordTrade({
         id: transId,
-        time: `${hhB}:${mmB}:${ssB}`,
+        time: wibBuy.timeHms,
         symbol: company.symbol,
         price: pricePerShare,
         lots: lots,
@@ -5308,12 +5342,10 @@ app.post('/api/trade/order', async (req, res) => {
 
       // Broadcast and record trade in Running Trade stream
       const nowSell = new Date();
-      const hhS = String(nowSell.getHours()).padStart(2, '0');
-      const mmS = String(nowSell.getMinutes()).padStart(2, '0');
-      const ssS = String(nowSell.getSeconds()).padStart(2, '0');
+      const wibSell = getWibTimeParts(nowSell);
       simulationEngine.recordTrade({
         id: transId,
-        time: `${hhS}:${mmS}:${ssS}`,
+        time: wibSell.timeHms,
         symbol: company.symbol,
         price: pricePerShare,
         lots: lots,
@@ -8790,18 +8822,18 @@ const bundledPublicApkPath = path.join(__dirname, '../public/downloads/Capital-F
 const directPublicApkPath = path.join(__dirname, '../public/downloads/capital-federation.apk');
 const localBuiltApkPath = path.join(__dirname, '../../mobile/build/app/outputs/flutter-apk/app-release.apk');
 
-const LATEST_RELEASE_NOTES_V200 = 'v2.0.1 (Build 50): Banding menang kini merehabilitasi TOTAL emiten yang tepat (sita dicabut, denda & defisit kas dihapus, perusahaan langsung terbuka). Perbaikan bug pemotongan denda yang menyeret kas PT/anak PT ke defisit & kebangkrutan. Penjelasan transparan arus kas pada PT yang dibekukan.';
+const LATEST_RELEASE_NOTES_V200 = 'v2.0.2 (Build 51): Format jam bursa & intraday sinkron penuh WIB Jakarta (UTC+7). Perbaikan badge selisih nominal bursa (+-), peningkatan valuasi & market cap otomatis saat upgrade R&D, Tim Direksi & Karyawan, serta pembukaan plafon sesi bursa baru.';
 
 async function getApkSettingsMap() {
   const defaults = {
-    apk_version: '2.0.1',
-    apk_build_number: '50',
+    apk_version: '2.0.2',
+    apk_build_number: '51',
     apk_min_android: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
     apk_file_size_mb: '57.5 MB',
     apk_release_notes: LATEST_RELEASE_NOTES_V200,
     apk_external_url: '',
     apk_download_count: '652',
-    apk_sha256: '38bbd634b5a7e9b2cf8cfe2331e04e23b6b53948475b39305a863fcfb3b6b531',
+    apk_sha256: '644ae0c4d656719b98fcb721095617499bce74e80fe6feffeac1166fc4c8193a',
     apk_updated_at: new Date().toISOString(),
   };
   try {
@@ -8811,11 +8843,11 @@ async function getApkSettingsMap() {
         defaults[r.key] = String(r.value);
       }
     }
-    if (parseInt(defaults.apk_build_number || '0', 10) < 50 || defaults.apk_sha256 !== '38bbd634b5a7e9b2cf8cfe2331e04e23b6b53948475b39305a863fcfb3b6b531') {
-      defaults.apk_version = '2.0.1';
-      defaults.apk_build_number = '50';
+    if (parseInt(defaults.apk_build_number || '0', 10) < 51 || defaults.apk_sha256 !== '644ae0c4d656719b98fcb721095617499bce74e80fe6feffeac1166fc4c8193a') {
+      defaults.apk_version = '2.0.2';
+      defaults.apk_build_number = '51';
       defaults.apk_file_size_mb = '57.5 MB';
-      defaults.apk_sha256 = '38bbd634b5a7e9b2cf8cfe2331e04e23b6b53948475b39305a863fcfb3b6b531';
+      defaults.apk_sha256 = '644ae0c4d656719b98fcb721095617499bce74e80fe6feffeac1166fc4c8193a';
       defaults.apk_release_notes = LATEST_RELEASE_NOTES_V200;
       defaults.apk_updated_at = new Date().toISOString();
       // Persist directly to central_bank_settings so /api/settings, /api/admin/settings & /api/admin/overview match 100%!

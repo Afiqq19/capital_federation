@@ -95,6 +95,7 @@ class CompanyModel {
   final String status;
   final double currentPrice;
   final double basePrice;
+  final double prevClose;
   final double priceChangePct;
   final int totalShares;
   final int circulatingShares;
@@ -136,6 +137,7 @@ class CompanyModel {
     required this.status,
     required this.currentPrice,
     required this.basePrice,
+    this.prevClose = 0.0,
     required this.priceChangePct,
     this.totalShares = 10000000,
     this.circulatingShares = 2000000,
@@ -198,8 +200,10 @@ class CompanyModel {
     final ipoStat = json['ipo_status']?.toString() ?? json['ipoStatus']?.toString();
     final bool preIpo = listStatus == 'PRE_IPO' || json['status'] == 'PRE_IPO' || json['is_pre_ipo'] == true;
 
-    final base = (json['prev_close'] ?? json['prevClose'] ?? json['base_price'] ?? json['basePrice'] ?? json['current_price'] ?? 0.0).toDouble();
-    final curr = preIpo ? base : (json['current_price'] ?? json['currentPrice'] ?? base).toDouble();
+    final pClose = (json['prev_close'] ?? json['prevClose'] ?? json['base_price'] ?? json['basePrice'] ?? 0.0).toDouble();
+    final bPrice = (json['base_price'] ?? json['basePrice'] ?? (pClose > 0 ? pClose : 2500.0)).toDouble();
+    final base = pClose > 0 ? pClose : bPrice;
+    final curr = preIpo ? bPrice : (json['current_price'] ?? json['currentPrice'] ?? base).toDouble();
     double changePct = 0.0;
     if (preIpo) {
       changePct = 0.0;
@@ -229,7 +233,8 @@ class CompanyModel {
       sector: json['sector'] ?? 'Teknologi',
       status: json['status'] ?? 'HEALTHY',
       currentPrice: curr,
-      basePrice: base,
+      basePrice: bPrice,
+      prevClose: pClose,
       priceChangePct: double.parse(changePct.toStringAsFixed(2)),
       totalShares: json['total_shares'] ?? 10000000,
       circulatingShares: (json['circulating_shares'] ?? json['circulatingShares'] ?? ((json['total_shares'] ?? 10000000) * 0.2).round()).toInt(),
@@ -269,6 +274,7 @@ class CompanyModel {
   CompanyModel copyWith({
     double? currentPrice,
     double? basePrice,
+    double? prevClose,
     double? priceChangePct,
     String? status,
     bool? isIpo,
@@ -290,6 +296,7 @@ class CompanyModel {
       status: status ?? this.status,
       currentPrice: currentPrice ?? this.currentPrice,
       basePrice: basePrice ?? this.basePrice,
+      prevClose: prevClose ?? this.prevClose,
       priceChangePct: priceChangePct ?? this.priceChangePct,
       totalShares: totalShares,
       circulatingShares: circulatingShares,
