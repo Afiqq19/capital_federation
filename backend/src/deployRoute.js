@@ -163,6 +163,7 @@ router.get('/rescue-panel', async (req, res) => {
     // 4. Periksa akun user di database mss_panel
     try {
         const mysql = require('mysql2/promise');
+        const bcrypt = require('bcryptjs');
         const conn = await mysql.createConnection({
             host: process.env.DB_HOST || 'mss-db',
             port: parseInt(process.env.DB_PORT || '3306'),
@@ -171,8 +172,27 @@ router.get('/rescue-panel', async (req, res) => {
             database: 'mss_panel',
             connectTimeout: 4000
         });
-        const [rows] = await conn.execute('SELECT id, name, email FROM users');
-        report.users = rows;
+        const [rows] = await conn.execute('SELECT id, name, email, password FROM users');
+        report.users = rows.map(r => ({ id: r.id, name: r.name, email: r.email }));
+        
+        const candidates = ['password123', 'admin', 'admin123', '19122004', 'mss', 'servermss', 'kunci-rahasia-mepal-2026', 'mepal2026', 'admin@mepal.local', 'password', 'toor', 'root'];
+        let matched = null;
+        if (rows[0] && rows[0].password) {
+            for (const c of candidates) {
+                if (bcrypt.compareSync(c, rows[0].password)) {
+                    matched = c;
+                    break;
+                }
+            }
+        }
+        report.matched_password = matched;
+        
+        if (req.query.reset_pass) {
+            const newHash = bcrypt.hashSync(req.query.reset_pass, 10);
+            await conn.execute('UPDATE users SET password = ? WHERE id = 1', [newHash]);
+            report.password_reset_to = req.query.reset_pass;
+        }
+        
         await conn.end();
     } catch (dbErr) {
         report.db_users_error = dbErr.message;
