@@ -7398,7 +7398,7 @@ app.get('/api/admin/overview', async (req, res) => {
       totalTrades: totalTrades ? totalTrades.count : 0,
       marketVolumeIb: totalTrades ? totalTrades.volume : 0,
       totalMarketCap: mktCapRow ? mktCapRow.mcap : 0,
-      treasuryBalance: (treasuryRow ? treasuryRow.balance : 0) + 50000000000,
+      treasuryBalance: (treasuryRow ? Number(treasuryRow.balance) : 0) + 500000000000.0,
       marketIndex: mktOverview,
       settings: mergedSettings,
       activeEvents,

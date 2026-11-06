@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useAdmin } from '../../context/AdminContext';
 import Card, { CardHeader } from '../../components/ui/Card';
 import StatCard from '../../components/ui/StatCard';
@@ -44,6 +44,12 @@ export default function CompaniesPage() {
   const [sectorFilter, setSectorFilter] = useState('ALL');
   const [sortBy, setSortBy] = useState('PRICE_DESC');
   const [loadingSeize, setLoadingSeize] = useState(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, statusFilter, sectorFilter, sortBy]);
 
   // Modal State: Intervensi Regulasi / Normalisasi Harga Manipulasi Saham
   const [normalizeModalCompany, setNormalizeModalCompany] = useState(null);
@@ -230,6 +236,11 @@ export default function CompaniesPage() {
     });
   }, [companies, search, statusFilter, sectorFilter, sortBy]);
 
+  const totalPages = Math.max(1, Math.ceil(filteredAndSorted.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const startIndex = (safePage - 1) * pageSize;
+  const paginatedCompanies = filteredAndSorted.slice(startIndex, startIndex + pageSize);
+
   return (
     <div className="space-y-5 page-enter">
       {/* 1. Header Overview Stats */}
@@ -360,7 +371,8 @@ export default function CompaniesPage() {
             }
           />
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-slate-800/80">
+          <>
+            <div className="overflow-x-auto rounded-lg border border-slate-800/80">
             <table className="w-full text-left border-collapse text-xs">
               <thead className="bg-slate-900/95 text-[11px] font-semibold text-slate-400 uppercase tracking-wider sticky top-0 border-b border-slate-800 z-30">
                 <tr>
@@ -375,7 +387,7 @@ export default function CompaniesPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60 bg-slate-950/40 font-normal">
-                {filteredAndSorted.map((c) => {
+                {paginatedCompanies.map((c) => {
                   const chg = changePct(c);
                   const price = Number(c.current_price) || 0;
                   const lotVal = price * 100;
@@ -576,6 +588,65 @@ export default function CompaniesPage() {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Controls */}
+          {filteredAndSorted.length > 0 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-slate-800 text-xs text-slate-400">
+              <div className="flex items-center gap-2">
+                <span>Menampilkan <strong>{startIndex + 1}</strong> - <strong>{Math.min(startIndex + pageSize, filteredAndSorted.length)}</strong> dari <strong>{filteredAndSorted.length}</strong> emiten</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setPage(1);
+                  }}
+                  className="select py-1 px-2 text-xs bg-slate-900 border-slate-800 rounded-lg text-slate-200"
+                >
+                  <option value={25}>25 per hal</option>
+                  <option value={50}>50 per hal</option>
+                  <option value={100}>100 per hal</option>
+                </select>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  disabled={safePage <= 1}
+                  onClick={() => setPage(1)}
+                  className="px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed border border-slate-800 text-slate-200 cursor-pointer"
+                >
+                  «
+                </button>
+                <button
+                  type="button"
+                  disabled={safePage <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  className="px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed border border-slate-800 text-slate-200 cursor-pointer"
+                >
+                  ‹ Prev
+                </button>
+                <span className="px-3 py-1 rounded bg-slate-900/80 border border-slate-800 text-amber-300 font-mono font-bold">
+                  {safePage} / {totalPages}
+                </span>
+                <button
+                  type="button"
+                  disabled={safePage >= totalPages}
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  className="px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed border border-slate-800 text-slate-200 cursor-pointer"
+                >
+                  Next ›
+                </button>
+                <button
+                  type="button"
+                  disabled={safePage >= totalPages}
+                  onClick={() => setPage(totalPages)}
+                  className="px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed border border-slate-800 text-slate-200 cursor-pointer"
+                >
+                  »
+                </button>
+              </div>
+            </div>
+          )}
+          </>
         )}
       </Card>
 
