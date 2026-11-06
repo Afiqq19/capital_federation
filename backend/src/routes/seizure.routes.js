@@ -226,7 +226,7 @@ module.exports = function(io, simulationEngine) {
       let activeLoansCount = 0;
 
       if (ownerId) {
-        const activeLoans = await query.all("SELECT * FROM loans WHERE user_id = ? AND status = 'ACTIVE'", [ownerId]);
+        const activeLoans = await query.all("SELECT * FROM loans WHERE user_id = ? AND status IN ('ACTIVE', 'SEIZED', 'NPL', 'DEFAULT') AND remaining_amount > 0", [ownerId]);
         activeLoansCount = activeLoans.length;
         for (const loan of activeLoans) {
           const rem = loan.remaining_amount !== undefined ? loan.remaining_amount : loan.principal_amount;
@@ -377,7 +377,7 @@ module.exports = function(io, simulationEngine) {
         courtFine = 0.0;
       }
 
-      const activeLoans = await query.all("SELECT * FROM loans WHERE user_id = ? AND status = 'ACTIVE'", [userId]);
+      const activeLoans = await query.all("SELECT * FROM loans WHERE user_id = ? AND status IN ('ACTIVE', 'SEIZED', 'NPL', 'DEFAULT') AND remaining_amount > 0", [userId]);
       let bankLoanPrincipal = 0.0;
       let bankLoanInterest = 0.0;
       for (const loan of activeLoans) {

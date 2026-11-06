@@ -30,15 +30,17 @@ module.exports = function registerBankRoutes(app, { query, io }) {
         const remaining = l.remaining_amount || 0;
         const paid = l.paid_amount || 0;
         const isActive = l.status === 'ACTIVE';
+        const isSeized = l.status === 'SEIZED';
+        const isDefaultStatus = l.status === 'DEFAULT' || l.status === 'NPL';
 
         totalIssued += principal;
         totalPaid += paid;
-        if (isActive) totalOutstanding += remaining;
+        if (isActive || isSeized || isDefaultStatus) totalOutstanding += remaining;
 
         const diffMs = new Date(l.due_date).getTime() - now;
         const remainingDays = Math.ceil(diffMs / DAY_MS);
-        const isOverdue = isActive && diffMs < 0;
-        if (isOverdue) nplCount++;
+        const isOverdue = isSeized || isDefaultStatus || (isActive && diffMs < 0);
+        if (isOverdue && remaining > 0) nplCount++;
 
         return {
           id: l.id,
@@ -141,23 +143,23 @@ module.exports = function registerBankRoutes(app, { query, io }) {
 
   app.post('/api/admin/bank/seize-debtor', async (req, res) => {
     try {
-      const { loanId } = req.body;
+      const { loanId, note } = req.body;
       const loan = await query.get('SELECT * FROM loans WHERE id = ?', [loanId]);
       if (!loan) return res.status(404).json({ error: 'Data pinjaman tidak ditemukan' });
-      if (loan.status !== 'ACTIVE') return res.status(400).json({ error: 'Hanya pinjaman aktif yang dapat disita asetnya' });
+      if (loan.status === 'PAID') return res.status(400).json({ error: 'Pinjaman ini sudah LUNAS' });
 
       const user = await query.get('SELECT * FROM users WHERE id = ?', [loan.user_id]);
       if (!user) return res.status(404).json({ error: 'Debitur tidak ditemukan' });
 
       const primaryComp = await query.get(
-        'SELECT id, company_balance_ib FROM companies WHERE owner_id = ? ORDER BY is_acquired ASC, is_bot ASC, founded_at ASC LIMIT 1',
+        'SELECT * FROM companies WHERE owner_id = ? ORDER BY is_acquired ASC, is_bot ASC, founded_at ASC LIMIT 1',
         [user.id]
       );
       const effectiveCompCash = primaryComp
         ? Math.max(Number(user.company_balance_ib || 0), Number(primaryComp.company_balance_ib || 0))
         : Number(user.company_balance_ib || 0);
 
-      const debt = loan.remaining_amount;
+      const debt = Number(loan.remaining_amount) || Number(loan.principal_amount) || 0;
       let fromCompany = 0;
       let fromPersonal = 0;
 
@@ -171,13 +173,13 @@ module.exports = function registerBankRoutes(app, { query, io }) {
       }
       const rest = debt - fromCompany;
       if (rest > 0 && user.balance_ib > 0) {
-        fromPersonal = Math.min(user.balance_ib, rest);
+        fromPersonal = Math.min(Number(user.balance_ib || 0), rest);
         await query.run('UPDATE users SET balance_ib = balance_ib - ? WHERE id = ?', [fromPersonal, user.id]);
       }
 
       const totalSeized = fromCompany + fromPersonal;
       const remainingAfter = Math.max(0, debt - totalSeized);
-      const newStatus = remainingAfter <= 0 ? 'SEIZED' : 'ACTIVE';
+      const newStatus = remainingAfter <= 0 ? 'PAID' : 'SEIZED';
 
       await query.run('UPDATE users SET credit_score = MAX(300, credit_score - 75) WHERE id = ?', [user.id]);
       await query.run(
@@ -185,28 +187,102 @@ module.exports = function registerBankRoutes(app, { query, io }) {
         [remainingAfter, totalSeized, newStatus, loan.id]
       );
 
+      const now = new Date();
+      const seizedAt = now.toISOString();
+      const seizureDeadline = new Date(now.getTime() + 4 * 24 * 60 * 60 * 1000).toISOString();
+      const reasonText = (note && note.trim().length > 0)
+        ? note.trim()
+        : `Sita Eksekusi Jaminan Kredit Macet Bank Sentral BIF (Kredit #${loan.id}, Sisa Kewajiban: IB ${Math.round(remainingAfter).toLocaleString('id-ID')})`;
+
+      // Eksekusi Sita Perseroan Debitur jika sisa hutang belum lunas
+      if (primaryComp && remainingAfter > 0) {
+        await query.run(
+          `UPDATE companies 
+           SET is_seized = 1,
+               seized_by = 'Bank Sentral Indigo Federasi (BIF)',
+               seized_at = ?,
+               seizure_deadline = ?,
+               is_auction_ready = 0,
+               seize_reason = ?
+           WHERE id = ?`,
+          [seizedAt, seizureDeadline, reasonText, primaryComp.id]
+        );
+
+        if (io) {
+          io.emit('company:seized_status', {
+            companyId: primaryComp.id,
+            isSeized: true,
+            reason: reasonText,
+            seizureDeadline,
+            seizedBy: 'Bank Sentral Indigo Federasi (BIF)'
+          });
+          io.emit('company:status_changed', {
+            companyId: primaryComp.id,
+            symbol: primaryComp.symbol,
+            is_seized: 1,
+            seize_reason: reasonText,
+            seizure_deadline: seizureDeadline
+          });
+        }
+      }
+
+      // Surat Pemberitahuan Resmi ke Kotak Masuk Pemain
+      const inboxId = require('uuid').v4();
+      await query.run(
+        `INSERT INTO user_inbox (id, user_id, title, message, category, created_at, is_read)
+         VALUES (?, ?, ?, ?, 'SYSTEM', datetime('now'), 0)`,
+        [
+          inboxId,
+          user.id,
+          '🚨 PENETAPAN SITA JAMINAN BANK SENTRAL BIF',
+          `Yth. Konglomerat ${user.username},\n\nFasilitas kredit Anda (${loan.id}) dinyatakan macet (wanprestasi). Otoritas Bank Sentral BIF telah mengeksekusi penetapan sita jaminan atas perseroan ${primaryComp ? primaryComp.name : (user.pt_name || 'PT Utama')}.\n\n📌 Dasar Penyitaan: ${reasonText}\n💰 Sisa Kewajiban Hutang: IB ${Math.round(remainingAfter).toLocaleString('id-ID')}\n⏳ Batas Akhir Masa Penebusan: 4 Hari (96 Jam)\n\nSilakan lunasi sisa kewajiban pinjaman Anda melalui menu TEBUS PERSEROAN pada Profil Emiten di aplikasi game sebelum perseroan dilelang secara terbuka di Bursa Aset.`
+        ]
+      ).catch(() => {});
+
       const postUser = await query.get('SELECT balance_ib, company_balance_ib, credit_score FROM users WHERE id = ?', [user.id]);
-      io.emit('user:balance_updated', {
-        userId: user.id,
-        newBalance: postUser ? postUser.balance_ib : (user.balance_ib - fromPersonal),
-        companyBalance: postUser ? postUser.company_balance_ib : Math.max(0, effectiveCompCash - fromCompany),
-        balance_ib: postUser ? postUser.balance_ib : (user.balance_ib - fromPersonal),
-        company_balance_ib: postUser ? postUser.company_balance_ib : Math.max(0, effectiveCompCash - fromCompany),
-        credit_score: postUser ? postUser.credit_score : user.credit_score,
-      });
-      io.emit('market:breaking_news', {
-        title: '🚨 BANK SENTRAL IPMC EKSEKUSI SITA ASET DEBITUR',
-        content: `Bank Sentral IPMC mengeksekusi penyitaan aset senilai IB ${Math.round(totalSeized).toLocaleString('id-ID')} milik ${user.username} (${user.pt_name || 'Konglomerat'}) akibat wanprestasi kredit.`,
-        sentiment: 'BEARISH',
-      });
+      if (io) {
+        io.emit('user:balance_updated', {
+          userId: user.id,
+          newBalance: postUser ? postUser.balance_ib : (user.balance_ib - fromPersonal),
+          companyBalance: postUser ? postUser.company_balance_ib : Math.max(0, effectiveCompCash - fromCompany),
+          balance_ib: postUser ? postUser.balance_ib : (user.balance_ib - fromPersonal),
+          company_balance_ib: postUser ? postUser.company_balance_ib : Math.max(0, effectiveCompCash - fromCompany),
+          credit_score: postUser ? postUser.credit_score : user.credit_score,
+        });
+
+        const newsTitle = `🚨 BANK SENTRAL BIF EKSEKUSI SITA ASET: ${primaryComp ? primaryComp.name : (user.pt_name || user.username)}`;
+        const newsContent = `Bank Sentral BIF mengeksekusi penyitaan aset jaminan atas kredit macet ${user.username} (${user.pt_name || 'Konglomerat'}). ${primaryComp ? `Perseroan ${primaryComp.name} (${primaryComp.symbol}) resmi disita dan diberi tenggang waktu 4 hari untuk penebusan.` : `Dana tunai disita: IB ${Math.round(totalSeized).toLocaleString('id-ID')}.`}`;
+
+        const newsItem = {
+          id: require('uuid').v4(),
+          title: newsTitle,
+          content: newsContent,
+          affected_sector: primaryComp ? primaryComp.sector : 'Keuangan',
+          sentiment: 'BEARISH',
+          published_at: seizedAt
+        };
+
+        await query.run(
+          'INSERT INTO news (id, title, content, affected_sector, sentiment, published_at) VALUES (?, ?, ?, ?, ?, ?)',
+          [newsItem.id, newsItem.title, newsItem.content, newsItem.affected_sector, newsItem.sentiment, newsItem.published_at]
+        );
+
+        io.emit('market:news_broadcast', newsItem);
+        io.emit('central_bank:loan_updated', { loanId: loan.id, status: newStatus, remainingDebt: remainingAfter });
+        io.emit('treasury:updated');
+      }
 
       res.json({
         success: true,
-        message: `Sita aset berhasil. Disita IB ${Math.round(totalSeized).toLocaleString('id-ID')}. Sisa hutang: IB ${Math.round(remainingAfter).toLocaleString('id-ID')}`,
+        message: primaryComp && remainingAfter > 0
+          ? `⚖️ Eksekusi sita jaminan berhasil! Perseroan ${primaryComp.name} (${primaryComp.symbol}) resmi DISITA (Masa tebus: 4 hari). Sisa hutang: IB ${Math.round(remainingAfter).toLocaleString('id-ID')}`
+          : `Sita aset berhasil. Disita IB ${Math.round(totalSeized).toLocaleString('id-ID')}. Sisa hutang: IB ${Math.round(remainingAfter).toLocaleString('id-ID')}`,
         totalSeized,
         seizedFromCompany: fromCompany,
         seizedFromPersonal: fromPersonal,
         remainingDebt: remainingAfter,
+        companySeized: Boolean(primaryComp && remainingAfter > 0),
+        companyName: primaryComp?.name
       });
     } catch (err) {
       res.status(500).json({ error: err.message });

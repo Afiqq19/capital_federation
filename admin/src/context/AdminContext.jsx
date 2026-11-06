@@ -272,6 +272,9 @@ export function AdminProvider({ children }) {
   const actions = useMemo(() => {
     const oversightRefresh = { refresh: [refreshOversight, refreshCompanies] };
     return {
+      refreshOverview,
+      refreshBank,
+      refreshAll,
       flagUma: (companyId, reason, direction) => run(() => adminApi.flagUma(companyId, reason, direction), oversightRefresh),
       clearUma: (companyId) => run(() => adminApi.clearUma(companyId), oversightRefresh),
       suspend: (companyId, untilIso, reason) => run(() => adminApi.suspend(companyId, untilIso, reason), oversightRefresh),
@@ -290,7 +293,7 @@ export function AdminProvider({ children }) {
         ),
       setRate: (rate) => run(() => adminApi.setRate(rate), { refresh: [refreshBank] }),
       seizeDebtor: (loanId, note) =>
-        run(() => adminApi.seizeDebtor(loanId, note), { refresh: [refreshBank, refreshUsers] }),
+        run(() => adminApi.seizeDebtor(loanId, note), { refresh: [refreshBank, refreshUsers, refreshCompanies, refreshOverview] }),
       liquidityInjection: () => run(() => adminApi.liquidityInjection(), { refresh: [refreshCompanies] }),
       toggleBan: (userId) =>
         run(async () => {

@@ -72,7 +72,8 @@ export default function BankCentralPage() {
     try {
       const res = await adminApi.massPenaltyWaiver();
       toast?.success(res.message);
-      actions.refreshOverview();
+      if (typeof actions?.refreshBank === 'function') actions.refreshBank();
+      if (typeof actions?.refreshOverview === 'function') actions.refreshOverview();
     } catch (err) {
       toast?.error(err.message || 'Gagal mengeksekusi pemutihan denda');
     } finally {
@@ -93,7 +94,8 @@ export default function BankCentralPage() {
       });
       toast?.success(res.message);
       setSelectedLoanForRestructure(null);
-      actions.refreshOverview();
+      if (typeof actions?.refreshBank === 'function') actions.refreshBank();
+      if (typeof actions?.refreshOverview === 'function') actions.refreshOverview();
     } catch (err) {
       toast?.error(err.message || 'Gagal merestrukturisasi kredit');
     } finally {
@@ -114,7 +116,7 @@ export default function BankCentralPage() {
       statusFilter === 'ALL' ||
       (statusFilter === 'ACTIVE' && loan?.status === 'ACTIVE') ||
       (statusFilter === 'PAID' && loan?.status === 'PAID') ||
-      (statusFilter === 'DEFAULT' && (loan?.status === 'DEFAULT' || loan?.status === 'NPL'));
+      (statusFilter === 'DEFAULT' && (loan?.status === 'DEFAULT' || loan?.status === 'NPL' || loan?.status === 'SEIZED'));
 
     return matchesSearch && matchesStatus;
   });
@@ -411,8 +413,13 @@ export default function BankCentralPage() {
 
                       <td>
                         {isPaid && <Badge tone="emerald">LUNAS</Badge>}
+                        {loan.status === 'SEIZED' && (
+                          <Badge tone="rose" pulse>
+                            DISITA BIF
+                          </Badge>
+                        )}
                         {isActive && !loan.is_overdue && <Badge tone="sky">BERJALAN</Badge>}
-                        {(isDefault || loan.is_overdue) && (
+                        {(isDefault || loan.is_overdue) && loan.status !== 'SEIZED' && (
                           <Badge tone="rose" pulse>
                             MACET {loan.days_overdue > 0 ? `(${loan.days_overdue} Hari)` : '(NPL)'}
                           </Badge>
@@ -442,14 +449,20 @@ export default function BankCentralPage() {
                             >
                               Restrukturisasi
                             </Button>
-                            <Button
-                              variant={isDefault || loan.is_overdue ? 'rose' : 'ghost'}
-                              size="sm"
-                              onClick={() => setSelectedLoanForSeizure(loan)}
-                              icon={ShieldAlert}
-                            >
-                              Sita Jaminan
-                            </Button>
+                            {loan.status === 'SEIZED' ? (
+                              <span className="text-[10px] font-bold px-2.5 py-1 rounded-md bg-rose-500/15 text-rose-400 border border-rose-500/30">
+                                ⚖️ Jaminan Disita
+                              </span>
+                            ) : (
+                              <Button
+                                variant={isDefault || loan.is_overdue ? 'rose' : 'ghost'}
+                                size="sm"
+                                onClick={() => setSelectedLoanForSeizure(loan)}
+                                icon={ShieldAlert}
+                              >
+                                Sita Jaminan
+                              </Button>
+                            )}
                           </div>
                         )}
                       </td>
