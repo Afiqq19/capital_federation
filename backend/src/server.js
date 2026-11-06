@@ -8833,7 +8833,7 @@ async function getApkSettingsMap() {
     apk_release_notes: LATEST_RELEASE_NOTES_V200,
     apk_external_url: '',
     apk_download_count: '652',
-    apk_sha256: '644ae0c4d656719b98fcb721095617499bce74e80fe6feffeac1166fc4c8193a',
+    apk_sha256: 'f07e1f488732a047b13957746c06d4f4acc0a8df54416b8ecab47ff135cdae86',
     apk_updated_at: new Date().toISOString(),
   };
   try {
@@ -8843,11 +8843,11 @@ async function getApkSettingsMap() {
         defaults[r.key] = String(r.value);
       }
     }
-    if (parseInt(defaults.apk_build_number || '0', 10) < 51 || defaults.apk_sha256 !== '644ae0c4d656719b98fcb721095617499bce74e80fe6feffeac1166fc4c8193a') {
+    if (parseInt(defaults.apk_build_number || '0', 10) < 51 || defaults.apk_sha256 !== 'f07e1f488732a047b13957746c06d4f4acc0a8df54416b8ecab47ff135cdae86') {
       defaults.apk_version = '2.0.2';
       defaults.apk_build_number = '51';
       defaults.apk_file_size_mb = '57.5 MB';
-      defaults.apk_sha256 = '644ae0c4d656719b98fcb721095617499bce74e80fe6feffeac1166fc4c8193a';
+      defaults.apk_sha256 = 'f07e1f488732a047b13957746c06d4f4acc0a8df54416b8ecab47ff135cdae86';
       defaults.apk_release_notes = LATEST_RELEASE_NOTES_V200;
       defaults.apk_updated_at = new Date().toISOString();
       // Persist directly to central_bank_settings so /api/settings, /api/admin/settings & /api/admin/overview match 100%!
