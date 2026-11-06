@@ -26,18 +26,18 @@ import {
 
 export default function PublicDownloadLandingPage() {
   const [versionInfo, setVersionInfo] = useState({
-    version: '1.9.0',
-    buildNumber: 26,
-    apkVersion: 'v1.9.0 (Build 26)',
+    version: '2.0.3',
+    buildNumber: 52,
+    apkVersion: 'v2.0.3 (Build 52)',
     minAndroid: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
-    fileSizeMb: '56.4 MB',
+    fileSizeMb: '57.5 MB',
     downloadUrl: '/api/download/apk',
-    downloadCount: 325,
-    totalCompanies: 504,
+    downloadCount: 652,
+    totalCompanies: 363,
     totalPlayers: 1053,
-    sha256: 'dea4c402cec5e7d41eb518350b782fd9f21fb1cbe432288f5486b2b758af455f',
+    sha256: '656d7181a8a0c50e7d664fc5e472e8ccd0ac39d57394be3c98bb5447224445d2',
     releaseNotes:
-      'v1.9.0: Fitur Kotak Masuk (Inbox) Terpadu untuk Notifikasi Tawaran & Penolakan P2P Real-Time, Navigasi Langsung Emiten dari Warta Berita Bursa, Pembaruan Majelis Hakim Arbitrase PNAF Resmi (Ketua Majelis Prof. Dr. Bagas Daniswara, S.H., M.H.), Gugatan Sengketa Pemulihan Saham Curian/Manipulasi, dan Sanksi Rekonvensi Denda Pencemaran Nama Baik untuk Tuduhan Palsu.',
+      'v2.0.3 (Build 52): Deteksi online/aktif real-time konglomerat di Web Admin (indikator hijau/merah). Perbaikan tuntas status suspensi kadaluarsa & sinkronisasi statistik orderbook (Prev, ARA, ARB).',
   });
   const [topLeaders, setTopLeaders] = useState([]);
   const [topStocks, setTopStocks] = useState([]);
@@ -104,8 +104,8 @@ export default function PublicDownloadLandingPage() {
         .catch(() => {});
     };
 
-    // 2. Fetch Version Info
-    fetch('/api/version')
+    // 2. Fetch Version Info (Always Fresh / No-Cache)
+    fetch(`/api/version?t=${Date.now()}`, { cache: 'no-store' })
       .then((r) => r.json())
       .then((data) => {
         if (active && data && data.version) {

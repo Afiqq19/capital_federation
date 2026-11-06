@@ -8924,6 +8924,9 @@ function getActiveApkFilePath() {
 
 // Endpoint Info Versi Sistem (Mobile APK, Web Admin, Website Download & Backend Server)
 app.get('/api/version', async (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   try {
     const [compCount, userStats, apkCfg] = await Promise.all([
       query.get('SELECT COUNT(*) as count FROM companies'),
@@ -9260,11 +9263,22 @@ app.use('/', deployRoute);
 // Sajikan Web Admin & Public Download Portal Statis dari folder backend/public
 const publicDir = path.join(__dirname, '../public');
 if (fs.existsSync(publicDir)) {
-  app.use(express.static(publicDir));
+  app.use(express.static(publicDir, {
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith('.html')) {
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+      }
+    }
+  }));
   app.use((req, res, next) => {
     if ((req.method === 'GET' || req.method === 'HEAD') && !req.path.startsWith('/api') && !req.path.startsWith('/socket.io')) {
       const indexFile = path.join(publicDir, 'index.html');
       if (fs.existsSync(indexFile)) {
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
         return res.sendFile(indexFile);
       }
     }
