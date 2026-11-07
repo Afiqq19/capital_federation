@@ -2134,7 +2134,9 @@ class CourtJudgeBotService {
         if (defRoll < defThreshold) {
           verdictStatus = 'VERDICT_REJECTED';
           verdictType = 'GUGUR_DISMISSED';
-          const defamationFine = Math.max(25000000, Math.min(250000000, Math.round(rawClaim * 0.15)));
+          const fineRow = await query.get("SELECT value FROM central_bank_settings WHERE key = 'market_manipulation_fine_ib'");
+          const baseFine = (fineRow && !isNaN(parseFloat(fineRow.value))) ? parseFloat(fineRow.value) : 25000000;
+          const defamationFine = Math.max(baseFine, Math.min(baseFine * 10, Math.round(rawClaim * 0.15)));
           customAwardedAmount = 0;
           verdictNotes = `🛡️ GUGATAN DITOLAK PENUH & PERLINDUNGAN HUKUM RETENSI: Majelis Hakim PNAF mengabulkan seluruh eksepsi Kuasa Hukum Tergugat (${c.defendant_lawyer_name}). Tuduhan Penggugat (${c.plaintiff_name}) dinyatakan tidak berdasar secara materiel! Menghukum Penggugat membayar denda pencemaran nama baik sebesar IB ${defamationFine.toLocaleString('id-ID')} kepada Tergugat.`;
         }

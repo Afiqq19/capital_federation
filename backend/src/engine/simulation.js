@@ -413,6 +413,10 @@ class MarketSimulationEngine {
           "SELECT value FROM central_bank_settings WHERE key = 'bot_auto_intervention'"
         );
         this.cachedIsAutoIntervention = interventionSetting?.value === 'true';
+        const araRow = await query.get("SELECT value FROM central_bank_settings WHERE key = 'ara_limit_pct'");
+        this.cachedAraLimitPct = (araRow && !isNaN(parseFloat(araRow.value))) ? parseFloat(araRow.value) : 25.0;
+        const arbRow = await query.get("SELECT value FROM central_bank_settings WHERE key = 'arb_limit_pct'");
+        this.cachedArbLimitPct = (arbRow && !isNaN(parseFloat(arbRow.value))) ? parseFloat(arbRow.value) : 25.0;
         const econRow = await query.get(
           "SELECT value FROM central_bank_settings WHERE key = 'economic_state'"
         );
@@ -626,10 +630,13 @@ class MarketSimulationEngine {
         const isLockedAra = comp.status === 'ARA';
         // Plafon ARA: Saham berfundamental SEHAT / skor tinggi diberi ruang apresiasi hingga +25% s/d +35%
         const isHealthy = comp.status === 'HEALTHY' || (comp.fundamental_score && comp.fundamental_score >= 75);
-        const normalAraPct = refPrice <= 200 ? 0.35 : (refPrice <= 5000 ? 0.25 : (isHealthy ? 0.25 : 0.20));
-        const araLimitPct = isLockedAra ? (refPrice <= 200 ? 0.70 : (refPrice <= 5000 ? 0.50 : 0.40)) : normalAraPct;
+        // Plafon ARA & Batas ARB: Mengikuti konfigurasi central_bank_settings
+        const configuredAraRatio = (this.cachedAraLimitPct || 25.0) / 100.0;
+        const configuredArbRatio = (this.cachedArbLimitPct || 25.0) / 100.0;
+        const normalAraPct = Math.max(configuredAraRatio, refPrice <= 200 ? 0.35 : (refPrice <= 5000 ? 0.25 : (isHealthy ? 0.25 : 0.20)));
+        const araLimitPct = isLockedAra ? Math.max(configuredAraRatio * 1.5, (refPrice <= 200 ? 0.70 : (refPrice <= 5000 ? 0.50 : 0.40))) : normalAraPct;
         
-        const minAllowed = Math.max(50, Math.round(refPrice * 0.65)); // ARB Simetris -35%
+        const minAllowed = Math.max(50, Math.round(refPrice * Math.max(0.05, 1.0 - configuredArbRatio))); // ARB limit
         const maxAllowed = Math.round(refPrice * (1 + araLimitPct)); // ARA ceiling
 
         let newPrice = isLockedAra ? maxAllowed : Math.round(comp.current_price * (1 + tickDeltaPct));

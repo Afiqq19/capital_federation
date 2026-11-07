@@ -248,7 +248,7 @@ class FormalDeedModal extends StatelessWidget {
                             Icon(Icons.verified_rounded, color: Color(0xFFF5B942), size: 14),
                             SizedBox(width: 6),
                             Text(
-                              'METERAI DIGITAL RESMI REPUBLIK FEDERASI IB 10.000 (LUNAS)',
+                              'METERAI DIGITAL RESMI REPUBLIK FEDERASI (LUNAS)',
                               style: TextStyle(color: Color(0xFFF5B942), fontSize: 8.5, fontWeight: FontWeight.bold),
                             ),
                           ],

@@ -2290,9 +2290,10 @@ class _HomeTabState extends State<HomeTab> {
         ? math.max(user.ptLevel, (activeEntity['ptLevel'] as num?)?.toInt() ?? 1)
         : ((activeEntity['ptLevel'] as num?)?.toInt() ?? 1);
     final String entityName = isPrimary ? user.ptName : (activeEntity['name'] ?? 'Perusahaan');
-    const double minIpoKas = 250000000.0; // Syarat Kas Min IB 250 Juta
+    final double minIpoKas = provider.minIpoCapital;
+    final int minIpoLvl = provider.ipoMinLevel;
     const double ipoRegFee = 100000000.0; // Biaya Registrasi Bursa IB 100 Juta
-    final bool canIpo = companyBalance >= (minIpoKas + ipoRegFee) && ptLevel >= 4;
+    final bool canIpo = companyBalance >= (minIpoKas + ipoRegFee) && ptLevel >= minIpoLvl;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -2341,9 +2342,9 @@ class _HomeTabState extends State<HomeTab> {
             ],
           ),
           const SizedBox(height: 8),
-          const Text(
-            'Syarat IPO: Kas Perusahaan minimal IB 250.000.000 + Biaya Registrasi Bursa CFX IB 100.000.000 dan Level PT min. 4. Saham akan masuk siklus Bookbuilding, Penawaran Umum, Penjatahan hingga Listing Melantai ARA di Bursa Efek Capital Federation.',
-            style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
+          Text(
+            'Syarat IPO: Kas Perusahaan minimal ${CurrencyFormatter.formatFull(minIpoKas)} + Biaya Registrasi Bursa CFX IB 100.000.000 dan Level PT min. $minIpoLvl. Saham akan masuk siklus Bookbuilding, Penawaran Umum, Penjatahan hingga Listing Melantai ARA di Bursa Efek Capital Federation.',
+            style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
           ),
           const SizedBox(height: 12),
           SizedBox(
@@ -3038,10 +3039,11 @@ class _HomeTabState extends State<HomeTab> {
     double selectedDamages = 10000000000.0; // Default IB 10 Miliar
     int selectedLawyerIndex = 1; // Default Puja Azzahra
 
+    final double dynamicCourtFee = provider.courtFilingFee;
     final lawyers = [
       {
         'name': 'Maju Mandiri (Tanpa Pengacara)',
-        'fee': 250000.0,
+        'fee': dynamicCourtFee,
         'title': 'Beracara Sendiri di Pengadilan PNAF',
         'badge': 'HEMAT',
         'badgeColor': const Color(0xFF64748B),
@@ -6452,7 +6454,7 @@ class _HomeTabState extends State<HomeTab> {
     final double companyBalance = isPrimary
         ? user.companyBalanceIb
         : ((activeEntity['companyBalance'] as num?)?.toDouble() ?? 0.0);
-    const double minCompanyBalance = 250000000.0;
+    final double minCompanyBalance = provider.minIpoCapital;
     const double ipoRegFee = 100000000.0;
     final bool isPtFundReady = companyBalance >= (minCompanyBalance + ipoRegFee);
 
@@ -6585,11 +6587,11 @@ class _HomeTabState extends State<HomeTab> {
                           ],
                         ),
                         const SizedBox(height: 4),
-                        const Row(
+                        Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text('• Syarat Minimal Kas PT:', style: TextStyle(color: Color(0xFF64748B), fontSize: 10)),
-                            Text('IB 250.000.000', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                            const Text('• Syarat Minimal Kas PT:', style: TextStyle(color: Color(0xFF64748B), fontSize: 10)),
+                            Text(CurrencyFormatter.formatFull(minCompanyBalance), style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                           ],
                         ),
                         const SizedBox(height: 2),

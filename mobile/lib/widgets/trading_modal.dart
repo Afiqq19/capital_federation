@@ -50,9 +50,12 @@ class _TradingModalState extends State<TradingModal> {
     final user = provider.user;
     final currencyFormatter = NumberFormat('#,###', 'id_ID');
 
+    final baseTradingFeePct = provider.tradingFeePct / 100.0;
+    final feePct = user?.isBlueChip == true ? (baseTradingFeePct / 3.0) : baseTradingFeePct;
+
     final shares = _lots * 100;
     final grossAmount = shares * widget.company.currentPrice;
-    final fee = grossAmount * (user?.isBlueChip == true ? 0.0005 : 0.0015);
+    final fee = grossAmount * feePct;
     final totalAmount = _orderType == 'BUY' ? grossAmount + fee : grossAmount - fee;
 
     // Find if user owns lots of this company
@@ -443,7 +446,7 @@ class _TradingModalState extends State<TradingModal> {
                           _buildPresetChip('+100', () => _updateLots(_lots + 100)),
                           _buildPresetChip('+500', () => _updateLots(_lots + 500)),
                           _buildPresetChip('MAX', () {
-                            final lotCost = widget.company.currentPrice * 100 * (user?.isBlueChip == true ? 1.0005 : 1.0015);
+                            final lotCost = widget.company.currentPrice * 100 * (1.0 + feePct);
                             final maxAffordable = lotCost > 0 ? (cash / lotCost).floor() : 0;
                             final maxBuyable = min(maxAffordable, availableFloatingLots);
                             if (maxAffordable <= 0) {
@@ -494,7 +497,7 @@ class _TradingModalState extends State<TradingModal> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Biaya Transaksi (Pajak & Kliring)', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11)),
+                  Text('Biaya Transaksi (${(feePct * 100).toStringAsFixed(2)}% Pajak & Kliring)', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11)),
                   Text('IB ${currencyFormatter.format(fee.round())}', style: const TextStyle(color: Colors.white, fontSize: 11)),
                 ],
               ),

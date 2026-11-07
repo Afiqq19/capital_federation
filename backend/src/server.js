@@ -2991,7 +2991,8 @@ app.post('/api/court/file-case', async (req, res) => {
     if (resolvedPlUserId) {
       const plUser = await query.get('SELECT * FROM users WHERE id = ?', [resolvedPlUserId]);
       if (plUser) {
-        const courtFee = 250000;
+        const courtFeeRow = await query.get("SELECT value FROM central_bank_settings WHERE key = 'pnk_filing_fee_ib'");
+        const courtFee = (courtFeeRow && !isNaN(parseFloat(courtFeeRow.value))) ? Math.max(0, parseFloat(courtFeeRow.value)) : 500000;
         const totalFee = courtFee + (chosenLawyer ? parsedLawyerFee : 0);
         if (plUser.balance_ib < totalFee) {
           return res.status(400).json({
@@ -5132,8 +5133,10 @@ app.post('/api/trade/order', async (req, res) => {
     const pricePerShare = (livePrice !== null && livePrice !== undefined) ? livePrice : company.current_price;
     const grossAmount = shares * pricePerShare;
 
-    // Fee (0.15% normal, 0.05% for Blue Chip)
-    const feePct = user.is_blue_chip ? 0.0005 : 0.0015;
+    // Dynamic Fee from central_bank_settings (e.g. 0.15% or 5.0% normal, 1/3 for Blue Chip)
+    const tradingFeeRow = await query.get("SELECT value FROM central_bank_settings WHERE key = 'trading_fee_pct'");
+    const baseFeePct = (tradingFeeRow && !isNaN(parseFloat(tradingFeeRow.value))) ? (parseFloat(tradingFeeRow.value) / 100.0) : 0.0015;
+    const feePct = user.is_blue_chip ? (baseFeePct / 3.0) : baseFeePct;
     const fee = Math.round(grossAmount * feePct);
 
     if (type === 'BUY') {
@@ -6328,7 +6331,8 @@ app.post('/api/takeover/negotiate', async (req, res) => {
     else if (offerTier === 'PREMIUM_15') discountFactor = 1.15;
 
     const rawAcquisitionPrice = Math.round(totalValuation * (pct / 100.0) * discountFactor);
-    const meteraiFee = 10000;
+    const stampSetting = await query.get("SELECT value FROM central_bank_settings WHERE key = 'stamp_duty_fee_ib'");
+    const meteraiFee = (stampSetting && !isNaN(parseFloat(stampSetting.value))) ? parseFloat(stampSetting.value) : 10000;
     const notaryAdminFee = 40000;
     const totalDeduction = rawAcquisitionPrice + meteraiFee + notaryAdminFee;
 
@@ -8722,11 +8726,13 @@ app.post('/api/bank/loan/apply', async (req, res) => {
     const rateRow = await query.get("SELECT value FROM central_bank_settings WHERE key = 'interest_rate'");
     const interestRate = parseFloat(rateRow ? rateRow.value : 6.5);
 
-    // Cek limit plafon berdasarkan credit score (Credit score 750 = limit s.d IB 1.5 Miliar)
-    const maxLoan = user.credit_score * 2000000;
+    // Cek limit plafon berdasarkan credit score dan regulasi max_loan_limit di Bank Sentral
+    const maxLoanSetting = await query.get("SELECT value FROM central_bank_settings WHERE key = 'max_loan_limit'");
+    const ceilingLimit = (maxLoanSetting && !isNaN(parseFloat(maxLoanSetting.value))) ? parseFloat(maxLoanSetting.value) : 1000000000;
+    const maxLoan = Math.min(ceilingLimit, user.credit_score * 2000000);
     if (loanAmount > maxLoan) {
       return res.status(400).json({
-        error: `Jumlah pinjaman melebihi plafon credit score Anda. Maksimal pinjaman: IB ${maxLoan.toLocaleString('id-ID')}`
+        error: `Jumlah pinjaman melebihi plafon regulasi/credit score Anda. Maksimal pinjaman yang diizinkan: IB ${maxLoan.toLocaleString('id-ID')}`
       });
     }
 
@@ -9164,18 +9170,18 @@ const bundledPublicApkPath = path.join(__dirname, '../public/downloads/Capital-F
 const directPublicApkPath = path.join(__dirname, '../public/downloads/capital-federation.apk');
 const localBuiltApkPath = path.join(__dirname, '../../mobile/build/app/outputs/flutter-apk/app-release.apk');
 
-const LATEST_RELEASE_NOTES_V200 = 'v2.0.6 (Build 55): Perbaikan sistem akuisisi & M&A perseroan (UPSERT atomic), layout Cap Table rapi, perbaikan pembagian kas negara/dividen stimulus (filter konglomerat riil), injeksi cadangan kas negara, serta pencegahan krisis kas negara.';
+const LATEST_RELEASE_NOTES_V200 = 'v2.0.7 (Build 56): Sinkronisasi dinamis seluruh parameter moneter & fiskal (biaya pendaftaran gugatan PNAF, tarif pajak bursa, bea meterai digital, limit pinjaman bank sentral), pembaruan live WebSocket settings, dan integrasi chart IPMC modern.';
 
 async function getApkSettingsMap() {
   const defaults = {
-    apk_version: '2.0.6',
-    apk_build_number: '55',
+    apk_version: '2.0.7',
+    apk_build_number: '56',
     apk_min_android: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
     apk_file_size_mb: '57.5 MB',
     apk_release_notes: LATEST_RELEASE_NOTES_V200,
     apk_external_url: '',
     apk_download_count: '710',
-    apk_sha256: '9779445a4b2b80bcf2c02f35b72503ab0e5db10edeaf199437656171fe0395bc',
+    apk_sha256: '0ce9845798c3353bd0b579a8af5929a706b33605495d5895380a56db270c511b',
     apk_updated_at: new Date().toISOString(),
   };
   try {
@@ -9185,11 +9191,11 @@ async function getApkSettingsMap() {
         defaults[r.key] = String(r.value);
       }
     }
-    if (parseInt(defaults.apk_build_number || '0', 10) < 55 || defaults.apk_sha256 !== '9779445a4b2b80bcf2c02f35b72503ab0e5db10edeaf199437656171fe0395bc') {
-      defaults.apk_version = '2.0.6';
-      defaults.apk_build_number = '55';
+    if (parseInt(defaults.apk_build_number || '0', 10) < 56 || defaults.apk_sha256 !== '0ce9845798c3353bd0b579a8af5929a706b33605495d5895380a56db270c511b') {
+      defaults.apk_version = '2.0.7';
+      defaults.apk_build_number = '56';
       defaults.apk_file_size_mb = '57.5 MB';
-      defaults.apk_sha256 = '9779445a4b2b80bcf2c02f35b72503ab0e5db10edeaf199437656171fe0395bc';
+      defaults.apk_sha256 = '0ce9845798c3353bd0b579a8af5929a706b33605495d5895380a56db270c511b';
       defaults.apk_release_notes = LATEST_RELEASE_NOTES_V200;
       defaults.apk_updated_at = new Date().toISOString();
       // Persist directly to central_bank_settings so /api/settings, /api/admin/settings & /api/admin/overview match 100%!
@@ -9273,11 +9279,11 @@ app.get('/api/version', async (req, res) => {
     });
   } catch (err) {
     res.json({
-      version: '2.0.6',
-      buildNumber: 55,
-      apkVersion: 'v2.0.6-CFX Production (Build 55)',
-      adminVersion: 'v2.0.6 Sovereign Launch',
-      backendVersion: 'v2.0.6-CFX Production',
+      version: '2.0.7',
+      buildNumber: 56,
+      apkVersion: 'v2.0.7-CFX Production (Build 56)',
+      adminVersion: 'v2.0.7 Sovereign Launch',
+      backendVersion: 'v2.0.7-CFX Production',
       minAndroid: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
       fileSizeMb: '57.6 MB',
       hasHostedApk: Boolean(getActiveApkFilePath()),

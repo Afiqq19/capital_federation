@@ -48,8 +48,9 @@ class _PartialBuySheetState extends State<PartialBuySheet> {
     final int sharesToBuy = (totalShares * (_selectedPct / 100.0)).round();
     final int lotsToBuy = (sharesToBuy / 100).round();
     final double grossAmount = sharesToBuy * widget.deal.pricePerShare;
-    final double adminFee = grossAmount * 0.001; // 0.1% pajak transaksi
-    const double meteraiFee = 10000.0; // Bea Meterai Digital Federasi
+    final double adminFeePct = gameProvider.tradingFeePct / 100.0;
+    final double adminFee = grossAmount * adminFeePct;
+    final double meteraiFee = gameProvider.stampDutyFee; // Bea Meterai Digital Federasi
     final double totalRequired = grossAmount + adminFee + meteraiFee;
 
     final double userBalance = user?.balanceIb ?? 0.0;

@@ -39,7 +39,7 @@ class _FileLawsuitSheetState extends State<FileLawsuitSheet> {
   String? _selectedDefSymbol;
   String? _selectedDefName;
 
-  final int _courtFee = 250000;
+  double _getCourtFee(BuildContext context) => context.read<GameProvider>().courtFilingFee;
 
   double get _lawyerFee {
     switch (_selectedLawyerKey) {
@@ -309,7 +309,8 @@ class _FileLawsuitSheetState extends State<FileLawsuitSheet> {
       return;
     }
 
-    final double totalFee = _courtFee.toDouble() + _lawyerFee;
+    final double courtFee = _getCourtFee(context);
+    final double totalFee = courtFee + _lawyerFee;
     if (user.balanceIb < totalFee) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -374,6 +375,7 @@ class _FileLawsuitSheetState extends State<FileLawsuitSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final double courtFee = context.watch<GameProvider>().courtFilingFee;
     return Container(
       padding: EdgeInsets.only(
         left: 20,
@@ -866,7 +868,7 @@ class _FileLawsuitSheetState extends State<FileLawsuitSheet> {
                           Text('Meterai Digital & Berita Acara', style: TextStyle(color: Color(0xFF64748B), fontSize: 9)),
                         ],
                       ),
-                      Text(CurrencyFormatter.formatFull(_courtFee.toDouble()), style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 11, fontWeight: FontWeight.bold, fontFamily: 'monospace')),
+                      Text(CurrencyFormatter.formatFull(courtFee), style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 11, fontWeight: FontWeight.bold, fontFamily: 'monospace')),
                     ],
                   ),
                   if (_lawyerFee > 0) ...[
@@ -891,7 +893,7 @@ class _FileLawsuitSheetState extends State<FileLawsuitSheet> {
                     children: [
                       const Text('TOTAL BIAYA DIAJUKAN:', style: TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.bold)),
                       Text(
-                        CurrencyFormatter.formatFull(_courtFee.toDouble() + _lawyerFee),
+                        CurrencyFormatter.formatFull(courtFee + _lawyerFee),
                         style: const TextStyle(color: Color(0xFF10B981), fontSize: 12, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
                       ),
                     ],

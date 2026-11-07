@@ -36,7 +36,9 @@ function createOrdersRouter(io, simulationEngine) {
         return res.status(400).json({ error: `⛔ Saham ${comp.symbol} sedang disuspen/disita. Tidak dapat memasang antrean order!` });
       }
 
-      const feePct = user.is_blue_chip ? 0.0005 : 0.0015;
+      const tradingFeeRow = await query.get("SELECT value FROM central_bank_settings WHERE key = 'trading_fee_pct'");
+      const baseFeePct = (tradingFeeRow && !isNaN(parseFloat(tradingFeeRow.value))) ? (parseFloat(tradingFeeRow.value) / 100.0) : 0.0015;
+      const feePct = user.is_blue_chip ? (baseFeePct / 3.0) : baseFeePct;
       const orderId = uuidv4();
 
       if (orderType === 'BUY') {
@@ -207,7 +209,9 @@ function createOrdersRouter(io, simulationEngine) {
       const user = await query.get('SELECT * FROM users WHERE id = ?', [userId]);
 
       if (orderTypeVal === 'BUY') {
-        const feePct = user.is_blue_chip ? 0.0005 : 0.0015;
+        const tradingFeeRow = await query.get("SELECT value FROM central_bank_settings WHERE key = 'trading_fee_pct'");
+        const baseFeePct = (tradingFeeRow && !isNaN(parseFloat(tradingFeeRow.value))) ? (parseFloat(tradingFeeRow.value) / 100.0) : 0.0015;
+        const feePct = user.is_blue_chip ? (baseFeePct / 3.0) : baseFeePct;
         const refundGross = unfilledLots * 100 * orderPrice;
         const refundFee = Math.round(refundGross * feePct);
         const totalRefund = refundGross + refundFee;

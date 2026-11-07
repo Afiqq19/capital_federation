@@ -26,18 +26,18 @@ import {
 
 export default function PublicDownloadLandingPage() {
   const [versionInfo, setVersionInfo] = useState({
-    version: '2.0.6',
-    buildNumber: 55,
-    apkVersion: 'v2.0.6 (Build 55)',
+    version: '2.0.7',
+    buildNumber: 56,
+    apkVersion: 'v2.0.7 (Build 56)',
     minAndroid: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
-    fileSizeMb: '57.6 MB',
+    fileSizeMb: '57.5 MB',
     downloadUrl: '/api/download/apk',
     downloadCount: 710,
     totalCompanies: 363,
     totalPlayers: 1053,
     sha256: '',
     releaseNotes:
-      'v2.0.6 (Build 55): Perbaikan sistem akuisisi & M&A perseroan (UPSERT atomic), layout Cap Table rapi, perbaikan pembagian kas negara/dividen stimulus (filter konglomerat riil), injeksi cadangan kas negara, serta pencegahan krisis kas negara.',
+      'v2.0.7 (Build 56): Sinkronisasi dinamis seluruh parameter moneter & fiskal (biaya pendaftaran gugatan PNAF, tarif pajak bursa, bea meterai digital, limit pinjaman bank sentral), pembaruan live WebSocket settings, dan integrasi chart IPMC modern.',
   });
   const [topLeaders, setTopLeaders] = useState([]);
   const [topStocks, setTopStocks] = useState([]);

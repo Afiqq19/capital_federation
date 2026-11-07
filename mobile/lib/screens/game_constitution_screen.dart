@@ -61,11 +61,11 @@ class _GameConstitutionScreenState extends State<GameConstitutionScreen> with Si
     },
     {
       'article': 'Pasal 5',
-      'title': 'Pajak Transaksi 0.10% & Bea Meterai Digital',
+      'title': 'Pajak Transaksi Bursa & Bea Meterai Digital',
       'summary': 'Kontribusi fiskal otomatis untuk ketahanan brankas kas negara federasi.',
       'points': [
-        'Setiap transaksi penjualan saham dikenakan pajak bursa 0.10% masuk ke Kas Negara.',
-        'Setiap akta notaris peralihan blok saham atau M&A dikenakan Bea Meterai IB 10.000.',
+        'Setiap transaksi saham dikenakan pajak bursa resmi sesuai regulasi moneter masuk ke Kas Negara.',
+        'Setiap akta notaris peralihan blok saham atau M&A dikenakan Bea Meterai Digital resmi.',
         'Penerimaan dialokasikan untuk cadangan devisa likuiditas dan dana talangan.',
       ],
       'color': Color(0xFF38BDF8),

@@ -10,20 +10,20 @@ export default function ApkManagerPage({ showToast }) {
   const adminCtx = useAdmin();
   const toastFn = showToast || adminCtx?.notify;
   const [apkInfo, setApkInfo] = useState({
-    version: '2.0.6',
-    buildNumber: 55,
-    fileSizeMb: '57.6 MB',
+    version: '2.0.7',
+    buildNumber: 56,
+    fileSizeMb: '57.5 MB',
     minAndroid: 'Android 10.0 (API Level 29 / Q)',
     hasHostedApk: true,
     downloadCount: 710,
-    releaseNotes: 'v2.0.6 (Build 55): Perbaikan sistem akuisisi & M&A perseroan (UPSERT atomic), layout Cap Table rapi, perbaikan pembagian kas negara/dividen stimulus (filter konglomerat riil), injeksi cadangan kas negara, serta pencegahan krisis kas negara.'
+    releaseNotes: 'v2.0.7 (Build 56): Sinkronisasi dinamis seluruh parameter moneter & fiskal (biaya pendaftaran gugatan PNAF, tarif pajak bursa, bea meterai digital, limit pinjaman bank sentral), pembaruan live WebSocket settings, dan integrasi chart IPMC modern.'
   });
   const [loading, setLoading] = useState(true);
   const [savingMeta, setSavingMeta] = useState(false);
 
   // Form metadata state
-  const [version, setVersion] = useState('2.0.6');
-  const [buildNumber, setBuildNumber] = useState(55);
+  const [version, setVersion] = useState('2.0.7');
+  const [buildNumber, setBuildNumber] = useState(56);
   const [minAndroid, setMinAndroid] = useState('Android 10.0 (API 29 / Q)');
   const [externalUrl, setExternalUrl] = useState('');
   const [releaseNotesText, setReleaseNotesText] = useState('');

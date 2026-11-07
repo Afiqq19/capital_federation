@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../../providers/game_provider.dart';
 import '../../../utils/formatters.dart';
 import '../../../utils/wib_time.dart';
 import '../models/deal_model.dart';
@@ -439,7 +441,7 @@ class _DeedCardState extends State<DeedCard> {
         content: Text(
           'Gugatan arbitrase niaga atas Akta ${deed.deedNumber} akan diregister ke Pengadilan Niaga Federasi (PNAF).\n\n'
           '• Tuntutan Penalti Pasal 7: ${CurrencyFormatter.formatFull(penaltyAmount)}\n'
-          '• Biaya Panitera: IB 250.000\n'
+          '• Biaya Panitera: ${CurrencyFormatter.formatFull(context.read<GameProvider>().courtFilingFee)}\n'
           '• Majelis Hakim PNAF akan segera memeriksa bukti akta & memutus perkara.',
           style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 11.5, height: 1.4),
         ),

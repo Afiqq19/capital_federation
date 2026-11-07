@@ -33,6 +33,7 @@ class GameProvider extends ChangeNotifier {
   double _centralBankInterestRate = 6.5;
   int _cashFlowIntervalMinutes = 25;
   double _corporateTaxRatePct = 10.0;
+  Map<String, dynamic> _monetarySettings = {};
   List<Map<String, dynamic>> _activeBonds = [];
   List<Map<String, dynamic>> _myBondHoldings = [];
   List<Map<String, dynamic>> _activeSubsidies = [];
@@ -78,6 +79,41 @@ class GameProvider extends ChangeNotifier {
   bool get hasActiveLoan => _activeLoan != null;
   int get cashFlowIntervalMinutes => _cashFlowIntervalMinutes;
   double get corporateTaxRatePct => _corporateTaxRatePct;
+  Map<String, dynamic> get monetarySettings => _monetarySettings;
+
+  double get courtFilingFee =>
+      double.tryParse(_monetarySettings['pnk_filing_fee_ib']?.toString() ?? '') ?? 500000.0;
+
+  double get tradingFeePct =>
+      double.tryParse(_monetarySettings['trading_fee_pct']?.toString() ?? '') ?? 0.15;
+
+  double get stampDutyFee =>
+      double.tryParse(_monetarySettings['stamp_duty_fee_ib']?.toString() ?? '') ?? 10000.0;
+
+  double get minIpoCapital =>
+      double.tryParse(_monetarySettings['min_ipo_capital']?.toString() ?? '') ?? 50000000.0;
+
+  int get ipoMinLevel =>
+      int.tryParse(_monetarySettings['ipo_min_level']?.toString() ?? '') ?? 4;
+
+  double get ptEstablishmentCost =>
+      double.tryParse(_monetarySettings['pt_establishment_cost_ib']?.toString() ?? '') ?? 10000000.0;
+
+  double get initialPtCash =>
+      double.tryParse(_monetarySettings['initial_pt_cash_ib']?.toString() ?? '') ?? 10000000.0;
+
+  double get maxLoanLimit =>
+      double.tryParse(_monetarySettings['max_loan_limit']?.toString() ?? '') ?? 1000000000.0;
+
+  double get bankruptcyLimit =>
+      double.tryParse(_monetarySettings['bankruptcy_limit_ib']?.toString() ?? '') ?? -50000000.0;
+
+  double get baseOperationalCost =>
+      double.tryParse(_monetarySettings['base_operational_cost_ib']?.toString() ?? '') ?? 3000000.0;
+
+  double get employeeSalaryPerHead =>
+      double.tryParse(_monetarySettings['employee_salary_per_head_ib']?.toString() ?? '') ?? 100000.0;
+
   List<Map<String, dynamic>> get activeBonds => _activeBonds;
   List<Map<String, dynamic>> get myBondHoldings => _myBondHoldings;
   List<Map<String, dynamic>> get activeSubsidies => _activeSubsidies;
@@ -327,21 +363,19 @@ class GameProvider extends ChangeNotifier {
       },
       onSettingsUpdated: (data) {
         if (data is Map) {
+          _monetarySettings.addAll(Map<String, dynamic>.from(data));
           if (data['interestRate'] != null) {
             _centralBankInterestRate = (data['interestRate'] as num).toDouble();
-            notifyListeners();
           } else if (data['interest_rate'] != null) {
             _centralBankInterestRate = double.tryParse(data['interest_rate'].toString()) ?? _centralBankInterestRate;
-            notifyListeners();
           }
           if (data['cash_flow_interval_minutes'] != null) {
             _cashFlowIntervalMinutes = int.tryParse(data['cash_flow_interval_minutes'].toString()) ?? _cashFlowIntervalMinutes;
-            notifyListeners();
           }
           if (data['corporate_tax_rate_pct'] != null) {
             _corporateTaxRatePct = double.tryParse(data['corporate_tax_rate_pct'].toString()) ?? _corporateTaxRatePct;
-            notifyListeners();
           }
+          notifyListeners();
         }
       },
       onBalanceUpdated: (data) {
@@ -531,6 +565,7 @@ class GameProvider extends ChangeNotifier {
     }
     final fetchedSettings = results[7] as Map<String, dynamic>?;
     if (fetchedSettings != null) {
+      _monetarySettings = Map<String, dynamic>.from(fetchedSettings);
       if (fetchedSettings['interest_rate'] != null) {
         _centralBankInterestRate = double.tryParse(fetchedSettings['interest_rate'].toString()) ?? _centralBankInterestRate;
       }

@@ -877,9 +877,10 @@ module.exports = function(io) {
       const plaintiff = await query.get('SELECT * FROM users WHERE id = ?', [plaintiffUserId]);
       if (!plaintiff) return res.status(404).json({ error: 'Data penggugat tidak valid' });
 
-      const filingFee = 250000;
+      const courtFeeRow = await query.get("SELECT value FROM central_bank_settings WHERE key = 'pnk_filing_fee_ib'");
+      const filingFee = (courtFeeRow && !isNaN(parseFloat(courtFeeRow.value))) ? Math.max(0, parseFloat(courtFeeRow.value)) : 500000;
       if ((plaintiff.balance_ib || 0) < filingFee) {
-        return res.status(400).json({ error: 'Kas Pribadi Anda tidak cukup untuk biaya panitera IB 250.000' });
+        return res.status(400).json({ error: `Kas Pribadi Anda tidak cukup untuk biaya panitera IB ${filingFee.toLocaleString('id-ID')}` });
       }
 
       const newBalance = (Number(plaintiff.balance_ib) || 0) - filingFee;

@@ -107,7 +107,8 @@ class _AssetExchangeTabState extends State<AssetExchangeTab> with SingleTickerPr
 
     final totalValuation = company.totalShares * company.currentPrice;
     final currencyFormatter = NumberFormat('#,###', 'id_ID');
-    final user = context.read<GameProvider>().user;
+    final gameProvider = context.read<GameProvider>();
+    final user = gameProvider.user;
     final sellerName = (company.ownerUsername != null && company.ownerUsername!.isNotEmpty)
         ? company.ownerUsername!
         : 'galih';
@@ -144,7 +145,7 @@ class _AssetExchangeTabState extends State<AssetExchangeTab> with SingleTickerPr
 
           final offerPricePerShare = (company.currentPrice * discountFactor).round();
           final rawAcquisitionPrice = (totalValuation * (percentage / 100.0) * discountFactor).round();
-          const meteraiFee = 10000;
+          final meteraiFee = gameProvider.stampDutyFee.round();
           const notaryAdminFee = 40000;
           final totalDeduction = rawAcquisitionPrice + meteraiFee + notaryAdminFee;
 
@@ -566,11 +567,11 @@ class _AssetExchangeTabState extends State<AssetExchangeTab> with SingleTickerPr
                           ],
                         ),
                         const SizedBox(height: 6),
-                        const Row(
+                        Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text('⚖️ Bea Meterai & Notariat Digital:', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11)),
-                            Text('IB 50.000 (Kas Negara)', style: TextStyle(color: Color(0xFFFBBF24), fontSize: 11, fontWeight: FontWeight.bold)),
+                            const Text('⚖️ Bea Meterai & Notariat Digital:', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11)),
+                            Text('IB ${currencyFormatter.format(meteraiFee + notaryAdminFee)} (Kas Negara)', style: const TextStyle(color: Color(0xFFFBBF24), fontSize: 11, fontWeight: FontWeight.bold)),
                           ],
                         ),
                         const Divider(color: Color(0xFF1E293B), height: 16),

@@ -66,7 +66,7 @@ void showTakeoverModalSheet(
 
         final offerPricePerShare = (company.currentPrice * discountFactor).round();
         final rawAcquisitionPrice = (totalValuation * (percentage / 100.0) * discountFactor).round();
-        const meteraiFee = 10000;
+        final meteraiFee = gameProvider.stampDutyFee.round();
         const notaryAdminFee = 40000;
         final totalDeduction = rawAcquisitionPrice + meteraiFee + notaryAdminFee;
 
@@ -349,7 +349,7 @@ void showTakeoverModalSheet(
                       const SizedBox(height: 4),
                       _buildSummaryRow('Volume Dialihkan:', '${currencyFormatter.format(lotsTransferred)} Lot', Colors.white),
                       const SizedBox(height: 4),
-                      _buildSummaryRow('Bea Meterai & Akta Notaris:', 'IB 50.000', const Color(0xFF64748B)),
+                      _buildSummaryRow('Bea Meterai & Akta Notaris:', 'IB ${currencyFormatter.format(meteraiFee + notaryAdminFee)}', const Color(0xFF64748B)),
                       const Divider(color: Color(0xFF1E293B), height: 16),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,

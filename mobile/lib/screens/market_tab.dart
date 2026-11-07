@@ -529,7 +529,7 @@ class _MarketTabState extends State<MarketTab> {
             final araPct = ipoPrice <= 200 ? 70.0 : (ipoPrice <= 5000 ? 50.0 : 40.0);
             final targetAraPrice = (ipoPrice * (1 + araPct / 100.0)).round();
 
-            const minCompanyBalance = 250000000.0; // IB 250 Juta
+            final minCompanyBalance = context.read<GameProvider>().minIpoCapital;
             const ipoRegFee = 100000000.0; // IB 100 Juta Biaya Pendaftaran IPO
             final isPtFundReady = user.companyBalanceIb >= (minCompanyBalance + ipoRegFee);
 
@@ -575,11 +575,11 @@ class _MarketTabState extends State<MarketTab> {
                             ],
                           ),
                           const SizedBox(height: 4),
-                          const Row(
+                          Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text('• Syarat Minimal Kas PT:', style: TextStyle(color: Color(0xFF64748B), fontSize: 9.5)),
-                              Text('IB 250.000.000', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                              const Text('• Syarat Minimal Kas PT:', style: TextStyle(color: Color(0xFF64748B), fontSize: 9.5)),
+                              Text(CurrencyFormatter.formatFull(minCompanyBalance), style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                             ],
                           ),
                           const SizedBox(height: 2),
