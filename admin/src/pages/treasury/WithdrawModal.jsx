@@ -11,7 +11,7 @@ export default function WithdrawModal({ open, onClose, users, companies, treasur
   const [selectedCompanyId, setSelectedCompanyId] = useState('');
   const [amountIb, setAmountIb] = useState(50000000); // Default IB 50 Juta
   const [purpose, setPurpose] = useState('Pencairan Anggaran Negara untuk Penguatan Likuiditas');
-  const [allowDeficit, setAllowDeficit] = useState(false);
+  const [allowDeficit, setAllowDeficit] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
   // Kunci daftar user dan PT selama modal terbuka agar dropdown tidak me-refresh sendiri saat mengetik/memilih

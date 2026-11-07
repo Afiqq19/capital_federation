@@ -3,7 +3,7 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const { query } = require('../db');
 
-module.exports = function(io, simulationEngine) {
+module.exports = function(io, simulationEngine, invalidateMarketCaches) {
   // 1. Ringkasan Kas Negara & Sovereign Wealth Fund
   router.get('/summary', async (req, res) => {
     try {
@@ -125,6 +125,8 @@ module.exports = function(io, simulationEngine) {
       io.emit('market:news_broadcast', newsItem);
       io.emit('company:seized_status', { companyId, isSeized: false });
       io.emit('treasury:updated');
+      if (typeof invalidateMarketCaches === 'function') invalidateMarketCaches();
+      if (typeof invalidateMarketCaches === 'function') invalidateMarketCaches();
 
       res.json({
         success: true,
@@ -155,6 +157,7 @@ module.exports = function(io, simulationEngine) {
       `, [ledgerId, amount, reasonDesc]);
 
       io.emit('treasury:updated');
+      if (typeof invalidateMarketCaches === 'function') invalidateMarketCaches();
 
       // Ambil saldo terbaru
       const rows = await query.all('SELECT direction, SUM(amount_ib) as total FROM state_treasury_ledger GROUP BY direction');
@@ -181,27 +184,39 @@ module.exports = function(io, simulationEngine) {
   // 4. Pembagian Dividen Kemakmuran Rakyat / BLT Ekonomi
   router.post('/distribute-dividend', async (req, res) => {
     try {
-      const { amountPerUser, note, targetAudience = 'HUMAN_ONLY', allowDeficit = false } = req.body;
+      const { amountPerUser, note, targetAudience = 'HUMAN_ONLY', allowDeficit = true } = req.body;
       const perUser = parseFloat(amountPerUser) || 50000000.0;
 
       let users = [];
       if (targetAudience === 'HUMAN_ONLY') {
-        users = await query.all("SELECT id, username, balance_ib FROM users WHERE (is_bot_account = 0 OR is_bot_account IS NULL) AND id NOT LIKE 'bot-user-%'");
+        users = await query.all("SELECT id, username, balance_ib FROM users WHERE id NOT LIKE 'bot-user-%' AND id NOT LIKE 'user-bot-%' AND role != 'ADMIN' AND id != 'admin-001'");
       } else {
-        users = await query.all('SELECT id, username, balance_ib FROM users');
+        users = await query.all("SELECT id, username, balance_ib FROM users WHERE role != 'ADMIN' AND id != 'admin-001'");
       }
 
       if (!users || users.length === 0) {
-        return res.status(400).json({ error: 'Tidak ada konglomerat yang sesuai target' });
+        return res.status(400).json({ error: 'Tidak ada konglomerat yang sesuai target penerima' });
       }
 
       const totalDisbursed = perUser * users.length;
 
       // Salurkan ke pemain sesuai target
       if (targetAudience === 'HUMAN_ONLY') {
-        await query.run("UPDATE users SET balance_ib = balance_ib + ? WHERE (is_bot_account = 0 OR is_bot_account IS NULL) AND id NOT LIKE 'bot-user-%'", [perUser]);
+        await query.run("UPDATE users SET balance_ib = balance_ib + ? WHERE id NOT LIKE 'bot-user-%' AND id NOT LIKE 'user-bot-%' AND role != 'ADMIN' AND id != 'admin-001'", [perUser]);
       } else {
-        await query.run('UPDATE users SET balance_ib = balance_ib + ?', [perUser]);
+        await query.run("UPDATE users SET balance_ib = balance_ib + ? WHERE role != 'ADMIN' AND id != 'admin-001'", [perUser]);
+      }
+
+      // Catat mutasi kas pribadi untuk konglomerat riil
+      for (const u of users) {
+        if (users.length <= 50) {
+          try {
+            await query.run(`
+              INSERT INTO cash_flow_ledger (id, user_id, account_type, category, title, amount_ib, direction, balance_after, notes)
+              VALUES (?, ?, 'PERSONAL', 'TREASURY_GRANT', ?, ?, 'INCOME', ?, ?)
+            `, [uuidv4(), u.id, 'Dividen Kemakmuran Rakyat Federasi', perUser, (u.balance_ib || 0) + perUser, note || 'Stimulus langsung dari Kas Negara']);
+          } catch (_) {}
+        }
       }
 
       const audienceLabel = targetAudience === 'HUMAN_ONLY' ? `${users.length} Konglomerat Pemain Asli` : `${users.length} Seluruh Konglomerat`;
@@ -209,7 +224,7 @@ module.exports = function(io, simulationEngine) {
       // Catat pengeluaran kas negara (mengurangi saldo kas likuid negara)
       await query.run(
         'INSERT INTO state_treasury_ledger (id, source_type, title, amount_ib, direction, reference_id, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [uuidv4(), 'BAILOUT_DISBURSEMENT', `Penyaluran Dividen Kemakmuran Rakyat Federasi (${audienceLabel})`, totalDisbursed, 'EXPENSE', 'BLT_FEDERASI', note || 'Stimulus daya beli masyarakat']
+        [uuidv4(), 'DIVIDEND_DISTRIBUTION', `Penyaluran Dividen Kemakmuran Rakyat Federasi (${audienceLabel})`, totalDisbursed, 'EXPENSE', 'BLT_FEDERASI', note || 'Stimulus daya beli masyarakat']
       );
 
       // Siarkan breaking news
@@ -228,6 +243,7 @@ module.exports = function(io, simulationEngine) {
 
       io.emit('market:news_broadcast', newsItem);
       io.emit('treasury:updated');
+      if (typeof invalidateMarketCaches === 'function') invalidateMarketCaches();
       io.emit('user:balance_batch_updated', { addedBalance: perUser, targetAudience });
 
       // Update balance untuk pemain (efisien, batasi loop agar server tidak lagging)
@@ -305,6 +321,7 @@ module.exports = function(io, simulationEngine) {
 
         io.emit('user:balance_updated', { userId, newBalance: postUser.balance_ib });
         io.emit('treasury:updated');
+      if (typeof invalidateMarketCaches === 'function') invalidateMarketCaches();
 
         return res.json({
           success: true,
@@ -338,6 +355,7 @@ module.exports = function(io, simulationEngine) {
         }
 
         io.emit('treasury:updated');
+      if (typeof invalidateMarketCaches === 'function') invalidateMarketCaches();
 
         return res.json({
           success: true,

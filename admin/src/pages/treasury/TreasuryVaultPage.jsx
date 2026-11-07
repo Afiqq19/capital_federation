@@ -30,7 +30,7 @@ import {
 } from 'lucide-react';
 
 export default function TreasuryVaultPage() {
-  const { companies, users, notify } = useAdmin();
+  const { companies, users, notify, actions } = useAdmin();
   const [summary, setSummary] = useState(null);
   const [ledger, setLedger] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -63,6 +63,7 @@ export default function TreasuryVaultPage() {
     fetchTreasury(false);
     const handleUpdate = () => {
       fetchTreasury(true);
+      if (typeof actions?.refreshOverview === 'function') actions.refreshOverview();
     };
     socket.on('treasury:updated', handleUpdate);
     socket.on('company:seized_status', handleUpdate);
@@ -70,13 +71,15 @@ export default function TreasuryVaultPage() {
       socket.off('treasury:updated', handleUpdate);
       socket.off('company:seized_status', handleUpdate);
     };
-  }, []);
+  }, [actions]);
 
   const handleConfirmBailout = async (payload) => {
     try {
       const res = await adminApi.treasuryBailout(payload);
       if (notify) notify(res.message || 'Dana talangan kas negara berhasil disalurkan!', 'success');
       await fetchTreasury(true);
+      if (typeof actions?.refreshOverview === 'function') actions.refreshOverview();
+      if (typeof actions?.refreshCompanies === 'function') actions.refreshCompanies();
     } catch (err) {
       if (notify) notify('Gagal menyalurkan bailout: ' + err.message, 'error');
       else alert('Gagal menyalurkan bailout: ' + err.message);
@@ -88,6 +91,8 @@ export default function TreasuryVaultPage() {
       const res = await adminApi.treasuryDistributeDividend(payload);
       if (notify) notify(res.message || 'Dividen nasional berhasil dicairkan ke seluruh pemain!', 'success');
       await fetchTreasury(true);
+      if (typeof actions?.refreshOverview === 'function') actions.refreshOverview();
+      if (typeof actions?.refreshUsers === 'function') actions.refreshUsers();
     } catch (err) {
       if (notify) notify('Gagal membagikan dividen: ' + err.message, 'error');
       else alert('Gagal membagikan dividen: ' + err.message);
@@ -99,6 +104,9 @@ export default function TreasuryVaultPage() {
       const res = await adminApi.treasuryWithdrawFunds(payload);
       if (notify) notify(res.message || 'Dana Kas Negara berhasil dicairkan!', 'success');
       await fetchTreasury(true);
+      if (typeof actions?.refreshOverview === 'function') actions.refreshOverview();
+      if (typeof actions?.refreshUsers === 'function') actions.refreshUsers();
+      if (typeof actions?.refreshCompanies === 'function') actions.refreshCompanies();
     } catch (err) {
       if (notify) notify('Gagal mencairkan dana: ' + err.message, 'error');
       else alert('Gagal mencairkan dana: ' + err.message);
@@ -110,13 +118,14 @@ export default function TreasuryVaultPage() {
       const res = await adminApi.treasuryInjectReserve(payload);
       if (notify) notify(res.message || 'Cadangan devisa kas negara berhasil disuntikkan!', 'success');
       await fetchTreasury(true);
+      if (typeof actions?.refreshOverview === 'function') actions.refreshOverview();
     } catch (err) {
       if (notify) notify('Gagal menyuntikkan cadangan: ' + err.message, 'error');
       else alert('Gagal menyuntikkan cadangan: ' + err.message);
     }
   };
 
-  const netBalance = summary?.netTreasuryBalance || 50000000000;
+  const netBalance = summary != null ? Number(summary.netTreasuryBalance || 0) : 0;
   const finesTotal = summary?.breakdown?.finesTotal || 0;
   const meteraiTaxTotal = (summary?.breakdown?.meteraiTotal || 0) + (summary?.breakdown?.taxTotal || 0);
 

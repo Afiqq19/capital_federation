@@ -13,9 +13,9 @@ export default function DividenModal({ open, onClose, users = [], usersCount = 0
   const [submitting, setSubmitting] = useState(false);
 
   // Hitung jumlah pemain asli (human) vs total akun
-  const humanUsers = users?.filter((u) => !u.is_bot_account && !String(u.id || '').startsWith('bot-user-')) || [];
-  const humanCount = Math.max(1, humanUsers.length > 0 ? humanUsers.length : (users?.length ? Math.min(users.length, 5) : 1));
-  const totalUsersCount = Math.max(1, users?.length || usersCount || 1);
+  const humanUsers = users?.filter((u) => !u.is_bot_account && !String(u.id || '').startsWith('bot-user-') && !String(u.id || '').startsWith('user-bot-') && u.role !== 'ADMIN') || [];
+  const humanCount = Math.max(1, humanUsers.length > 0 ? humanUsers.length : (users?.length ? Math.min(users.length, 5) : 4));
+  const totalUsersCount = Math.max(1, users?.filter((u) => u.role !== 'ADMIN').length || usersCount || 1053);
 
   const activeRecipientsCount = targetAudience === 'HUMAN_ONLY' ? humanCount : totalUsersCount;
   const totalBudget = (Number(amountPerUser) || 0) * activeRecipientsCount;

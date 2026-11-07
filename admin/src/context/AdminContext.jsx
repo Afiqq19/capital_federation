@@ -204,8 +204,8 @@ export function AdminProvider({ children }) {
       );
     };
     const onTreasury = () => {
-      scheduleSilent('overview', refreshOverview, 4000);
-      scheduleSilent('bank', refreshBank, 4000);
+      scheduleSilent('overview', refreshOverview, 200);
+      scheduleSilent('bank', refreshBank, 400);
     };
 
     socket.on('connect', onConnect);
