@@ -868,10 +868,11 @@ class MarketSimulationEngine {
                 if (existPort) {
                   await query.run('UPDATE portfolios SET lots_owned = lots_owned + ? WHERE id = ?', [lotSize, existPort.id]);
                 } else {
-                  await query.run(
-                    'INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price) VALUES (?, ?, ?, ?, ?)',
-                    [uuidv4(), randomBot.id, randComp.id, lotSize, randComp.current_price]
-                  );
+                  await query.run(`
+                    INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price, created_at, updated_at) 
+                    VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                    ON CONFLICT(user_id, company_id) DO UPDATE SET lots_owned = lots_owned + excluded.lots_owned, updated_at = CURRENT_TIMESTAMP
+                  `, [uuidv4(), randomBot.id, randComp.id, lotSize, randComp.current_price]);
                 }
               } else if (existPort && existPort.lots_owned > lotSize + 50) {
                 await query.run('UPDATE portfolios SET lots_owned = lots_owned - ? WHERE id = ?', [lotSize, existPort.id]);
@@ -994,10 +995,11 @@ class MarketSimulationEngine {
             const newAvg = ((totalOldShares * existingPort.avg_buy_price) + (fillShares * execPrice)) / totalNewShares;
             await query.run('UPDATE portfolios SET lots_owned = lots_owned + ?, avg_buy_price = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [fillAmount, newAvg, existingPort.id]);
           } else {
-            await query.run(
-              'INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price) VALUES (?, ?, ?, ?, ?)',
-              [uuidv4(), order.user_id, order.company_id, fillAmount, execPrice]
-            );
+            await query.run(`
+              INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price, created_at, updated_at) 
+              VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+              ON CONFLICT(user_id, company_id) DO UPDATE SET lots_owned = lots_owned + excluded.lots_owned, updated_at = CURRENT_TIMESTAMP
+            `, [uuidv4(), order.user_id, order.company_id, fillAmount, execPrice]);
           }
 
           // Jika harga beli riil lebih murah dari batas bid order, kembalikan selisih dana (refund kelebihan escrow)

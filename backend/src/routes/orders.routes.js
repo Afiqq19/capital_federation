@@ -232,10 +232,11 @@ function createOrdersRouter(io, simulationEngine) {
         if (port) {
           await query.run('UPDATE portfolios SET lots_owned = lots_owned + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [unfilledLots, port.id]);
         } else {
-          await query.run(
-            'INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price) VALUES (?, ?, ?, ?, ?)',
-            [uuidv4(), userId, order.company_id, unfilledLots, orderPrice]
-          );
+          await query.run(`
+            INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price, created_at, updated_at) 
+            VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ON CONFLICT(user_id, company_id) DO UPDATE SET lots_owned = lots_owned + excluded.lots_owned, updated_at = CURRENT_TIMESTAMP
+          `, [uuidv4(), userId, order.company_id, unfilledLots, orderPrice]);
         }
       }
 

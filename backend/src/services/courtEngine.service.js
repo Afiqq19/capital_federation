@@ -870,10 +870,11 @@ async function executeCourtVerdict(
           if (plPort) {
             await query.run('UPDATE portfolios SET lots_owned = lots_owned + ? WHERE id = ?', [lotsToRecover, plPort.id]);
           } else {
-            await query.run(
-              'INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price) VALUES (?, ?, ?, ?, ?)',
-              [uuidv4(), plaintiffId, targetComp.id, lotsToRecover, targetComp.current_price || 100]
-            );
+            await query.run(`
+              INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price, created_at, updated_at) 
+              VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+              ON CONFLICT(user_id, company_id) DO UPDATE SET lots_owned = lots_owned + excluded.lots_owned, updated_at = CURRENT_TIMESTAMP
+            `, [uuidv4(), plaintiffId, targetComp.id, lotsToRecover, targetComp.current_price || 100]);
           }
 
           await dispatchInboxNotification(io, {
@@ -995,10 +996,11 @@ async function executeCourtVerdict(
           if (plPort) {
             await query.run('UPDATE portfolios SET lots_owned = lots_owned + ? WHERE id = ?', [lotsToSeize, plPort.id]);
           } else {
-            await query.run(
-              'INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price) VALUES (?, ?, ?, ?, ?)',
-              [uuidv4(), plUser.id, targetComp.id, lotsToSeize, curPrice]
-            );
+            await query.run(`
+              INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price, created_at, updated_at) 
+              VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+              ON CONFLICT(user_id, company_id) DO UPDATE SET lots_owned = lots_owned + excluded.lots_owned, updated_at = CURRENT_TIMESTAMP
+            `, [uuidv4(), plUser.id, targetComp.id, lotsToSeize, curPrice]);
           }
 
           // 3. Status perseroan dipulihkan: Pengendali berganti jika porsi Penggugat lebih besar
@@ -1097,10 +1099,11 @@ async function executeCourtVerdict(
           if (plPort) {
             await query.run('UPDATE portfolios SET lots_owned = lots_owned + ? WHERE id = ?', [totalLots, plPort.id]);
           } else {
-            await query.run(
-              'INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price) VALUES (?, ?, ?, ?, ?)',
-              [uuidv4(), plUser.id, targetComp.id, totalLots, curPrice]
-            );
+            await query.run(`
+              INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price, created_at, updated_at) 
+              VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+              ON CONFLICT(user_id, company_id) DO UPDATE SET lots_owned = lots_owned + excluded.lots_owned, updated_at = CURRENT_TIMESTAMP
+            `, [uuidv4(), plUser.id, targetComp.id, totalLots, curPrice]);
           }
 
           await dispatchInboxNotification(io, {

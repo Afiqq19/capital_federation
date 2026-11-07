@@ -2823,9 +2823,13 @@ app.post('/api/company/negotiation/deal', async (req, res) => {
       // Tambahkan ke portofolio pembeli
       const buyerPort = await query.get('SELECT * FROM portfolios WHERE user_id = ? AND company_id = ?', [buyer.id, targetCompId]);
       if (buyerPort) {
-        await query.run('UPDATE portfolios SET lots_owned = lots_owned + ? WHERE id = ?', [lotsSold, buyerPort.id]);
+        await query.run('UPDATE portfolios SET lots_owned = lots_owned + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [lotsSold, buyerPort.id]);
       } else {
-        await query.run('INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price) VALUES (?, ?, ?, ?, ?)', [uuidv4(), buyer.id, targetCompId, lotsSold, numPrice]);
+        await query.run(`
+          INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price, created_at, updated_at) 
+          VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          ON CONFLICT(user_id, company_id) DO UPDATE SET lots_owned = lots_owned + excluded.lots_owned, updated_at = CURRENT_TIMESTAMP
+        `, [uuidv4(), buyer.id, targetCompId, lotsSold, numPrice]);
       }
 
       // Jika pembeli memiliki > 50%, ini adalah AKUISISI SAH YANG DISEPAKATI!
@@ -3408,10 +3412,11 @@ app.post('/api/ipo/allotment', async (req, res) => {
                   [totalLots, newAvg, existingPortfolio.id]
                 );
               } else {
-                await query.run(
-                  'INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price) VALUES (?, ?, ?, ?, ?)',
-                  [uuidv4(), bidder.id, targetCompId, lotsCount, bid.offered_price_per_share]
-                );
+                await query.run(`
+                  INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price, created_at, updated_at) 
+                  VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                  ON CONFLICT(user_id, company_id) DO UPDATE SET lots_owned = lots_owned + excluded.lots_owned, updated_at = CURRENT_TIMESTAMP
+                `, [uuidv4(), bidder.id, targetCompId, lotsCount, bid.offered_price_per_share]);
               }
 
               const holderLabel = bid.bidder_company_name || formatCleanPtName(bidder.pt_name, bidder.has_pt);
@@ -4414,10 +4419,11 @@ app.post('/api/ipo/order', async (req, res) => {
         const newAvg = Math.round(((totalOldShares * existingPort.avg_buy_price) + totalCost) / totalNewShares);
         await query.run('UPDATE portfolios SET lots_owned = lots_owned + ?, avg_buy_price = ? WHERE id = ?', [numLots, newAvg, existingPort.id]);
       } else {
-        await query.run(
-          'INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price) VALUES (?, ?, ?, ?, ?)',
-          [uuidv4(), userId, compRecord.id, numLots, ipo.offering_price]
-        );
+        await query.run(`
+          INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price, created_at, updated_at) 
+          VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          ON CONFLICT(user_id, company_id) DO UPDATE SET lots_owned = lots_owned + excluded.lots_owned, updated_at = CURRENT_TIMESTAMP
+        `, [uuidv4(), userId, compRecord.id, numLots, ipo.offering_price]);
       }
 
       // Kreditkan dana segar penyerapan Bookbuilding/IPO ke Kas PT Emiten
@@ -4528,10 +4534,11 @@ app.post('/api/ipo/list-now', async (req, res) => {
         const newAvg = ((totalOldShares * existingPort.avg_buy_price) + (ord.lots * 100 * ipo.offering_price)) / totalNewShares;
         await query.run('UPDATE portfolios SET lots_owned = lots_owned + ?, avg_buy_price = ? WHERE id = ?', [ord.lots, newAvg, existingPort.id]);
       } else {
-        await query.run(
-          'INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price) VALUES (?, ?, ?, ?, ?)',
-          [uuidv4(), ord.user_id, compId, ord.lots, ipo.offering_price]
-        );
+        await query.run(`
+          INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price, created_at, updated_at) 
+          VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          ON CONFLICT(user_id, company_id) DO UPDATE SET lots_owned = lots_owned + excluded.lots_owned, updated_at = CURRENT_TIMESTAMP
+        `, [uuidv4(), ord.user_id, compId, ord.lots, ipo.offering_price]);
       }
       await query.run("UPDATE ipo_orders SET status = 'CREDITED' WHERE id = ?", [ord.id]);
     }
@@ -4631,10 +4638,11 @@ app.post('/api/ipo/advance-status', async (req, res) => {
           const newAvg = ((totalOldShares * existingPort.avg_buy_price) + (ord.lots * 100 * ipo.offering_price)) / totalNewShares;
           await query.run('UPDATE portfolios SET lots_owned = lots_owned + ?, avg_buy_price = ? WHERE id = ?', [ord.lots, newAvg, existingPort.id]);
         } else {
-          await query.run(
-            'INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price) VALUES (?, ?, ?, ?, ?)',
-            [uuidv4(), ord.user_id, compId, ord.lots, ipo.offering_price]
-          );
+          await query.run(`
+            INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price, created_at, updated_at) 
+            VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ON CONFLICT(user_id, company_id) DO UPDATE SET lots_owned = lots_owned + excluded.lots_owned, updated_at = CURRENT_TIMESTAMP
+          `, [uuidv4(), ord.user_id, compId, ord.lots, ipo.offering_price]);
         }
         await query.run("UPDATE ipo_orders SET status = 'CREDITED' WHERE id = ?", [ord.id]);
       }
@@ -5161,8 +5169,9 @@ app.post('/api/trade/order', async (req, res) => {
         );
       } else {
         await query.run(
-          `INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price)
-           VALUES (?, ?, ?, ?, ?)`,
+          `INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+           ON CONFLICT(user_id, company_id) DO UPDATE SET lots_owned = lots_owned + excluded.lots_owned, updated_at = CURRENT_TIMESTAMP`,
           [uuidv4(), userId, companyId, lots, pricePerShare]
         );
       }
@@ -6003,14 +6012,18 @@ async function executeApprovedAcquisition({
   if (sellerUserId && sellerUserId !== 'consortium-trustee') {
     // Kurangi portofolio atau berikan alokasi sisa saham pendiri (misal 19%) ke portofolio penjual
     const remainingFounderLots = Math.round(((company.total_shares || 10000000) * (remainingFounderPct / 100.0)) / 100);
-    const existingSellerPort = await query.get('SELECT * FROM portfolios WHERE user_id = ? AND company_id = ?', [sellerUserId, companyId]);
+    const existingSellerPort = await query.get(
+      'SELECT * FROM portfolios WHERE user_id = ? AND (company_id = ? OR company_id = ?)', 
+      [sellerUserId, companyId, company.symbol]
+    );
     if (existingSellerPort) {
-      await query.run('UPDATE portfolios SET lots_owned = ? WHERE id = ?', [remainingFounderLots, existingSellerPort.id]);
+      await query.run('UPDATE portfolios SET lots_owned = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [remainingFounderLots, existingSellerPort.id]);
     } else if (remainingFounderLots > 0) {
-      await query.run(
-        'INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price) VALUES (?, ?, ?, ?, ?)',
-        [uuidv4(), sellerUserId, companyId, remainingFounderLots, avgPrice]
-      );
+      await query.run(`
+        INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price, created_at, updated_at) 
+        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ON CONFLICT(user_id, company_id) DO UPDATE SET lots_owned = excluded.lots_owned, updated_at = CURRENT_TIMESTAMP
+      `, [uuidv4(), sellerUserId, companyId, remainingFounderLots, avgPrice]);
     }
 
     // Catat penjualan saham pendiri ke users & companies
@@ -6069,17 +6082,24 @@ async function executeApprovedAcquisition({
     io.emit('user:conglomerate_updated', { userId: sellerUserId });
   }
 
-  const existingBuyerPort = await query.get('SELECT * FROM portfolios WHERE user_id = ? AND company_id = ?', [userId, companyId]);
+  const existingBuyerPort = await query.get(
+    'SELECT * FROM portfolios WHERE user_id = ? AND (company_id = ? OR company_id = ?)', 
+    [userId, companyId, company.symbol]
+  );
   if (existingBuyerPort) {
     await query.run(`
       UPDATE portfolios 
-      SET lots_owned = lots_owned + ?, avg_buy_price = ? 
+      SET lots_owned = lots_owned + ?, avg_buy_price = ?, updated_at = CURRENT_TIMESTAMP 
       WHERE id = ?
     `, [acquiredLots, avgPrice, existingBuyerPort.id]);
   } else {
     await query.run(`
-      INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ON CONFLICT(user_id, company_id) DO UPDATE SET 
+        lots_owned = lots_owned + excluded.lots_owned,
+        avg_buy_price = excluded.avg_buy_price,
+        updated_at = CURRENT_TIMESTAMP
     `, [uuidv4(), userId, companyId, acquiredLots, avgPrice]);
   }
 
@@ -6279,6 +6299,19 @@ app.post('/api/takeover/negotiate', async (req, res) => {
     }
     if (company.owner_id === userId) {
       return res.status(400).json({ error: 'Anda sudah menjadi Pemilik / Pemegang Saham Pengendali emiten ini!' });
+    }
+
+    // Cek apakah pembeli sudah memiliki >= 50% saham di portofolio atau Cap Table
+    const userPort = await query.get(
+      'SELECT lots_owned FROM portfolios WHERE user_id = ? AND (company_id = ? OR company_id = ?)',
+      [userId, company.id, company.symbol]
+    );
+    const userHoldingShares = (userPort?.lots_owned || 0) * 100;
+    const compTotalShares = company.total_shares || 10000000;
+    if (userHoldingShares >= (compTotalShares * 0.50)) {
+      return res.status(400).json({
+        error: 'Anda sudah memegang saham pengendali mayoritas (>= 50%) atas perseroan ini. Anda tidak dapat mengakuisisi perusahaan milik sendiri. Gunakan menu Aksi Korporasi atau Penjualan Saham untuk melepas kepemilikan.'
+      });
     }
 
     const pct = Math.max(20, Math.min(100, parseInt(percentageOffer, 10) || 20));
@@ -6858,12 +6891,16 @@ app.post('/api/auctions/bid', async (req, res) => {
     const effPrice = Math.max(50, Math.round(requiredIb / auc.shares_offered));
     const existPort = await query.get('SELECT * FROM portfolios WHERE user_id = ? AND company_id = ?', [userId, auc.company_id]);
     if (existPort) {
-      await query.run('UPDATE portfolios SET lots_owned = lots_owned + ?, avg_buy_price = ? WHERE id = ?', [lotsOffered, effPrice, existPort.id]);
+      await query.run('UPDATE portfolios SET lots_owned = lots_owned + ?, avg_buy_price = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [lotsOffered, effPrice, existPort.id]);
     } else {
-      await query.run(
-        'INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price) VALUES (?, ?, ?, ?, ?)',
-        [uuidv4(), userId, auc.company_id, lotsOffered, effPrice]
-      );
+      await query.run(`
+        INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price, created_at, updated_at) 
+        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ON CONFLICT(user_id, company_id) DO UPDATE SET 
+          lots_owned = lots_owned + excluded.lots_owned,
+          avg_buy_price = excluded.avg_buy_price,
+          updated_at = CURRENT_TIMESTAMP
+      `, [uuidv4(), userId, auc.company_id, lotsOffered, effPrice]);
     }
 
     // Jika paket saham >= 50%, pemenang otomatis menjadi Pemegang Saham Pengendali Baru!
@@ -9121,18 +9158,18 @@ const bundledPublicApkPath = path.join(__dirname, '../public/downloads/Capital-F
 const directPublicApkPath = path.join(__dirname, '../public/downloads/capital-federation.apk');
 const localBuiltApkPath = path.join(__dirname, '../../mobile/build/app/outputs/flutter-apk/app-release.apk');
 
-const LATEST_RELEASE_NOTES_V200 = 'v2.0.5 (Build 54): Optimasi performa pencarian PT & stabilitas form PNAF dan Suspensi Saham (anti refresh saat mengetik). Integrasi kredit bot Bank Sentral BIF.';
+const LATEST_RELEASE_NOTES_V200 = 'v2.0.6 (Build 55): Perbaikan sistem akuisisi & M&A perseroan (UPSERT atomic), layout Cap Table rapi, perbaikan pembagian kas negara/dividen stimulus (filter konglomerat riil), injeksi cadangan kas negara, serta pencegahan krisis kas negara.';
 
 async function getApkSettingsMap() {
   const defaults = {
-    apk_version: '2.0.5',
-    apk_build_number: '54',
+    apk_version: '2.0.6',
+    apk_build_number: '55',
     apk_min_android: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
-    apk_file_size_mb: '57.6 MB',
+    apk_file_size_mb: '57.5 MB',
     apk_release_notes: LATEST_RELEASE_NOTES_V200,
     apk_external_url: '',
-    apk_download_count: '685',
-    apk_sha256: 'b667611a1fcafd893a49e2fc2b9db044c77914e4ce69f786d4856ab1eadc97a5',
+    apk_download_count: '710',
+    apk_sha256: '9779445a4b2b80bcf2c02f35b72503ab0e5db10edeaf199437656171fe0395bc',
     apk_updated_at: new Date().toISOString(),
   };
   try {
@@ -9142,11 +9179,11 @@ async function getApkSettingsMap() {
         defaults[r.key] = String(r.value);
       }
     }
-    if (parseInt(defaults.apk_build_number || '0', 10) < 54 || defaults.apk_sha256 !== 'b667611a1fcafd893a49e2fc2b9db044c77914e4ce69f786d4856ab1eadc97a5') {
-      defaults.apk_version = '2.0.5';
-      defaults.apk_build_number = '54';
-      defaults.apk_file_size_mb = '57.6 MB';
-      defaults.apk_sha256 = 'b667611a1fcafd893a49e2fc2b9db044c77914e4ce69f786d4856ab1eadc97a5';
+    if (parseInt(defaults.apk_build_number || '0', 10) < 55 || defaults.apk_sha256 !== '9779445a4b2b80bcf2c02f35b72503ab0e5db10edeaf199437656171fe0395bc') {
+      defaults.apk_version = '2.0.6';
+      defaults.apk_build_number = '55';
+      defaults.apk_file_size_mb = '57.5 MB';
+      defaults.apk_sha256 = '9779445a4b2b80bcf2c02f35b72503ab0e5db10edeaf199437656171fe0395bc';
       defaults.apk_release_notes = LATEST_RELEASE_NOTES_V200;
       defaults.apk_updated_at = new Date().toISOString();
       // Persist directly to central_bank_settings so /api/settings, /api/admin/settings & /api/admin/overview match 100%!
@@ -9230,16 +9267,16 @@ app.get('/api/version', async (req, res) => {
     });
   } catch (err) {
     res.json({
-      version: '2.0.5',
-      buildNumber: 54,
-      apkVersion: 'v2.0.5-CFX Production (Build 54)',
-      adminVersion: 'v2.0.5 Sovereign Launch',
-      backendVersion: 'v2.0.5-CFX Production',
+      version: '2.0.6',
+      buildNumber: 55,
+      apkVersion: 'v2.0.6-CFX Production (Build 55)',
+      adminVersion: 'v2.0.6 Sovereign Launch',
+      backendVersion: 'v2.0.6-CFX Production',
       minAndroid: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
       fileSizeMb: '57.6 MB',
       hasHostedApk: Boolean(getActiveApkFilePath()),
       downloadUrl: '/api/download/apk',
-      downloadCount: 685,
+      downloadCount: 710,
       releaseNotes: LATEST_RELEASE_NOTES_V200,
       databaseProtection: 'SQLite Persistent Volume (Zero Reset on Update)'
     });

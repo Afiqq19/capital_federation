@@ -5,12 +5,13 @@ import { FormField, Input, Textarea, Select } from '../../components/ui/Form';
 import { Coins, Landmark, ArrowRight, User, Building } from 'lucide-react';
 import { ib } from '../../lib/format';
 
-export default function WithdrawModal({ open, onClose, users, companies, treasuryBalance, onConfirm }) {
+export default function WithdrawModal({ open, onClose, users, companies, treasuryBalance, onConfirm, onOpenInject }) {
   const [targetType, setTargetType] = useState('PERSONAL'); // 'PERSONAL' | 'COMPANY'
   const [selectedUserId, setSelectedUserId] = useState('');
   const [selectedCompanyId, setSelectedCompanyId] = useState('');
   const [amountIb, setAmountIb] = useState(50000000); // Default IB 50 Juta
   const [purpose, setPurpose] = useState('Pencairan Anggaran Negara untuk Penguatan Likuiditas');
+  const [allowDeficit, setAllowDeficit] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   // Kunci daftar user dan PT selama modal terbuka agar dropdown tidak me-refresh sendiri saat mengetik/memilih
@@ -43,6 +44,8 @@ export default function WithdrawModal({ open, onClose, users, companies, treasur
     { label: 'IB 1 M', value: 1000000000 },
   ];
 
+  const isDeficitRisk = (Number(amountIb) || 0) > (treasuryBalance || 0);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!amountIb || amountIb <= 0) return;
@@ -57,6 +60,7 @@ export default function WithdrawModal({ open, onClose, users, companies, treasur
         companyId: targetType === 'COMPANY' ? selectedCompanyId : null,
         amountIb: Number(amountIb),
         purpose,
+        allowDeficit,
       });
       onClose();
     } finally {
@@ -73,23 +77,32 @@ export default function WithdrawModal({ open, onClose, users, companies, treasur
       icon={Coins}
       tone="var(--emerald)"
       footer={
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" onClick={onClose} disabled={submitting}>
-            Batal
-          </Button>
-          <Button
-            variant="emerald"
-            onClick={handleSubmit}
-            disabled={
-              submitting ||
-              amountIb <= 0 ||
-              (targetType === 'PERSONAL' && !selectedUserId) ||
-              (targetType === 'COMPANY' && !selectedCompanyId) ||
-              amountIb > (treasuryBalance || 0)
-            }
-          >
-            {submitting ? 'Memproses Pencairan...' : 'Cairkan Dana Kas Negara'}
-          </Button>
+        <div className="flex items-center justify-between w-full">
+          <div className="text-xs text-slate-400">
+            {isDeficitRisk ? (
+              <span className="text-amber-400 font-semibold">⚠️ Melebihi saldo kas negara</span>
+            ) : (
+              <span className="text-emerald-400 font-semibold">Kas negara mencukupi</span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" onClick={onClose} disabled={submitting}>
+              Batal
+            </Button>
+            <Button
+              variant="emerald"
+              onClick={handleSubmit}
+              disabled={
+                submitting ||
+                amountIb <= 0 ||
+                (targetType === 'PERSONAL' && !selectedUserId) ||
+                (targetType === 'COMPANY' && !selectedCompanyId) ||
+                (isDeficitRisk && !allowDeficit)
+              }
+            >
+              {submitting ? 'Memproses Pencairan...' : 'Cairkan Dana Kas Negara'}
+            </Button>
+          </div>
         </div>
       }
     >
@@ -104,11 +117,42 @@ export default function WithdrawModal({ open, onClose, users, companies, treasur
             <span>Nominal Penarikan Dana:</span>
             <span className="font-mono font-bold">- {ib(amountIb || 0)}</span>
           </div>
-          <div className="border-t border-slate-800 pt-2 flex items-center justify-between text-emerald-400 font-semibold">
-            <span>Sisa Saldo Kas Negara:</span>
-            <span className="font-mono font-bold">{ib(newTreasuryBalance)}</span>
+          <div className="border-t border-slate-800 pt-2 flex items-center justify-between font-semibold">
+            <span className={(treasuryBalance || 0) - (Number(amountIb) || 0) < 0 ? 'text-rose-400' : 'text-emerald-400'}>
+              Sisa Saldo Kas Negara:
+            </span>
+            <span className={`font-mono font-bold ${(treasuryBalance || 0) - (Number(amountIb) || 0) < 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+              {ib((treasuryBalance || 0) - (Number(amountIb) || 0))}
+            </span>
           </div>
         </div>
+
+        {/* Warning jika defisit */}
+        {isDeficitRisk && (
+          <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300 flex items-center justify-between">
+            <label className="flex items-center gap-2 cursor-pointer font-semibold text-slate-200">
+              <input
+                type="checkbox"
+                checked={allowDeficit}
+                onChange={(e) => setAllowDeficit(e.target.checked)}
+                className="rounded border-slate-700 text-emerald-500 focus:ring-0"
+              />
+              <span>Izinkan Defisit Fiskal (Quantitative Easing)</span>
+            </label>
+            {onOpenInject && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onOpenInject();
+                }}
+                className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold text-[10px]"
+              >
+                ➕ Injeksi Kas Dulu
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Target Destination Switcher */}
         <FormField label="Pilih Tujuan Penyaluran Dana">

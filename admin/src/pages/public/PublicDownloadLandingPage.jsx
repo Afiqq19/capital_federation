@@ -26,18 +26,18 @@ import {
 
 export default function PublicDownloadLandingPage() {
   const [versionInfo, setVersionInfo] = useState({
-    version: '2.0.5',
-    buildNumber: 54,
-    apkVersion: 'v2.0.5 (Build 54)',
+    version: '2.0.6',
+    buildNumber: 55,
+    apkVersion: 'v2.0.6 (Build 55)',
     minAndroid: 'Android 10.0 (API Level 29 / Quince Tart) ke atas',
     fileSizeMb: '57.6 MB',
     downloadUrl: '/api/download/apk',
-    downloadCount: 685,
+    downloadCount: 710,
     totalCompanies: 363,
     totalPlayers: 1053,
     sha256: '',
     releaseNotes:
-      'v2.0.5 (Build 54): Optimasi performa pencarian PT & stabilitas form PNAF dan Suspensi Saham (anti refresh saat mengetik). Integrasi kredit bot Bank Sentral BIF.',
+      'v2.0.6 (Build 55): Perbaikan sistem akuisisi & M&A perseroan (UPSERT atomic), layout Cap Table rapi, perbaikan pembagian kas negara/dividen stimulus (filter konglomerat riil), injeksi cadangan kas negara, serta pencegahan krisis kas negara.',
   });
   const [topLeaders, setTopLeaders] = useState([]);
   const [topStocks, setTopStocks] = useState([]);

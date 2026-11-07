@@ -3097,7 +3097,7 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
   // SUB-TAB 3: INSIDER (PROFIL PEMILIK, CAP TABLE & STRUKTUR SAHAM TERBESAR)
   // ============================================================================
   Widget _buildInsiderTab(CompanyModel c, GameProvider provider) {
-    final String ownerName = (c.ownerUsername != null && c.ownerUsername!.trim().isNotEmpty)
+    final String initialOwner = (c.ownerUsername != null && c.ownerUsername!.trim().isNotEmpty)
         ? c.ownerUsername!
         : (c.isBot ? 'Algoritma Pengendali Bursa IPMC' : 'Investor Publik (Konsorsium)');
     final String ownerHolding = (c.ownerPtName != null && c.ownerPtName!.trim().isNotEmpty)
@@ -3116,7 +3116,7 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
         ? List<Map<String, dynamic>>.from(rawList)
         : [
             {
-              'holder_name': '$ownerName (Pendiri & Pengendali)',
+              'holder_name': '$initialOwner (Pendiri & Pengendali)',
               'holder_type': 'FOUNDER',
               'percentage': 51.0,
               'shares_count': (c.totalShares * 0.51).round(),
@@ -3146,12 +3146,32 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
     final topPct = (topShareholder?['percentage'] as num?)?.toDouble() ?? 51.0;
     final bool hasMajority = topPct >= 50.0;
     final user = provider.user;
+
+    final port = provider.portfolio;
+    final matchingHoldings = port?.holdings.where((h) => h.companyId == c.id || h.symbol == c.symbol).toList() ?? [];
+    final int userLots = matchingHoldings.fold<int>(0, (sum, h) => sum + h.lotsOwned);
+    final bool userHoldsMajority = userLots >= (c.totalShares * 0.50 / 100);
+
+    final bool isUserTopShareholder = user != null && topShareholder != null && (
+      (topShareholder['user_id'] != null && topShareholder['user_id'] == user.id) ||
+      (topShareholder['holder_name'] != null && topShareholder['holder_name'].toString().toLowerCase().contains(user.username.toLowerCase()))
+    );
+
     final bool isCompanyOwner = user != null && (
       (c.ownerId != null && c.ownerId == user.id) ||
       (c.ownerUsername != null && c.ownerUsername == user.username) ||
       (user.ptName.isNotEmpty && (c.name.toLowerCase() == user.ptName.toLowerCase() || c.name.toLowerCase().contains(user.ptName.toLowerCase()))) ||
-      (user.ptSymbol.isNotEmpty && c.symbol.toUpperCase() == user.ptSymbol.toUpperCase())
+      (user.ptSymbol.isNotEmpty && c.symbol.toUpperCase() == user.ptSymbol.toUpperCase()) ||
+      isUserTopShareholder ||
+      userHoldsMajority
     );
+
+    final String cleanTopName = (topShareholder?['holder_name'] != null)
+        ? topShareholder!['holder_name'].toString().replaceAll(RegExp(r'\s*\([^)]*\)'), '').trim()
+        : '';
+    final String ownerName = (cleanTopName.isNotEmpty && hasMajority)
+        ? cleanTopName
+        : initialOwner;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -3362,9 +3382,14 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                       Text(
                         holderName,
                         style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 2),
-                      Row(
+                      const SizedBox(height: 3),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 2,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
@@ -3377,7 +3402,6 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                               style: TextStyle(color: typeCol, fontSize: 8.5, fontWeight: FontWeight.bold),
                             ),
                           ),
-                          const SizedBox(width: 6),
                           Text(
                             '${CurrencyFormatter.formatNumberOnly(shares)} lbr (${CurrencyFormatter.formatNumberOnly(lots)} Lot)',
                             style: const TextStyle(color: Color(0xFF64748B), fontSize: 9.5),
@@ -3387,9 +3411,11 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                     ],
                   ),
                 ),
+                const SizedBox(width: 8),
 
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
                       '${pct.toStringAsFixed(1)}%',

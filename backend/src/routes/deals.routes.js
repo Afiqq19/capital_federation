@@ -383,10 +383,11 @@ module.exports = function(io) {
       if (existingPort) {
         await query.run('UPDATE portfolios SET lots_owned = lots_owned + ? WHERE id = ?', [lotsTransferred, existingPort.id]);
       } else {
-        await query.run(
-          'INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price) VALUES (?, ?, ?, ?, ?)',
-          [uuidv4(), buyer.id, comp.id, lotsTransferred, deal.price_per_share]
-        );
+        await query.run(`
+          INSERT INTO portfolios (id, user_id, company_id, lots_owned, avg_buy_price, created_at, updated_at) 
+          VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          ON CONFLICT(user_id, company_id) DO UPDATE SET lots_owned = lots_owned + excluded.lots_owned, updated_at = CURRENT_TIMESTAMP
+        `, [uuidv4(), buyer.id, comp.id, lotsTransferred, deal.price_per_share]);
       }
 
       // 5. Kurangi sisa penawaran di deal

@@ -70,6 +70,7 @@ export const adminApi = {
   treasuryBailout: (payload) => request('/api/treasury/bailout', { method: 'POST', body: payload }),
   treasuryDistributeDividend: (payload) => request('/api/treasury/distribute-dividend', { method: 'POST', body: payload }),
   treasuryWithdrawFunds: (payload) => request('/api/treasury/withdraw-funds', { method: 'POST', body: payload }),
+  treasuryInjectReserve: (payload) => request('/api/treasury/inject-reserve', { method: 'POST', body: payload }),
   allDeeds: () => request('/api/deals/all-deeds'),
 
   // ---- 4 PILAR KEBIJAKAN EKONOMI STRATEGIS NEGARA ----

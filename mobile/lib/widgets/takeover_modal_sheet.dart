@@ -21,7 +21,8 @@ void showTakeoverModalSheet(
 
   final totalValuation = company.totalShares * company.currentPrice;
   final currencyFormatter = NumberFormat('#,###', 'id_ID');
-  final user = context.read<GameProvider>().user;
+  final gameProvider = context.read<GameProvider>();
+  final user = gameProvider.user;
   final sellerName = (company.ownerUsername != null && company.ownerUsername!.isNotEmpty)
       ? company.ownerUsername!
       : 'galih';
@@ -29,11 +30,17 @@ void showTakeoverModalSheet(
   final personalBal = user?.balanceIb ?? 0.0;
   final companyBal = user?.companyBalanceIb ?? 0.0;
 
+  final port = gameProvider.portfolio;
+  final matchingHoldings = port?.holdings.where((h) => h.companyId == company.id || h.symbol == company.symbol).toList() ?? [];
+  final ownedLots = matchingHoldings.fold<int>(0, (sum, h) => sum + h.lotsOwned);
+  final bool userHoldsMajority = ownedLots >= (company.totalShares * 0.50 / 100);
+
   final bool isSelfTakeover = user != null && (
     (company.ownerId != null && company.ownerId == user.id) ||
     (company.ownerUsername != null && company.ownerUsername == user.username) ||
-    (user.ptName.isNotEmpty && company.name.toLowerCase() == user.ptName.toLowerCase()) ||
-    (user.ptSymbol.isNotEmpty && company.symbol.toUpperCase() == user.ptSymbol.toUpperCase())
+    (user.ptName.isNotEmpty && (company.name.toLowerCase() == user.ptName.toLowerCase() || company.name.toLowerCase().contains(user.ptName.toLowerCase()))) ||
+    (user.ptSymbol.isNotEmpty && company.symbol.toUpperCase() == user.ptSymbol.toUpperCase()) ||
+    userHoldsMajority
   );
 
   if (personalBal < (totalValuation * 0.51 * 0.70) && companyBal >= (totalValuation * 0.51 * 0.70)) {

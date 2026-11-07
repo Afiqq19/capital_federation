@@ -137,33 +137,86 @@ module.exports = function(io, simulationEngine) {
     }
   });
 
+  // 3b. Injeksi Cadangan Brankas Kas Negara (Top Up Sovereign Fund)
+  router.post('/inject-reserve', async (req, res) => {
+    try {
+      const { amountIb, notes } = req.body;
+      const amount = parseFloat(amountIb);
+      if (!amount || amount <= 0) {
+        return res.status(400).json({ error: 'Nominal injeksi cadangan kas negara tidak valid' });
+      }
+
+      const ledgerId = uuidv4();
+      const reasonDesc = (notes || '').trim() || 'Injeksi Likuiditas Cadangan Devisa Kas Negara oleh Otoritas Moneter';
+
+      await query.run(`
+        INSERT INTO state_treasury_ledger (id, source_type, title, amount_ib, direction, reference_id, notes)
+        VALUES (?, 'SOVEREIGN_INJECTION', 'Injeksi Cadangan Devisa Kas Negara (Sovereign Capital Injection)', ?, 'INCOME', 'SOVEREIGN_VAULT_TOPUP', ?)
+      `, [ledgerId, amount, reasonDesc]);
+
+      io.emit('treasury:updated');
+
+      // Ambil saldo terbaru
+      const rows = await query.all('SELECT direction, SUM(amount_ib) as total FROM state_treasury_ledger GROUP BY direction');
+      let baseReserve = 1000000000000.0;
+      let totalIncome = 0.0;
+      let totalExpense = 0.0;
+      for (const r of (rows || [])) {
+        if (r.direction === 'INCOME') totalIncome += (r.total || 0);
+        else totalExpense += (r.total || 0);
+      }
+      const newNetTreasury = baseReserve + totalIncome - totalExpense;
+
+      res.json({
+        success: true,
+        injectedAmount: amount,
+        newNetTreasury,
+        message: `🎉 Berhasil menyuntikkan cadangan kas negara sebesar IB ${amount.toLocaleString('id-ID')}! Saldo Kas Likuid kini: IB ${newNetTreasury.toLocaleString('id-ID')}.`
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // 4. Pembagian Dividen Kemakmuran Rakyat / BLT Ekonomi
   router.post('/distribute-dividend', async (req, res) => {
     try {
-      const { amountPerUser, note } = req.body;
+      const { amountPerUser, note, targetAudience = 'HUMAN_ONLY', allowDeficit = false } = req.body;
       const perUser = parseFloat(amountPerUser) || 50000000.0;
 
-      const users = await query.all('SELECT id, balance_ib FROM users');
+      let users = [];
+      if (targetAudience === 'HUMAN_ONLY') {
+        users = await query.all("SELECT id, username, balance_ib FROM users WHERE (is_bot_account = 0 OR is_bot_account IS NULL) AND id NOT LIKE 'bot-user-%'");
+      } else {
+        users = await query.all('SELECT id, username, balance_ib FROM users');
+      }
+
       if (!users || users.length === 0) {
-        return res.status(400).json({ error: 'Tidak ada pemain terdaftar' });
+        return res.status(400).json({ error: 'Tidak ada konglomerat yang sesuai target' });
       }
 
       const totalDisbursed = perUser * users.length;
 
-      // Salurkan ke semua pemain
-      await query.run('UPDATE users SET balance_ib = balance_ib + ?', [perUser]);
+      // Salurkan ke pemain sesuai target
+      if (targetAudience === 'HUMAN_ONLY') {
+        await query.run("UPDATE users SET balance_ib = balance_ib + ? WHERE (is_bot_account = 0 OR is_bot_account IS NULL) AND id NOT LIKE 'bot-user-%'", [perUser]);
+      } else {
+        await query.run('UPDATE users SET balance_ib = balance_ib + ?', [perUser]);
+      }
+
+      const audienceLabel = targetAudience === 'HUMAN_ONLY' ? `${users.length} Konglomerat Pemain Asli` : `${users.length} Seluruh Konglomerat`;
 
       // Catat pengeluaran kas negara (mengurangi saldo kas likuid negara)
       await query.run(
         'INSERT INTO state_treasury_ledger (id, source_type, title, amount_ib, direction, reference_id, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [uuidv4(), 'BAILOUT_DISBURSEMENT', `Penyaluran Dividen Kemakmuran Rakyat Federasi (${users.length} Pemain)`, totalDisbursed, 'EXPENSE', 'BLT_FEDERASI', note || 'Stimulus daya beli masyarakat']
+        [uuidv4(), 'BAILOUT_DISBURSEMENT', `Penyaluran Dividen Kemakmuran Rakyat Federasi (${audienceLabel})`, totalDisbursed, 'EXPENSE', 'BLT_FEDERASI', note || 'Stimulus daya beli masyarakat']
       );
 
       // Siarkan breaking news
       const newsItem = {
         id: uuidv4(),
         title: `💰 DIVIDEN KEMAKMURAN RAKYAT FEDERASI DICAIRKAN!`,
-        content: `Pemerintah Federasi menyalurkan surplus kas negara sebesar IB ${perUser.toLocaleString('id-ID')} langsung ke setiap kas pribadi seluruh konglomerat dan warga Capital Federation!`,
+        content: `Pemerintah Federasi menyalurkan surplus kas negara sebesar IB ${perUser.toLocaleString('id-ID')} langsung ke setiap kas pribadi ${audienceLabel}!`,
         affected_sector: 'Semua Sektor',
         sentiment: 'BULLISH',
         published_at: new Date().toISOString()
@@ -175,10 +228,16 @@ module.exports = function(io, simulationEngine) {
 
       io.emit('market:news_broadcast', newsItem);
       io.emit('treasury:updated');
+      io.emit('user:balance_batch_updated', { addedBalance: perUser, targetAudience });
 
-      // Update balance untuk masing-masing user yang terhubung
-      for (const u of users) {
-        io.emit('user:balance_updated', { userId: u.id, newBalance: (u.balance_ib || 0) + perUser });
+      // Update balance untuk pemain (efisien, batasi loop agar server tidak lagging)
+      if (users.length <= 100) {
+        for (const u of users) {
+          io.emit('user:balance_updated', { userId: u.id, newBalance: (u.balance_ib || 0) + perUser });
+        }
+      } else {
+        // Broadcast umum agar semua client me-refresh balance
+        io.emit('user:balance_updated', {});
       }
 
       res.json({
@@ -186,7 +245,8 @@ module.exports = function(io, simulationEngine) {
         totalDisbursed,
         perUser,
         recipientsCount: users.length,
-        message: `🎉 Berhasil mencairkan IB ${perUser.toLocaleString('id-ID')} ke ${users.length} konglomerat! Total dana negara: IB ${totalDisbursed.toLocaleString('id-ID')}.`
+        targetAudience,
+        message: `🎉 Berhasil mencairkan IB ${perUser.toLocaleString('id-ID')} ke ${audienceLabel}! Total dana negara disalurkan: IB ${totalDisbursed.toLocaleString('id-ID')}.`
       });
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -196,7 +256,7 @@ module.exports = function(io, simulationEngine) {
   // 5. Penarikan / Penggunaan Langsung Saldo Kas Negara ke Kas Pribadi atau Kas PT
   router.post('/withdraw-funds', async (req, res) => {
     try {
-      const { targetType, userId, companyId, amountIb, purpose } = req.body;
+      const { targetType, userId, companyId, amountIb, purpose, allowDeficit = false } = req.body;
       const amount = parseFloat(amountIb);
       if (!amount || amount <= 0) {
         return res.status(400).json({ error: 'Nominal penarikan kas negara tidak valid' });
@@ -204,7 +264,7 @@ module.exports = function(io, simulationEngine) {
 
       // Hitung saldo kas negara saat ini
       const rows = await query.all('SELECT direction, SUM(amount_ib) as total FROM state_treasury_ledger GROUP BY direction');
-      let baseReserve = 500000000000.0;
+      let baseReserve = 1000000000000.0;
       let totalIncome = 0.0;
       let totalExpense = 0.0;
       for (const r of (rows || [])) {
@@ -212,9 +272,9 @@ module.exports = function(io, simulationEngine) {
         else totalExpense += (r.total || 0);
       }
       const netTreasury = baseReserve + totalIncome - totalExpense;
-      if (amount > netTreasury) {
+      if (amount > netTreasury && !allowDeficit) {
         return res.status(400).json({
-          error: `Saldo Kas Negara tidak mencukupi. Saldo tersedia: IB ${netTreasury.toLocaleString('id-ID')}`
+          error: `Saldo Kas Negara tidak mencukupi (Tersedia: IB ${netTreasury.toLocaleString('id-ID')}). Silakan lakukan Injeksi Kas Negara terlebih dahulu atau aktifkan persetujuan defisit anggaran.`
         });
       }
 

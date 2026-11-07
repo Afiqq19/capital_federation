@@ -12,6 +12,7 @@ import { socket } from '../../lib/socket';
 import BailoutModal from './BailoutModal';
 import DividenModal from './DividenModal';
 import WithdrawModal from './WithdrawModal';
+import InjectReserveModal from './InjectReserveModal';
 import {
   Landmark,
   Coins,
@@ -25,6 +26,7 @@ import {
   Gift,
   Building,
   Filter,
+  PlusCircle,
 } from 'lucide-react';
 
 export default function TreasuryVaultPage() {
@@ -39,6 +41,7 @@ export default function TreasuryVaultPage() {
   const [isBailoutOpen, setIsBailoutOpen] = useState(false);
   const [isDividenOpen, setIsDividenOpen] = useState(false);
   const [isWithdrawOpen, setIsWithdrawOpen] = useState(false);
+  const [isInjectOpen, setIsInjectOpen] = useState(false);
 
   const fetchTreasury = async (silent = false) => {
     try {
@@ -99,6 +102,17 @@ export default function TreasuryVaultPage() {
     } catch (err) {
       if (notify) notify('Gagal mencairkan dana: ' + err.message, 'error');
       else alert('Gagal mencairkan dana: ' + err.message);
+    }
+  };
+
+  const handleConfirmInject = async (payload) => {
+    try {
+      const res = await adminApi.treasuryInjectReserve(payload);
+      if (notify) notify(res.message || 'Cadangan devisa kas negara berhasil disuntikkan!', 'success');
+      await fetchTreasury(true);
+    } catch (err) {
+      if (notify) notify('Gagal menyuntikkan cadangan: ' + err.message, 'error');
+      else alert('Gagal menyuntikkan cadangan: ' + err.message);
     }
   };
 
@@ -180,6 +194,15 @@ export default function TreasuryVaultPage() {
           </div>
 
           <div className="flex items-center gap-2 shrink-0 flex-wrap">
+            <Button
+              variant="emerald"
+              size="sm"
+              icon={PlusCircle}
+              onClick={() => setIsInjectOpen(true)}
+            >
+              Injeksi Kas Negara
+            </Button>
+
             <Button
               variant="amber"
               size="sm"
@@ -342,9 +365,11 @@ export default function TreasuryVaultPage() {
       <DividenModal
         open={isDividenOpen}
         onClose={() => setIsDividenOpen(false)}
+        users={users}
         usersCount={users?.length || 0}
         treasuryBalance={netBalance}
         onConfirm={handleConfirmDividen}
+        onOpenInject={() => setIsInjectOpen(true)}
       />
 
       {/* Modern Withdraw / Disbursement Modal */}
@@ -355,6 +380,15 @@ export default function TreasuryVaultPage() {
         companies={companies}
         treasuryBalance={netBalance}
         onConfirm={handleConfirmWithdraw}
+        onOpenInject={() => setIsInjectOpen(true)}
+      />
+
+      {/* Injeksi Cadangan Brankas Kas Negara Modal */}
+      <InjectReserveModal
+        open={isInjectOpen}
+        onClose={() => setIsInjectOpen(false)}
+        treasuryBalance={netBalance}
+        onConfirm={handleConfirmInject}
       />
     </div>
   );
