@@ -3,6 +3,7 @@ import Card, { CardHeader } from '../../components/ui/Card';
 import StatCard from '../../components/ui/StatCard';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
+import PaginationBar from '../../components/ui/PaginationBar';
 import Modal from '../../components/ui/Modal';
 import { FormField, Input, Select } from '../../components/ui/Form';
 import { adminApi } from '../../api/admin';
@@ -35,6 +36,8 @@ export default function GovernmentTendersPage() {
   };
   const [tenders, setTenders] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   // Modal Buka Tender Baru
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -200,6 +203,7 @@ export default function GovernmentTendersPage() {
   const totalValue = tenders.reduce((sum, t) => sum + (t.contract_value_ib || 0), 0);
   const openCount = tenders.filter((t) => t.status === 'OPEN').length;
   const totalBids = tenders.reduce((sum, t) => sum + (t.total_bids || 0), 0);
+  const pagedTenders = tenders.slice((page - 1) * pageSize, page * pageSize);
 
   return (
     <div className="space-y-6 page-enter pb-16">
@@ -274,8 +278,9 @@ export default function GovernmentTendersPage() {
         ) : tenders.length === 0 ? (
           <div className="py-12 text-center text-slate-500 text-xs">Belum ada paket tender pengadaan yang dibuka.</div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            {tenders.map((tender) => {
+          <>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              {pagedTenders.map((tender) => {
               const isOpen = tender.status === 'OPEN';
               const isAwarded = tender.status === 'AWARDED';
 
@@ -371,7 +376,19 @@ export default function GovernmentTendersPage() {
                 </div>
               );
             })}
-          </div>
+            </div>
+            <PaginationBar
+              page={page}
+              pageSize={pageSize}
+              totalItems={tenders.length}
+              onPageChange={setPage}
+              onPageSizeChange={(n) => {
+                setPageSize(n);
+                setPage(1);
+              }}
+              itemLabel="paket tender"
+            />
+          </>
         )}
       </Card>
 
@@ -776,7 +793,7 @@ export default function GovernmentTendersPage() {
       {/* Footer Versi Web Admin */}
       <div className="pt-6 pb-2 text-center text-xs text-slate-500 border-t border-slate-800/60 flex flex-col sm:flex-row items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <Badge tone="amber">Web Admin Console v2.0.5 (Build 54)</Badge>
+          <Badge tone="amber">Web Admin Console v2.0.6 (Build 55)</Badge>
           <span>Capital Federation Sovereign Launch Console</span>
         </div>
         <div className="font-mono text-[11px] text-slate-500">

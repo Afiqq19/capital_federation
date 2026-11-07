@@ -1,18 +1,19 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAdmin } from '../../context/AdminContext';
 import Card, { CardHeader } from '../../components/ui/Card';
-import StatCard from '../../components/ui/StatCard';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
+import EmptyState from '../../components/ui/EmptyState';
+import SearchInput from '../../components/ui/SearchInput';
+import PaginationBar from '../../components/ui/PaginationBar';
 import { FormField, Input, Textarea, Select } from '../../components/ui/Form';
 import { adminApi } from '../../api/admin';
+import { dateTime } from '../../lib/format';
 import {
   Zap,
   Radio,
   Flame,
   TrendingDown,
-  TrendingUp,
-  AlertTriangle,
   Globe,
   Send,
   Landmark,
@@ -20,6 +21,9 @@ import {
   Sparkles,
   Sliders,
   ShieldCheck,
+  FileText,
+  History,
+  RefreshCw,
 } from 'lucide-react';
 
 const PRESETS = [
@@ -67,6 +71,116 @@ const PRESETS = [
   },
 ];
 
+// 6 Template Skenario Guncangan Makro Kustom (Klik langsung mengisi Judul, Deskripsi, Sektor, dan % Shock)
+const CUSTOM_SHOCK_TEMPLATES = [
+  {
+    label: '⚔️ Perang Dunia III',
+    title: 'Pecahnya Perang Dunia & Konflik Geopolitik Global',
+    description:
+      'Eskalasi militer skala penuh antar kekuatan besar dunia memutus jalur perdagangan internasional, melumpuhkan rantai pasok global, dan memicu kepanikan jual ekstrem (panic selling) di seluruh bursa efek.',
+    sector: 'ALL',
+    impact: -35,
+    tone: 'rose',
+  },
+  {
+    label: '🦠 Pandemi & Lockdown',
+    title: 'Darurat Pandemi Baru & Lockdown Ekonomi Nasional',
+    description:
+      'Penyebaran varian patogen baru memaksa penutupan perbatasan, penghentian aktivitas pabrik, dan pembatasan mobilitas ketat yang menekan seluruh sektor riil dan ritel.',
+    sector: 'ALL',
+    impact: -25,
+    tone: 'rose',
+  },
+  {
+    label: '🏦 Kolaps Megabank',
+    title: 'Kolapsnya Megabank Internasional & Krisis Kredit Macet',
+    description:
+      'Gagal bayar obligasi derivatif senilai ratusan triliun memicu kebangkrutan beruntun institusi finansial global dan membekukan likuiditas perbankan nasional.',
+    sector: 'FINANCE',
+    impact: -30,
+    tone: 'amber',
+  },
+  {
+    label: '🛢️ Embargo Energi',
+    title: 'Embargo Minyak & Lonjakan Harga Komoditas Energi',
+    description:
+      'Blokade jalur distribusi minyak dunia memicu kelangkaan pasokan bahan bakar ekstrem dan melambungkan harga komoditas energi serta batu bara ke titik tertinggi sepanjang sejarah.',
+    sector: 'ENERGY',
+    impact: 25,
+    tone: 'emerald',
+  },
+  {
+    label: '🤖 Revolusi Super-AI',
+    title: 'Terobosan Komputasi Kuantum & Revolusi Industri AI',
+    description:
+      'Peluncuran infrastruktur kecerdasan buatan generasi baru memicu gelombang investasi triliunan IB ke perusahaan teknologi, semikonduktor, dan pusat data nasional.',
+    sector: 'TECHNOLOGY',
+    impact: 30,
+    tone: 'emerald',
+  },
+  {
+    label: '🚀 Supercycle Ekonomi',
+    title: 'Booming Ekonomi Emas & Banjir Investasi Asing (FDI)',
+    description:
+      'Surplus neraca perdagangan rekor tertinggi dan masuknya dana investasi institusional global mengangkat daya beli masyarakat serta melambungkan valuasi seluruh emiten bursa.',
+    sector: 'ALL',
+    impact: 25,
+    tone: 'emerald',
+  },
+];
+
+// 6 Template Siaran Breaking News (Klik langsung mengisi Judul & Isi Berita)
+const NEWS_TEMPLATES = [
+  {
+    label: '⚔️ Sirene Perang Dunia',
+    title: 'Darurat Geopolitik: Eskalasi Perang Dunia Guncang Bursa Global',
+    content:
+      'Ketegangan militer antarblok dunia meningkat tajam. Investor institusi mulai menarik likuiditas secara masif dan memicu volatilitas tinggi di lantai bursa.',
+    sector: 'ALL',
+    sentiment: 'BEARISH',
+  },
+  {
+    label: '🏦 Stimulus Bunga Rendah',
+    title: 'Bank Sentral BIF Pangkas Suku Bunga & Siapkan Likuiditas Murah',
+    content:
+      'Dewan Gubernur Bank Sentral mengumumkan pelonggaran moneter besar-besaran guna memacu ekspansi kredit korporasi dan mendongkrak gairah pasar modal.',
+    sector: 'FINANCE',
+    sentiment: 'BULLISH',
+  },
+  {
+    label: '⚡ Cadangan Migas Raksasa',
+    title: 'Temuan Cadangan Migas & Litium Raksasa di Wilayah Federasi',
+    content:
+      'Eksplorasi nasional menemukan cadangan energi bernilai puluhan triliun IB yang siap melipatgandakan laba emiten pertambangan dan energi.',
+    sector: 'ENERGY',
+    sentiment: 'BULLISH',
+  },
+  {
+    label: '🤖 Mega-Kontrak Cloud AI',
+    title: 'Konsorsium Global Suntik Dana Triliunan ke Sektor Teknologi & AI',
+    content:
+      'Emiten teknologi nasional menandatangani kontrak pembangunan pusat data AI terbesar di kawasan regional, memicu aksi beli masif investor asing.',
+    sector: 'TECHNOLOGY',
+    sentiment: 'BULLISH',
+  },
+  {
+    label: '⚠️ Tekanan Inflasi Pangan',
+    title: 'Lonjakan Inflasi Bahan Pokok Tekan Daya Beli Konsumen',
+    content:
+      'Kenaikan biaya logistik global dan bahan baku impor menyebabkan penurunan margin laba emiten ritel serta barang konsumsi masyarakat.',
+    sector: 'CONSUMER',
+    sentiment: 'BEARISH',
+  },
+  {
+    label: '💎 Pesta Dividen Raya',
+    title: 'Laba Korporasi Cetak Rekor, Emiten Bersiap Bagikan Dividen Jumbo',
+    content:
+      'Laporan keuangan kuartal terbaru menunjukkan pertumbuhan laba bersih di atas ekspektasi, mendorong reli penguatan indeks IPMC.',
+    sector: 'ALL',
+    sentiment: 'BULLISH',
+  },
+];
+
 export default function MacroEventsPage() {
   const { actions, overview, notify } = useAdmin();
   // Federation Macro State
@@ -75,6 +189,12 @@ export default function MacroEventsPage() {
   const [crisisTriggerMode, setCrisisTriggerMode] = useState('MANUAL');
   const [crisisThresholdIb, setCrisisThresholdIb] = useState(-100000000000);
   const [isSavingPolicy, setIsSavingPolicy] = useState(false);
+
+  // History & Pagination state (25 items per page)
+  const [historySearch, setHistorySearch] = useState('');
+  const [sentimentFilter, setSentimentFilter] = useState('ALL');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   const fetchMacro = async () => {
     try {
@@ -94,7 +214,7 @@ export default function MacroEventsPage() {
       setIsSavingPolicy(true);
       const res = await adminApi.setFederationMacroPolicy({
         crisisTriggerMode,
-        crisisDeficitThresholdIb: parseFloat(crisisThresholdIb)
+        crisisDeficitThresholdIb: parseFloat(crisisThresholdIb),
       });
       await fetchMacro();
       if (notify) notify(res?.message || 'Kebijakan pemicu krisis fiskal berhasil disimpan!', 'success');
@@ -108,6 +228,10 @@ export default function MacroEventsPage() {
   useEffect(() => {
     fetchMacro();
   }, []);
+
+  useEffect(() => {
+    setPage(1);
+  }, [historySearch, sentimentFilter]);
 
   const handleSetMacroState = async (state) => {
     try {
@@ -132,7 +256,7 @@ export default function MacroEventsPage() {
   const [eventTitle, setEventTitle] = useState('');
   const [eventDesc, setEventDesc] = useState('');
   const [eventSector, setEventSector] = useState('ALL');
-  const [eventImpact, setEventImpact] = useState(-10);
+  const [eventImpact, setEventImpact] = useState(-15);
   const [isTriggering, setIsTriggering] = useState(false);
 
   // News broadcast state
@@ -142,10 +266,25 @@ export default function MacroEventsPage() {
   const [newsSentiment, setNewsSentiment] = useState('BULLISH');
   const [isBroadcasting, setIsBroadcasting] = useState(false);
 
+  const handleApplyShockTemplate = (tpl) => {
+    setEventTitle(tpl.title);
+    setEventDesc(tpl.description);
+    setEventSector(tpl.sector);
+    setEventImpact(tpl.impact);
+  };
+
+  const handleApplyNewsTemplate = (tpl) => {
+    setNewsTitle(tpl.title);
+    setNewsContent(tpl.content);
+    setNewsSector(tpl.sector);
+    setNewsSentiment(tpl.sentiment);
+  };
+
   const handleTriggerPreset = async (preset) => {
     try {
       setIsTriggering(true);
       await actions.triggerEvent(preset);
+      await fetchMacro();
       if (notify) {
         notify(`Skenario '${preset.title}' berhasil diluncurkan ke pasar bursa!`, 'success');
       }
@@ -159,34 +298,61 @@ export default function MacroEventsPage() {
   const handleCustomEvent = async (e) => {
     e.preventDefault();
     if (!eventTitle || !eventDesc) return;
-    setIsTriggering(true);
-    await actions.triggerEvent({
-      title: eventTitle,
-      description: eventDesc,
-      affectedSector: eventSector,
-      priceImpactPct: Number(eventImpact),
-    });
-    setEventTitle('');
-    setEventDesc('');
-    setIsTriggering(false);
+    try {
+      setIsTriggering(true);
+      await actions.triggerEvent({
+        title: eventTitle,
+        description: eventDesc,
+        affectedSector: eventSector,
+        priceImpactPct: Number(eventImpact),
+      });
+      setEventTitle('');
+      setEventDesc('');
+      await fetchMacro();
+    } finally {
+      setIsTriggering(false);
+    }
   };
 
   const handleBroadcastNews = async (e) => {
     e.preventDefault();
     if (!newsTitle || !newsContent) return;
-    setIsBroadcasting(true);
-    await actions.injectNews({
-      title: newsTitle,
-      content: newsContent,
-      affectedSector: newsSector,
-      sentiment: newsSentiment,
-    });
-    setNewsTitle('');
-    setNewsContent('');
-    setIsBroadcasting(false);
+    try {
+      setIsBroadcasting(true);
+      await actions.injectNews({
+        title: newsTitle,
+        content: newsContent,
+        affectedSector: newsSector,
+        sentiment: newsSentiment,
+      });
+      setNewsTitle('');
+      setNewsContent('');
+      await fetchMacro();
+    } finally {
+      setIsBroadcasting(false);
+    }
   };
 
   const currentState = macroData?.economicState || 'NORMAL';
+
+  // Gabungkan riwayat berita & peristiwa makro
+  const filteredHistory = useMemo(() => {
+    const rawNews = Array.isArray(macroData?.recentNews) ? macroData.recentNews : [];
+    const q = historySearch.trim().toLowerCase();
+    return rawNews.filter((item) => {
+      const matchSearch =
+        !q ||
+        (item.title && item.title.toLowerCase().includes(q)) ||
+        (item.content && item.content.toLowerCase().includes(q)) ||
+        (item.affected_sector && item.affected_sector.toLowerCase().includes(q));
+      const matchSentiment = sentimentFilter === 'ALL' || item.sentiment === sentimentFilter;
+      return matchSearch && matchSentiment;
+    });
+  }, [macroData?.recentNews, historySearch, sentimentFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredHistory.length / pageSize));
+  const safePage = Math.min(Math.max(1, page), totalPages);
+  const paginatedHistory = filteredHistory.slice((safePage - 1) * pageSize, safePage * pageSize);
 
   return (
     <div className="space-y-6 page-enter">
@@ -198,7 +364,17 @@ export default function MacroEventsPage() {
           icon={Globe}
           tone="var(--gold)"
           action={
-            <Badge tone={currentState === 'BOOM' ? 'emerald' : currentState === 'CRISIS' ? 'rose' : currentState === 'RECESSION' ? 'amber' : 'sky'}>
+            <Badge
+              tone={
+                currentState === 'BOOM'
+                  ? 'emerald'
+                  : currentState === 'CRISIS'
+                  ? 'rose'
+                  : currentState === 'RECESSION'
+                  ? 'amber'
+                  : 'sky'
+              }
+            >
               STATUS: {currentState}
             </Badge>
           }
@@ -211,7 +387,7 @@ export default function MacroEventsPage() {
               type="button"
               disabled={isSwitchingMacro}
               onClick={() => handleSetMacroState('BOOM')}
-              className={`p-3.5 rounded-xl border text-left transition-all ${
+              className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
                 currentState === 'BOOM'
                   ? 'bg-emerald-500/20 border-emerald-400 text-emerald-200 shadow-lg shadow-emerald-500/10'
                   : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
@@ -230,7 +406,7 @@ export default function MacroEventsPage() {
               type="button"
               disabled={isSwitchingMacro}
               onClick={() => handleSetMacroState('NORMAL')}
-              className={`p-3.5 rounded-xl border text-left transition-all ${
+              className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
                 currentState === 'NORMAL'
                   ? 'bg-sky-500/20 border-sky-400 text-sky-200 shadow-lg shadow-sky-500/10'
                   : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
@@ -249,7 +425,7 @@ export default function MacroEventsPage() {
               type="button"
               disabled={isSwitchingMacro}
               onClick={() => handleSetMacroState('RECESSION')}
-              className={`p-3.5 rounded-xl border text-left transition-all ${
+              className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
                 currentState === 'RECESSION'
                   ? 'bg-amber-500/20 border-amber-400 text-amber-200 shadow-lg shadow-amber-500/10'
                   : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
@@ -268,7 +444,7 @@ export default function MacroEventsPage() {
               type="button"
               disabled={isSwitchingMacro}
               onClick={() => handleSetMacroState('CRISIS')}
-              className={`p-3.5 rounded-xl border text-left transition-all ${
+              className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
                 currentState === 'CRISIS'
                   ? 'bg-rose-500/20 border-rose-400 text-rose-200 shadow-lg shadow-rose-500/10'
                   : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
@@ -296,7 +472,8 @@ export default function MacroEventsPage() {
             <div className="flex items-center gap-2">
               <span className="text-xs text-slate-400">Kas Negara Saat Ini:</span>
               <Badge tone={(overview?.treasuryBalance ?? 0) >= 0 ? 'emerald' : 'rose'}>
-                {(overview?.treasuryBalance ?? 0) >= 0 ? 'SURPLUS' : 'DEFISIT'}: IB {((overview?.treasuryBalance ?? 471413400083) / 1e9).toFixed(1)} Miliar
+                {(overview?.treasuryBalance ?? 0) >= 0 ? 'SURPLUS' : 'DEFISIT'}: IB{' '}
+                {((overview?.treasuryBalance ?? 0) / 1e9).toFixed(1)} Miliar
               </Badge>
             </div>
           }
@@ -315,7 +492,10 @@ export default function MacroEventsPage() {
             >
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
-                  <ShieldCheck size={18} className={crisisTriggerMode === 'MANUAL' ? 'text-emerald-400' : 'text-slate-500'} />
+                  <ShieldCheck
+                    size={18}
+                    className={crisisTriggerMode === 'MANUAL' ? 'text-emerald-400' : 'text-slate-500'}
+                  />
                   <span className="font-bold text-sm text-slate-100">MODE MANUAL (Rekomendasi)</span>
                 </div>
                 {crisisTriggerMode === 'MANUAL' && (
@@ -325,7 +505,10 @@ export default function MacroEventsPage() {
                 )}
               </div>
               <p className="text-xs text-slate-400 leading-relaxed">
-                <strong className="text-emerald-300">100% Terkendali Aman:</strong> Krisis moneter global <strong className="text-slate-200">TIDAK AKAN PERNAH</strong> aktif sendiri meskipun kas negara sedang berfluktuasi atau defisit. Krisis hanya akan meledak jika Admin secara sengaja menekan tombol <em className="text-rose-400">"CRISIS"</em> atau meluncurkan skenario di bawah.
+                <strong className="text-emerald-300">100% Terkendali Aman:</strong> Krisis moneter global{' '}
+                <strong className="text-slate-200">TIDAK AKAN PERNAH</strong> aktif sendiri meskipun kas negara sedang
+                berfluktuasi atau defisit. Krisis hanya akan meledak jika Admin secara sengaja menekan tombol{' '}
+                <em className="text-rose-400">&quot;CRISIS&quot;</em> atau meluncurkan skenario di bawah.
               </p>
             </div>
 
@@ -340,7 +523,10 @@ export default function MacroEventsPage() {
             >
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
-                  <ShieldAlert size={18} className={crisisTriggerMode === 'AUTO_DEFICIT' ? 'text-rose-400' : 'text-slate-500'} />
+                  <ShieldAlert
+                    size={18}
+                    className={crisisTriggerMode === 'AUTO_DEFICIT' ? 'text-rose-400' : 'text-slate-500'}
+                  />
                   <span className="font-bold text-sm text-slate-100">MODE OTOMATIS DEFISIT</span>
                 </div>
                 {crisisTriggerMode === 'AUTO_DEFICIT' && (
@@ -350,7 +536,10 @@ export default function MacroEventsPage() {
                 )}
               </div>
               <p className="text-xs text-slate-400 leading-relaxed">
-                <strong className="text-rose-300">Pemicu Otomatis:</strong> Jika pengeluaran bailout dan subsidi negara melebihi batas ambang cadangan kas (defisit ekstrem), sistem secara otomatis memicu <strong className="text-slate-200">Krisis Moneter Global</strong> dan berita kepanikan pasar. Krisis pulih otomatis saat kas kembali surplus.
+                <strong className="text-rose-300">Pemicu Otomatis:</strong> Jika pengeluaran bailout dan subsidi negara
+                melebihi batas ambang cadangan kas (defisit ekstrem), sistem secara otomatis memicu{' '}
+                <strong className="text-slate-200">Krisis Moneter Global</strong> dan berita kepanikan pasar. Krisis
+                pulih otomatis saat kas kembali surplus.
               </p>
             </div>
           </div>
@@ -361,23 +550,18 @@ export default function MacroEventsPage() {
               <span className="text-slate-400">Batas Toleransi Defisit Pemicu Auto-Krisis:</span>
               <span className="font-mono font-bold text-amber-400">-IB 100.000.000.000 (-IB 100 Miliar)</span>
             </div>
-            <Button
-              variant="primary"
-              size="sm"
-              disabled={isSavingPolicy}
-              onClick={handleSavePolicy}
-            >
+            <Button variant="primary" size="sm" disabled={isSavingPolicy} onClick={handleSavePolicy}>
               {isSavingPolicy ? 'Menyimpan Kebijakan...' : 'Terapkan Kebijakan Krisis'}
             </Button>
           </div>
         </div>
       </Card>
 
-      {/* 2. Preset Event Triggers */}
+      {/* 3. Preset Event Triggers */}
       <div>
         <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-2">
           <Flame size={14} className="text-amber-400" />
-          Pemicu Krisis & Boom Instan (Preset Skenario)
+          Pemicu Krisis & Boom Instan (6 Preset Skenario Cepat)
         </h4>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -392,7 +576,8 @@ export default function MacroEventsPage() {
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-bold text-sm text-slate-100">{p.title}</span>
                     <Badge tone={isNegative ? 'rose' : 'emerald'}>
-                      {isNegative ? '' : '+'}{p.priceImpactPct}%
+                      {isNegative ? '' : '+'}
+                      {p.priceImpactPct}%
                     </Badge>
                   </div>
                   <p className="text-xs text-slate-400 mt-1 leading-relaxed">{p.description}</p>
@@ -416,23 +601,75 @@ export default function MacroEventsPage() {
         </div>
       </div>
 
-      {/* 3. Custom Event Trigger & News Injector */}
+      {/* 4. Custom Event Trigger & News Injector (Dengan 6 Template Siap Pakai) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Custom Macro Shock */}
-        <Card>
-          <CardHeader
-            title="Buat Skenario Guncangan Makro Kustom"
-            subtitle="Rancang skenario ekonomi spesifik beserta persentase dampaknya"
-            icon={Zap}
-            tone="var(--amber)"
-          />
+        <Card className="flex flex-col justify-between">
+          <div>
+            <CardHeader
+              title="Buat Skenario Guncangan Makro Kustom"
+              subtitle="Klik salah satu dari 6 template di bawah atau tulis skenario sendiri"
+              icon={Zap}
+              tone="var(--amber)"
+            />
+
+            {/* 6 Template Skenario Cepat */}
+            <div className="mb-4 p-3 rounded-xl bg-slate-950/80 border border-slate-800/90">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10.5px] font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                  <FileText size={12} /> 6 Template Skenario Cepat (Klik untuk Isi Otomatis)
+                </span>
+                {eventTitle && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEventTitle('');
+                      setEventDesc('');
+                      setEventSector('ALL');
+                      setEventImpact(-15);
+                    }}
+                    className="text-[10px] text-slate-400 hover:text-rose-400 cursor-pointer"
+                  >
+                    Reset Form
+                  </button>
+                )}
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {CUSTOM_SHOCK_TEMPLATES.map((tpl, i) => {
+                  const isSelected = eventTitle === tpl.title;
+                  const isNeg = tpl.impact < 0;
+                  return (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => handleApplyShockTemplate(tpl)}
+                      className={`px-2.5 py-2 rounded-lg border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                        isSelected
+                          ? 'bg-amber-500/20 border-amber-400 text-amber-200 shadow-sm'
+                          : 'bg-slate-900/90 border-slate-800 hover:border-slate-700 text-slate-300 hover:bg-slate-800/70'
+                      }`}
+                    >
+                      <span className="text-[11px] font-bold truncate block w-full">{tpl.label}</span>
+                      <div className="flex items-center justify-between mt-1 text-[10px] font-mono">
+                        <span className="text-slate-400">{tpl.sector}</span>
+                        <span className={isNeg ? 'text-rose-400 font-bold' : 'text-emerald-400 font-bold'}>
+                          {isNeg ? '' : '+'}
+                          {tpl.impact}%
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
 
           <form onSubmit={handleCustomEvent} className="space-y-4">
-            <FormField label="Judul Peristiwa Makro" hint="Contoh: Skandal Kartel Perbankan Swasta">
+            <FormField label="Judul Peristiwa Makro" hint="Contoh: Pecahnya Perang Dunia & Konflik Geopolitik Global">
               <Input
                 value={eventTitle}
                 onChange={(e) => setEventTitle(e.target.value)}
-                placeholder="Masukkan judul skenario..."
+                placeholder="Masukkan judul skenario atau pilih template di atas..."
                 required
               />
             </FormField>
@@ -447,7 +684,7 @@ export default function MacroEventsPage() {
               />
             </FormField>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <FormField label="Sektor Terdampak">
                 <Select value={eventSector} onChange={(e) => setEventSector(e.target.value)}>
                   <option value="ALL">Seluruh Bursa (IPMC Total)</option>
@@ -482,13 +719,64 @@ export default function MacroEventsPage() {
         </Card>
 
         {/* Breaking News Injector */}
-        <Card>
-          <CardHeader
-            title="Siarkan Breaking News ke Seluruh Pemain"
-            subtitle="Kirimkan push bulletin dan running ticker ke layar HP pemain"
-            icon={Radio}
-            tone="var(--sky)"
-          />
+        <Card className="flex flex-col justify-between">
+          <div>
+            <CardHeader
+              title="Siarkan Breaking News ke Seluruh Pemain"
+              subtitle="Kirimkan push bulletin dan running ticker ke layar HP pemain"
+              icon={Radio}
+              tone="var(--sky)"
+            />
+
+            {/* 6 Template Berita Cepat */}
+            <div className="mb-4 p-3 rounded-xl bg-slate-950/80 border border-slate-800/90">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10.5px] font-bold uppercase tracking-wider text-sky-400 flex items-center gap-1.5">
+                  <FileText size={12} /> 6 Template Berita Cepat (Klik untuk Isi Otomatis)
+                </span>
+                {newsTitle && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewsTitle('');
+                      setNewsContent('');
+                      setNewsSector('ALL');
+                      setNewsSentiment('BULLISH');
+                    }}
+                    className="text-[10px] text-slate-400 hover:text-rose-400 cursor-pointer"
+                  >
+                    Reset Form
+                  </button>
+                )}
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {NEWS_TEMPLATES.map((tpl, i) => {
+                  const isSelected = newsTitle === tpl.title;
+                  const isBull = tpl.sentiment === 'BULLISH';
+                  return (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => handleApplyNewsTemplate(tpl)}
+                      className={`px-2.5 py-2 rounded-lg border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                        isSelected
+                          ? 'bg-sky-500/20 border-sky-400 text-sky-200 shadow-sm'
+                          : 'bg-slate-900/90 border-slate-800 hover:border-slate-700 text-slate-300 hover:bg-slate-800/70'
+                      }`}
+                    >
+                      <span className="text-[11px] font-bold truncate block w-full">{tpl.label}</span>
+                      <div className="flex items-center justify-between mt-1 text-[10px] font-mono">
+                        <span className="text-slate-400">{tpl.sector}</span>
+                        <span className={isBull ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
+                          {tpl.sentiment}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
 
           <form onSubmit={handleBroadcastNews} className="space-y-4">
             <FormField label="Judul Siaran Berita" hint="Akan tampil dengan label 🚨 BREAKING">
@@ -510,7 +798,7 @@ export default function MacroEventsPage() {
               />
             </FormField>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <FormField label="Sektor Relevan">
                 <Select value={newsSector} onChange={(e) => setNewsSector(e.target.value)}>
                   <option value="ALL">Umum / Semua Sektor</option>
@@ -542,6 +830,103 @@ export default function MacroEventsPage() {
           </form>
         </Card>
       </div>
+
+      {/* 5. Riwayat Peristiwa Makro & Siaran Berita (Paginated 25 per halaman) */}
+      <Card>
+        <CardHeader
+          title="Riwayat Peristiwa Makro & Siaran Berita Bursa"
+          subtitle="Daftar seluruh siaran berita dan guncangan ekonomi yang telah dipublikasikan ke layar pemain"
+          icon={History}
+          tone="var(--gold)"
+          action={
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="w-52">
+                <SearchInput
+                  value={historySearch}
+                  onChange={setHistorySearch}
+                  placeholder="Cari judul / isi berita..."
+                />
+              </div>
+              <select
+                value={sentimentFilter}
+                onChange={(e) => setSentimentFilter(e.target.value)}
+                className="select text-xs py-1.5 px-3 bg-slate-900 border-slate-800 rounded-xl"
+              >
+                <option value="ALL">Semua Sentimen</option>
+                <option value="BULLISH">Bullish (Positif)</option>
+                <option value="BEARISH">Bearish (Negatif)</option>
+                <option value="NEUTRAL">Netral</option>
+              </select>
+              <Button variant="ghost" size="sm" icon={RefreshCw} onClick={fetchMacro}>
+                Refresh
+              </Button>
+            </div>
+          }
+        />
+
+        {filteredHistory.length === 0 ? (
+          <EmptyState
+            title="Belum Ada Riwayat Siaran Berita"
+            description="Siaran breaking news dan peristiwa makro yang diluncurkan akan tercatat di sini."
+          />
+        ) : (
+          <>
+            <div className="table-wrap">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Waktu Siaran</th>
+                    <th>Judul Peristiwa / Berita</th>
+                    <th>Isi Keterbukaan Informasi</th>
+                    <th>Sektor</th>
+                    <th>Sentimen</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedHistory.map((item) => (
+                    <tr key={item.id}>
+                      <td className="text-xs font-mono text-slate-400 whitespace-nowrap">
+                        {dateTime(item.published_at)}
+                      </td>
+                      <td className="text-xs font-bold text-slate-100 max-w-xs">
+                        {item.title}
+                      </td>
+                      <td className="text-xs text-slate-300 max-w-md leading-relaxed">
+                        {item.content}
+                      </td>
+                      <td>
+                        <Badge tone="sky">{item.affected_sector || 'ALL'}</Badge>
+                      </td>
+                      <td>
+                        <Badge
+                          tone={
+                            item.sentiment === 'BULLISH'
+                              ? 'emerald'
+                              : item.sentiment === 'BEARISH'
+                              ? 'rose'
+                              : 'amber'
+                          }
+                        >
+                          {item.sentiment || 'NEUTRAL'}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <PaginationBar
+              totalItems={filteredHistory.length}
+              page={safePage}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+              itemLabel="riwayat berita"
+            />
+          </>
+        )}
+      </Card>
     </div>
   );
 }

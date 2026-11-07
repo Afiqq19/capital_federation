@@ -5,6 +5,7 @@ import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import EmptyState from '../../components/ui/EmptyState';
 import SearchInput from '../../components/ui/SearchInput';
+import PaginationBar from '../../components/ui/PaginationBar';
 import { ib, dateTime } from '../../lib/format';
 import { adminApi } from '../../api/admin';
 import NotaryDeedModal from './NotaryDeedModal';
@@ -25,6 +26,8 @@ export default function DeedRegistryPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [selectedDeed, setSelectedDeed] = useState(null);
 
   const fetchDeeds = async (silent = false) => {
@@ -60,6 +63,8 @@ export default function DeedRegistryPage() {
 
     return matchSearch && matchStatus;
   });
+
+  const pagedDeeds = filteredDeeds.slice((page - 1) * pageSize, page * pageSize);
 
   const totalValue = deeds.reduce((sum, d) => sum + (Number(d.total_price_ib) || 0), 0);
   const totalBreached = deeds.filter((d) => d.status === 'BREACHED_WANPRESTASI').length;
@@ -134,14 +139,14 @@ export default function DeedRegistryPage() {
               <div className="w-full sm:w-56">
                 <SearchInput
                   value={search}
-                  onChange={setSearch}
+                  onChange={(v) => { setSearch(v); setPage(1); }}
                   placeholder="Cari no akta / pihak / emiten..."
                 />
               </div>
 
               <select
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
+                onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
                 className="select text-xs py-1.5 px-3 bg-slate-900 border-slate-800 rounded-lg text-slate-300 w-full sm:w-auto"
               >
                 <option value="ALL">Semua Status</option>
@@ -181,7 +186,7 @@ export default function DeedRegistryPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredDeeds.map((d) => (
+                {pagedDeeds.map((d) => (
                   <tr key={d.id} className="hover:bg-slate-900/60 transition-colors">
                     <td>
                       <div className="font-mono text-xs font-bold text-amber-300">
@@ -276,6 +281,18 @@ export default function DeedRegistryPage() {
                 ))}
               </tbody>
             </table>
+
+            <PaginationBar
+              page={page}
+              pageSize={pageSize}
+              totalItems={filteredDeeds.length}
+              onPageChange={setPage}
+              onPageSizeChange={(n) => {
+                setPageSize(n);
+                setPage(1);
+              }}
+              itemLabel="akta notaris"
+            />
           </div>
         )}
       </Card>

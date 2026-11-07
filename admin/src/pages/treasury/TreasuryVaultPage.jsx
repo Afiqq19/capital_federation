@@ -5,6 +5,7 @@ import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import EmptyState from '../../components/ui/EmptyState';
 import SearchInput from '../../components/ui/SearchInput';
+import PaginationBar from '../../components/ui/PaginationBar';
 import { ib, ibShort, dateTime } from '../../lib/format';
 import { adminApi } from '../../api/admin';
 import { useAdmin } from '../../context/AdminContext';
@@ -36,6 +37,12 @@ export default function TreasuryVaultPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, categoryFilter]);
 
   // Modals state
   const [isBailoutOpen, setIsBailoutOpen] = useState(false);
@@ -146,6 +153,10 @@ export default function TreasuryVaultPage() {
     return matchesSearch && matchesCategory;
   });
 
+  const totalPages = Math.max(1, Math.ceil(filteredLedger.length / pageSize));
+  const safePage = Math.min(Math.max(1, page), totalPages);
+  const paginatedLedger = filteredLedger.slice((safePage - 1) * pageSize, safePage * pageSize);
+
   return (
     <div className="space-y-6 page-enter">
       {/* 1. Header Overview Stats - Rapi tanpa pemotongan teks */}
@@ -184,69 +195,73 @@ export default function TreasuryVaultPage() {
         />
       </div>
 
-      {/* 2. Action Banner: Kegunaan Uang Sitaan & Kas Negara */}
+      {/* 2. Action Banner: Kegunaan Uang Sitaan & Kas Negara (Layout Lebar Penuh Tanpa Terpotong) */}
       <Card className="bg-gradient-to-r from-emerald-500/10 via-slate-900/60 to-transparent border-emerald-500/30">
-        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
-          <div className="flex items-start gap-3">
+        <div className="space-y-4">
+          <div className="flex items-start gap-3.5">
             <div className="p-3 rounded-xl bg-emerald-500/20 text-emerald-300 shrink-0">
               <Coins size={26} />
             </div>
-            <div>
-              <h4 className="text-sm font-bold text-slate-100 flex items-center gap-2">
-                Brankas Kas Negara & Otoritas Finansial Republik Federasi Indigo
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h4 className="text-sm sm:text-base font-bold text-slate-100">
+                  Brankas Kas Negara & Otoritas Finansial Republik Federasi Indigo
+                </h4>
                 <Badge tone="emerald">SOVEREIGN WEALTH VAULT</Badge>
-              </h4>
-              <p className="text-xs text-slate-400 mt-1 leading-relaxed max-w-3xl">
+              </div>
+              <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
                 Seluruh biaya registrasi gugatan PNAF, denda sitaan spekulan, bea meterai akta digital, dan pajak bursa masuk ke brankas kedaulatan negara ini. Kas negara dapat digunakan untuk <strong>menyuntikkan dana talangan (Bailout)</strong> saat emiten krisis, atau <strong>dibagikan sebagai Dividen Kemakmuran (Stimulus Nasional)</strong> ke seluruh konglomerat.
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0 flex-wrap">
-            <Button
-              variant="emerald"
-              size="sm"
-              icon={PlusCircle}
-              onClick={() => setIsInjectOpen(true)}
-            >
-              Injeksi Kas Negara
-            </Button>
+          <div className="pt-3.5 border-t border-slate-800/80 flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button
+                variant="emerald"
+                size="sm"
+                icon={PlusCircle}
+                onClick={() => setIsInjectOpen(true)}
+              >
+                Injeksi Kas Negara
+              </Button>
 
-            <Button
-              variant="amber"
-              size="sm"
-              icon={ShieldAlert}
-              onClick={() => setIsBailoutOpen(true)}
-            >
-              Suntik Bailout Emiten
-            </Button>
+              <Button
+                variant="amber"
+                size="sm"
+                icon={ShieldAlert}
+                onClick={() => setIsBailoutOpen(true)}
+              >
+                Suntik Bailout Emiten
+              </Button>
 
-            <Button
-              variant="emerald"
-              size="sm"
-              icon={Gift}
-              onClick={() => setIsDividenOpen(true)}
-            >
-              Bagi Dividen Nasional
-            </Button>
+              <Button
+                variant="emerald"
+                size="sm"
+                icon={Gift}
+                onClick={() => setIsDividenOpen(true)}
+              >
+                Bagi Dividen Nasional
+              </Button>
 
-            <Button
-              variant="primary"
-              size="sm"
-              icon={Coins}
-              onClick={() => setIsWithdrawOpen(true)}
-            >
-              Gunakan / Cairkan Kas Negara
-            </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                icon={Coins}
+                onClick={() => setIsWithdrawOpen(true)}
+              >
+                Gunakan / Cairkan Kas Negara
+              </Button>
+            </div>
 
             <Button
               variant="ghost"
               size="sm"
               icon={RefreshCw}
-              onClick={fetchTreasury}
+              onClick={() => fetchTreasury(false)}
               disabled={loading}
             >
-              Refresh
+              Refresh Data
             </Button>
           </div>
         </div>
@@ -260,7 +275,7 @@ export default function TreasuryVaultPage() {
           icon={Landmark}
           tone="var(--emerald)"
           action={
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <div className="w-56">
                 <SearchInput
                   value={search}
@@ -277,10 +292,14 @@ export default function TreasuryVaultPage() {
                 <option value="ALL">Semua Kategori</option>
                 <option value="INCOME">Pemasukan (+INCOME)</option>
                 <option value="EXPENSE">Pengeluaran (-EXPENSE)</option>
+                <option value="SOVEREIGN_INJECTION">Injeksi Cadangan Devisa</option>
+                <option value="DIVIDEND_DISTRIBUTION">Dividen Kemakmuran</option>
+                <option value="STATE_TREASURY_WITHDRAWAL">Pencairan Kas Negara</option>
+                <option value="BAILOUT_DISBURSEMENT">Dana Bailout Emiten</option>
                 <option value="SEIZURE_FINE">Denda Sitaan PNAF</option>
                 <option value="METERAI_FEE">Bea Meterai Digital</option>
                 <option value="TRANSACTION_TAX">Pajak Transaksi Bursa</option>
-                <option value="BAILOUT_DISBURSEMENT">Dana Bailout Emiten</option>
+                <option value="CORPORATE_TAX">PPh Badan Korporasi</option>
               </select>
             </div>
           }
@@ -300,64 +319,98 @@ export default function TreasuryVaultPage() {
             }
           />
         ) : (
-          <div className="table-wrap">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Waktu Mutasi</th>
-                  <th>Sumber Penerimaan / Pos Anggaran</th>
-                  <th>Uraian Transaksi Otoritas</th>
-                  <th>Kategori</th>
-                  <th className="right">Nominal Arus Kas</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredLedger.map((row) => {
-                  const isIncome = row.direction === 'INCOME';
+          <>
+            <div className="table-wrap">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Waktu Mutasi</th>
+                    <th>Sumber Penerimaan / Pos Anggaran</th>
+                    <th>Uraian Transaksi Otoritas</th>
+                    <th>Kategori</th>
+                    <th className="right">Nominal Arus Kas</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedLedger.map((row) => {
+                    const isIncome = row.direction === 'INCOME';
 
-                  return (
-                    <tr key={row.id}>
-                      <td className="text-xs text-slate-400 font-mono">
-                        {dateTime(row.created_at)}
-                      </td>
+                    return (
+                      <tr key={row.id}>
+                        <td className="text-xs text-slate-400 font-mono whitespace-nowrap">
+                          {dateTime(row.created_at)}
+                        </td>
 
-                      <td>
-                        <div className="text-xs font-bold text-slate-100 flex items-center gap-1.5">
-                          {isIncome ? (
-                            <ArrowDownRight size={14} className="text-emerald-400 shrink-0" />
-                          ) : (
-                            <ArrowUpRight size={14} className="text-rose-400 shrink-0" />
+                        <td>
+                          <div className="text-xs font-bold text-slate-100 flex items-center gap-1.5">
+                            {isIncome ? (
+                              <ArrowDownRight size={14} className="text-emerald-400 shrink-0" />
+                            ) : (
+                              <ArrowUpRight size={14} className="text-rose-400 shrink-0" />
+                            )}
+                            {row.title}
+                          </div>
+                          <div className="text-[10px] text-slate-500 font-mono">
+                            Ref: {row.reference_id || row.id.slice(0, 8)}
+                          </div>
+                        </td>
+
+                        <td className="text-xs text-slate-300 max-w-sm">
+                          {row.notes || '-'}
+                        </td>
+
+                        <td>
+                          {row.source_type === 'SEIZURE_FINE' && <Badge tone="amber">DENDA SITAAN</Badge>}
+                          {row.source_type === 'PNAF_FILING_FEE' && <Badge tone="sky">BIAYA SIDANG</Badge>}
+                          {row.source_type === 'METERAI_FEE' && <Badge tone="emerald">METERAI DIGITAL</Badge>}
+                          {row.source_type === 'TRANSACTION_TAX' && <Badge tone="violet">PAJAK BURSA</Badge>}
+                          {row.source_type === 'CORPORATE_TAX' && <Badge tone="violet">PPH KORPORASI</Badge>}
+                          {row.source_type === 'BAILOUT_DISBURSEMENT' && <Badge tone="rose">STIMULUS BAILOUT</Badge>}
+                          {row.source_type === 'DIVIDEND_DISTRIBUTION' && <Badge tone="rose">DIVIDEN RAKYAT</Badge>}
+                          {row.source_type === 'STATE_TREASURY_WITHDRAWAL' && <Badge tone="amber">PENCAIRAN KAS</Badge>}
+                          {row.source_type === 'SOVEREIGN_INJECTION' && <Badge tone="emerald">INJEKSI DEVISA</Badge>}
+                          {row.source_type === 'BANK_INTEREST_INCOME' && <Badge tone="sky">BUNGA BANK BIF</Badge>}
+                          {row.source_type === 'DEBT_RESTRUCTURING_SUBSIDY' && <Badge tone="rose">SUBSIDI KREDIT</Badge>}
+                          {![
+                            'SEIZURE_FINE',
+                            'PNAF_FILING_FEE',
+                            'METERAI_FEE',
+                            'TRANSACTION_TAX',
+                            'CORPORATE_TAX',
+                            'BAILOUT_DISBURSEMENT',
+                            'DIVIDEND_DISTRIBUTION',
+                            'STATE_TREASURY_WITHDRAWAL',
+                            'SOVEREIGN_INJECTION',
+                            'BANK_INTEREST_INCOME',
+                            'DEBT_RESTRUCTURING_SUBSIDY',
+                          ].includes(row.source_type) && (
+                            <Badge tone={isIncome ? 'emerald' : 'rose'}>
+                              {row.source_type || (isIncome ? 'PEMASUKAN' : 'PENGELUARAN')}
+                            </Badge>
                           )}
-                          {row.title}
-                        </div>
-                        <div className="text-[10px] text-slate-500 font-mono">
-                          Ref: {row.reference_id || row.id.slice(0, 8)}
-                        </div>
-                      </td>
+                        </td>
 
-                      <td className="text-xs text-slate-300 max-w-sm">
-                        {row.notes || '-'}
-                      </td>
+                        <td className="right whitespace-nowrap">
+                          <span className={`font-mono text-xs font-bold ${isIncome ? 'text-emerald-400' : 'text-rose-400'}`}>
+                            {isIncome ? '+' : '-'}{ib(row.amount_ib)}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
 
-                      <td>
-                        {row.source_type === 'SEIZURE_FINE' && <Badge tone="amber">DENDA SITAAN</Badge>}
-                        {row.source_type === 'PNAF_FILING_FEE' && <Badge tone="sky">BIAYA SIDANG</Badge>}
-                        {row.source_type === 'METERAI_FEE' && <Badge tone="emerald">METERAI DIGITAL</Badge>}
-                        {row.source_type === 'TRANSACTION_TAX' && <Badge tone="violet">PAJAK BURSA</Badge>}
-                        {row.source_type === 'BAILOUT_DISBURSEMENT' && <Badge tone="rose">STIMULUS NEGARA</Badge>}
-                      </td>
-
-                      <td className="right">
-                        <span className={`font-mono text-xs font-bold ${isIncome ? 'text-emerald-400' : 'text-rose-400'}`}>
-                          {isIncome ? '+' : '-'}{ib(row.amount_ib)}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+            <PaginationBar
+              totalItems={filteredLedger.length}
+              page={safePage}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+              itemLabel="mutasi kas"
+            />
+          </>
         )}
       </Card>
 

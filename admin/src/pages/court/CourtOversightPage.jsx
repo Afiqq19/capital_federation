@@ -5,6 +5,7 @@ import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import EmptyState from '../../components/ui/EmptyState';
 import SearchInput from '../../components/ui/SearchInput';
+import PaginationBar from '../../components/ui/PaginationBar';
 import Modal from '../../components/ui/Modal';
 import { FormField, Input, Textarea, Select } from '../../components/ui/Form';
 import { adminApi } from '../../api/admin';
@@ -43,6 +44,8 @@ export default function CourtOversightPage() {
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   // Auto-Judge Bot State
   const [autoJudge, setAutoJudge] = useState({
@@ -403,6 +406,8 @@ export default function CourtOversightPage() {
     return matchesSearch && matchesType && matchesStatus;
   });
 
+  const pagedCases = filteredCases.slice((page - 1) * pageSize, page * pageSize);
+
   const filteredCompaniesForPlaintiff = useMemo(() => {
     const list = companies || [];
     if (!plaintiffSearchQuery) return list.slice(0, 15);
@@ -606,12 +611,12 @@ export default function CourtOversightPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
           <SearchInput
             value={search}
-            onChange={setSearch}
+            onChange={(v) => { setSearch(v); setPage(1); }}
             placeholder="Cari nomor perkara, pihak, akta, aset..."
           />
           <select
             value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value)}
+            onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }}
             className="select text-xs py-1.5 px-3 bg-slate-900 border-slate-800 rounded-xl"
           >
             <option value="ALL">Semua Jenis Perkara</option>
@@ -621,7 +626,7 @@ export default function CourtOversightPage() {
           </select>
           <select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
             className="select text-xs py-1.5 px-3 bg-slate-900 border-slate-800 rounded-xl"
           >
             <option value="ALL">Semua Status Putusan</option>
@@ -652,7 +657,7 @@ export default function CourtOversightPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredCases.map((c) => {
+                {pagedCases.map((c) => {
                   const isInTrial = c.status === 'IN_TRIAL';
                   const isApproved = c.status === 'VERDICT_APPROVED';
                   const isPailit = c.status === 'VERDICT_PAILIT';
@@ -803,6 +808,18 @@ export default function CourtOversightPage() {
                 })}
               </tbody>
             </table>
+
+            <PaginationBar
+              page={page}
+              pageSize={pageSize}
+              totalItems={filteredCases.length}
+              onPageChange={setPage}
+              onPageSizeChange={(n) => {
+                setPageSize(n);
+                setPage(1);
+              }}
+              itemLabel="perkara"
+            />
           </div>
         )}
       </Card>

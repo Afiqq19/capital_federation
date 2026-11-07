@@ -6,6 +6,7 @@ import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import EmptyState from '../../components/ui/EmptyState';
 import SearchInput from '../../components/ui/SearchInput';
+import PaginationBar from '../../components/ui/PaginationBar';
 import Modal from '../../components/ui/Modal';
 import { FormField, Input, Select } from '../../components/ui/Form';
 import SeizeAssetModal from './SeizeAssetModal';
@@ -32,6 +33,8 @@ export default function BankCentralPage() {
   const [isInjectingQE, setIsInjectingQE] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [selectedLoanForSeizure, setSelectedLoanForSeizure] = useState(null);
 
   // Pilar 4: Pemutihan Denda & Restrukturisasi
@@ -120,6 +123,8 @@ export default function BankCentralPage() {
 
     return matchesSearch && matchesStatus;
   });
+
+  const pagedLoans = filteredLoans.slice((page - 1) * pageSize, page * pageSize);
 
   return (
     <div className="space-y-6 page-enter">
@@ -327,14 +332,14 @@ export default function BankCentralPage() {
               <div className="w-48">
                 <SearchInput
                   value={search}
-                  onChange={setSearch}
+                  onChange={(v) => { setSearch(v); setPage(1); }}
                   placeholder="Cari debitur / ID..."
                 />
               </div>
 
               <select
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
+                onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
                 className="select text-xs py-1.5 px-3 bg-slate-900 border-slate-800 rounded-xl"
               >
                 <option value="ALL">Semua Status</option>
@@ -371,7 +376,7 @@ export default function BankCentralPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredLoans.map((loan) => {
+                {pagedLoans.map((loan) => {
                   const isDefault = loan.status === 'DEFAULT' || loan.status === 'NPL';
                   const isPaid = loan.status === 'PAID';
                   const isActive = loan.status === 'ACTIVE';
@@ -471,6 +476,18 @@ export default function BankCentralPage() {
                 })}
               </tbody>
             </table>
+
+            <PaginationBar
+              page={page}
+              pageSize={pageSize}
+              totalItems={filteredLoans.length}
+              onPageChange={setPage}
+              onPageSizeChange={(n) => {
+                setPageSize(n);
+                setPage(1);
+              }}
+              itemLabel="pinjaman"
+            />
           </div>
         )}
       </Card>

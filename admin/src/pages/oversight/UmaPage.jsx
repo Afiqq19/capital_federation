@@ -6,6 +6,7 @@ import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import EmptyState from '../../components/ui/EmptyState';
 import SearchInput from '../../components/ui/SearchInput';
+import PaginationBar from '../../components/ui/PaginationBar';
 import FlagUmaModal from './FlagUmaModal';
 import { ib, changePct, signedPct, dateTime } from '../../lib/format';
 import {
@@ -23,6 +24,8 @@ export default function UmaPage() {
   const { oversight, companies, actions } = useAdmin();
   const [showFlagModal, setShowFlagModal] = useState(false);
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   // Konfigurasi Auto-UMA
   const cfg = oversight?.config || { autoEnabled: true, thresholdPct: 15, clearPct: 7 };
@@ -49,6 +52,8 @@ export default function UmaPage() {
       (c.uma_reason && c.uma_reason.toLowerCase().includes(q))
     );
   });
+
+  const pagedUma = filteredUma.slice((page - 1) * pageSize, page * pageSize);
 
   return (
     <div className="space-y-6 page-enter">
@@ -210,7 +215,7 @@ export default function UmaPage() {
             <div className="w-64">
               <SearchInput
                 value={search}
-                onChange={setSearch}
+                onChange={(v) => { setSearch(v); setPage(1); }}
                 placeholder="Cari simbol / nama / alasan..."
               />
             </div>
@@ -241,7 +246,7 @@ export default function UmaPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredUma.map((c) => {
+                {pagedUma.map((c) => {
                   const chg = changePct(c);
                   const isAuto = c.uma_source === 'AUTO' || !c.uma_source;
                   const isUp = c.uma_direction ? c.uma_direction === 'UP' : chg >= 0;
@@ -299,6 +304,18 @@ export default function UmaPage() {
                 })}
               </tbody>
             </table>
+
+            <PaginationBar
+              page={page}
+              pageSize={pageSize}
+              totalItems={filteredUma.length}
+              onPageChange={setPage}
+              onPageSizeChange={(n) => {
+                setPageSize(n);
+                setPage(1);
+              }}
+              itemLabel="emiten UMA"
+            />
           </div>
         )}
       </Card>

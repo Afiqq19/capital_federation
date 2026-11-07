@@ -3,6 +3,7 @@ import Card, { CardHeader } from '../../components/ui/Card';
 import StatCard from '../../components/ui/StatCard';
 import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
+import PaginationBar from '../../components/ui/PaginationBar';
 import Modal from '../../components/ui/Modal';
 import { FormField, Input, Select } from '../../components/ui/Form';
 import { adminApi } from '../../api/admin';
@@ -30,6 +31,8 @@ export default function SovereignBondsPage() {
   };
   const [bonds, setBonds] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   // Modal Terbitkan Obligasi
   const [isIssueModalOpen, setIsIssueModalOpen] = useState(false);
@@ -108,6 +111,7 @@ export default function SovereignBondsPage() {
   const avgCoupon = bonds.length > 0 
     ? (bonds.reduce((sum, b) => sum + (b.coupon_rate_pct || 0), 0) / bonds.length).toFixed(2)
     : '0.00';
+  const pagedBonds = bonds.slice((page - 1) * pageSize, page * pageSize);
 
   return (
     <div className="space-y-6 page-enter pb-16">
@@ -182,8 +186,9 @@ export default function SovereignBondsPage() {
         ) : bonds.length === 0 ? (
           <div className="py-12 text-center text-slate-500 text-xs">Belum ada seri obligasi yang diterbitkan.</div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            {bonds.map((bond) => {
+          <>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              {pagedBonds.map((bond) => {
               const absorbed = bond.ordered_quota_ib || 0;
               const quota = bond.total_quota_ib || 1;
               const pct = Math.min(100, (absorbed / quota) * 100);
@@ -269,7 +274,19 @@ export default function SovereignBondsPage() {
                 </div>
               );
             })}
-          </div>
+            </div>
+            <PaginationBar
+              page={page}
+              pageSize={pageSize}
+              totalItems={bonds.length}
+              onPageChange={setPage}
+              onPageSizeChange={(n) => {
+                setPageSize(n);
+                setPage(1);
+              }}
+              itemLabel="seri obligasi"
+            />
+          </>
         )}
       </Card>
 

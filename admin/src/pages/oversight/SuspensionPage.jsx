@@ -6,6 +6,7 @@ import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import EmptyState from '../../components/ui/EmptyState';
 import SearchInput from '../../components/ui/SearchInput';
+import PaginationBar from '../../components/ui/PaginationBar';
 import SuspendStockModal from './SuspendStockModal';
 import { ib, dateTime, timeLeft } from '../../lib/format';
 import {
@@ -23,6 +24,8 @@ export default function SuspensionPage() {
   const [showSuspendModal, setShowSuspendModal] = useState(false);
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState('ALL'); // 'ALL' = Semua Emiten Intervensi Cepat, 'SUSPENDED' = Sedang Dibekukan
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   const suspensionList = oversight?.suspensionList || [];
 
@@ -49,6 +52,9 @@ export default function SuspensionPage() {
       );
     });
   }, [companies, search]);
+
+  const pagedAll = filteredAll.slice((page - 1) * pageSize, page * pageSize);
+  const pagedSuspended = filteredSuspended.slice((page - 1) * pageSize, page * pageSize);
 
   return (
     <div className="space-y-6 page-enter">
@@ -122,7 +128,7 @@ export default function SuspensionPage() {
       {/* 4. Tab Switcher: Semua Emiten vs Hanya yang Disuspensi */}
       <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
         <button
-          onClick={() => setActiveTab('ALL')}
+          onClick={() => { setActiveTab('ALL'); setPage(1); }}
           className={`px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-2 ${
             activeTab === 'ALL'
               ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 shadow-sm'
@@ -134,7 +140,7 @@ export default function SuspensionPage() {
         </button>
 
         <button
-          onClick={() => setActiveTab('SUSPENDED')}
+          onClick={() => { setActiveTab('SUSPENDED'); setPage(1); }}
           className={`px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-2 ${
             activeTab === 'SUSPENDED'
               ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 shadow-sm'
@@ -158,7 +164,7 @@ export default function SuspensionPage() {
               <div className="w-64">
                 <SearchInput
                   value={search}
-                  onChange={setSearch}
+                  onChange={(v) => { setSearch(v); setPage(1); }}
                   placeholder="Cari simbol / nama PT..."
                 />
               </div>
@@ -176,7 +182,7 @@ export default function SuspensionPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredAll.map((c) => (
+                {pagedAll.map((c) => (
                   <tr key={c.id}>
                     <td>
                       <div className="flex items-center gap-2">
@@ -257,6 +263,18 @@ export default function SuspensionPage() {
                 ))}
               </tbody>
             </table>
+
+            <PaginationBar
+              page={page}
+              pageSize={pageSize}
+              totalItems={filteredAll.length}
+              onPageChange={setPage}
+              onPageSizeChange={(n) => {
+                setPageSize(n);
+                setPage(1);
+              }}
+              itemLabel="emiten"
+            />
           </div>
         </Card>
       ) : (
@@ -270,7 +288,7 @@ export default function SuspensionPage() {
               <div className="w-64">
                 <SearchInput
                   value={search}
-                  onChange={setSearch}
+                  onChange={(v) => { setSearch(v); setPage(1); }}
                   placeholder="Cari emiten disuspensi..."
                 />
               </div>
@@ -300,7 +318,7 @@ export default function SuspensionPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredSuspended.map((c) => {
+                  {pagedSuspended.map((c) => {
                     const remaining = timeLeft(c.suspended_until);
                     const isExpired = remaining === 'Berakhir';
 
@@ -349,6 +367,18 @@ export default function SuspensionPage() {
                   })}
                 </tbody>
               </table>
+
+              <PaginationBar
+                page={page}
+                pageSize={pageSize}
+                totalItems={filteredSuspended.length}
+                onPageChange={setPage}
+                onPageSizeChange={(n) => {
+                  setPageSize(n);
+                  setPage(1);
+                }}
+                itemLabel="emiten disuspensi"
+              />
             </div>
           )}
         </Card>

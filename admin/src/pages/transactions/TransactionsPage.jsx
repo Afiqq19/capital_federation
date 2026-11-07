@@ -6,6 +6,7 @@ import Button from '../../components/ui/Button';
 import Badge from '../../components/ui/Badge';
 import EmptyState from '../../components/ui/EmptyState';
 import SearchInput from '../../components/ui/SearchInput';
+import PaginationBar from '../../components/ui/PaginationBar';
 import TradeSlipModal from './TradeSlipModal';
 import { ib, ibShort, dateTime } from '../../lib/format';
 import {
@@ -23,6 +24,8 @@ export default function TransactionsPage() {
   const { transactions } = useAdmin();
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('ALL');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [selectedTrade, setSelectedTrade] = useState(null);
 
   const list = Array.isArray(transactions) ? transactions : [];
@@ -48,6 +51,8 @@ export default function TransactionsPage() {
 
     return matchesSearch && matchesType;
   });
+
+  const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
 
   return (
     <div className="space-y-6 page-enter">
@@ -95,14 +100,14 @@ export default function TransactionsPage() {
               <div className="w-56">
                 <SearchInput
                   value={search}
-                  onChange={setSearch}
+                  onChange={(v) => { setSearch(v); setPage(1); }}
                   placeholder="Cari simbol / pemain / PT..."
                 />
               </div>
 
               <select
                 value={typeFilter}
-                onChange={(e) => setTypeFilter(e.target.value)}
+                onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }}
                 className="select text-xs py-1.5 px-3 bg-slate-900 border-slate-800 rounded-xl"
               >
                 <option value="ALL">Semua Tipe Order</option>
@@ -142,7 +147,7 @@ export default function TransactionsPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((t, idx) => {
+                {paged.map((t, idx) => {
                   const isBuy = t.type === 'BUY';
                   const price = Number(t.price_per_share || t.price || 0);
                   const total = Number(t.total_amount || t.total_amount_ib || t.total_ib || (t.lots * 100 * price) || 0);
@@ -210,6 +215,18 @@ export default function TransactionsPage() {
                 })}
               </tbody>
             </table>
+
+            <PaginationBar
+              page={page}
+              pageSize={pageSize}
+              totalItems={filtered.length}
+              onPageChange={setPage}
+              onPageSizeChange={(n) => {
+                setPageSize(n);
+                setPage(1);
+              }}
+              itemLabel="transaksi"
+            />
           </div>
         )}
       </Card>

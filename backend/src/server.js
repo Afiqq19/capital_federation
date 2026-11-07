@@ -3488,7 +3488,11 @@ app.post('/api/ipo/allotment', async (req, res) => {
 // Indikator Makroekonomi Federasi
 app.get('/api/federation/macro', async (req, res) => {
   try {
-    const settings = await query.all('SELECT * FROM central_bank_settings');
+    const [settings, recentNews, recentEvents] = await Promise.all([
+      query.all('SELECT * FROM central_bank_settings'),
+      query.all('SELECT * FROM news ORDER BY published_at DESC LIMIT 250').catch(() => []),
+      query.all('SELECT * FROM macro_events ORDER BY started_at DESC LIMIT 100').catch(() => []),
+    ]);
     const mapped = Object.fromEntries(settings.map(s => [s.key, s.value]));
     res.json({
       countryName: mapped.country_name || 'Republik Federasi Indigo',
@@ -3499,7 +3503,9 @@ app.get('/api/federation/macro', async (req, res) => {
       interestRate: parseFloat(mapped.interest_rate || '6.5'),
       inflationRate: mapped.economic_state === 'CRISIS' ? 14.2 : (mapped.economic_state === 'RECESSION' ? 7.8 : 3.1),
       currencyName: 'IB (Indigo Billion)',
-      courtAuthority: 'PNAF (Pengadilan Niaga Arbitrase Federasi)'
+      courtAuthority: 'PNAF (Pengadilan Niaga Arbitrase Federasi)',
+      recentNews: recentNews || [],
+      recentEvents: recentEvents || [],
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -9117,7 +9123,7 @@ app.get('/api/admin/transactions', async (req, res) => {
     FROM transactions t
     JOIN users u ON t.user_id = u.id
     JOIN companies c ON t.company_id = c.id
-    ORDER BY t.created_at DESC LIMIT 100
+    ORDER BY t.created_at DESC LIMIT 500
   `);
   res.json(logs);
 });

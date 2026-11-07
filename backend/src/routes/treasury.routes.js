@@ -61,7 +61,7 @@ module.exports = function(io, simulationEngine, invalidateMarketCaches) {
   // 2. Riwayat Mutasi Buku Kas Negara (Ledger)
   router.get('/ledger', async (req, res) => {
     try {
-      const ledger = await query.all('SELECT * FROM state_treasury_ledger ORDER BY created_at DESC LIMIT 50');
+      const ledger = await query.all('SELECT * FROM state_treasury_ledger ORDER BY created_at DESC LIMIT 500');
       res.json(ledger || []);
     } catch (err) {
       res.status(500).json({ error: err.message });

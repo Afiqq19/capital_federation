@@ -2090,11 +2090,6 @@ class MarketSimulationEngine {
             // Stage price update for batched atomic commit
             this.pendingPriceUpdates.set(comp.id, [newPrice, dailyHigh, dailyLow, comp.id]);
 
-            await query.run(
-              'UPDATE companies SET current_price = ?, daily_high = ?, daily_low = ? WHERE id = ?',
-              [newPrice, dailyHigh, dailyLow, comp.id]
-            );
-
             updatedList.push({
               id: comp.id,
               symbol: comp.symbol,
