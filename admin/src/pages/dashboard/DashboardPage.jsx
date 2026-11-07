@@ -4,6 +4,7 @@ import StatCard from '../../components/ui/StatCard';
 import Card, { CardHeader } from '../../components/ui/Card';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
+import IpmcMarketHero from './components/IpmcMarketHero';
 import { ib, ibShort, changePct, signedPct, timeOnly } from '../../lib/format';
 import {
   TrendingUp,
@@ -24,40 +25,6 @@ import {
   Sparkles,
 } from 'lucide-react';
 
-function renderSparkline(history, isUp) {
-  if (!history || history.length < 2) return null;
-  const pts = history.map((h) => Number(h.points) || 0);
-  const min = Math.min(...pts);
-  const max = Math.max(...pts);
-  const range = max - min || 1;
-  const w = 220;
-  const h = 48;
-  const pad = 4;
-
-  const coords = pts.map((val, idx) => {
-    const x = pad + (idx / (pts.length - 1)) * (w - pad * 2);
-    const y = h - pad - ((val - min) / range) * (h - pad * 2);
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  });
-
-  const pathD = `M ${coords.join(' L ')}`;
-  const areaD = `M ${coords[0]} L ${coords.join(' L ')} L ${coords[coords.length - 1].split(',')[0]},${h} L ${coords[0].split(',')[0]},${h} Z`;
-  const strokeColor = isUp ? '#10b981' : '#f43f5e';
-
-  return (
-    <svg width={w} height={h} className="overflow-visible">
-      <defs>
-        <linearGradient id={`grad-${isUp ? 'up' : 'down'}`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={strokeColor} stopOpacity="0.28" />
-          <stop offset="100%" stopColor={strokeColor} stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d={areaD} fill={`url(#grad-${isUp ? 'up' : 'down'})`} />
-      <path d={pathD} fill="none" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
 export default function DashboardPage({ onNavigate }) {
   const { overview, marketIndex, companies, users, bank, oversight, transactions, feed, actions } = useAdmin();
   const [isInjectingQE, setIsInjectingQE] = useState(false);
@@ -71,22 +38,6 @@ export default function DashboardPage({ onNavigate }) {
       0
     );
   }, [companies, overview?.totalMarketCap]);
-
-  // Data IPMC Composite Index
-  const mkt = marketIndex || overview?.marketIndex || null;
-  const ipmcPoints = mkt?.points ? Number(mkt.points) : 6080.0;
-  const ipmcChangePct = mkt?.changePct ? Number(mkt.changePct) : 0;
-  const ipmcChangePts = mkt?.changePts ? Number(mkt.changePts) : 0;
-  const isIndexUp = ipmcChangePct >= 0;
-
-  // Breadth emiten: naik, flat, turun
-  const breadthUp = mkt?.breadth?.up ?? (companies || []).filter((c) => changePct(c) > 0).length;
-  const breadthFlat = mkt?.breadth?.flat ?? (companies || []).filter((c) => changePct(c) === 0).length;
-  const breadthDown = mkt?.breadth?.down ?? (companies || []).filter((c) => changePct(c) < 0).length;
-  const totalBreadth = Math.max(1, breadthUp + breadthFlat + breadthDown);
-  const pctUp = ((breadthUp / totalBreadth) * 100).toFixed(0);
-  const pctFlat = ((breadthFlat / totalBreadth) * 100).toFixed(0);
-  const pctDown = (100 - Number(pctUp) - Number(pctFlat)).toFixed(0);
 
   // Top gainers & losers
   const sortedCompanies = useMemo(() => {
@@ -148,95 +99,8 @@ export default function DashboardPage({ onNavigate }) {
 
   return (
     <div className="space-y-6 page-enter">
-      {/* 1. HERO COMPOSITE INDEX & REALTIME MARKET SNAPSHOT */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900/95 via-slate-900/90 to-slate-950/98 border border-slate-700/60 shadow-2xl p-5 md:p-6 backdrop-blur-xl">
-        <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-emerald-500 via-sky-500 to-amber-500 opacity-80" />
-        <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
-        <div className="relative z-10 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
-          {/* Sisi Kiri: Indeks Acuan IPMC & Sparkline */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <span className="flex h-2.5 w-2.5 relative">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-                </span>
-                <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400 font-mono">
-                  Bursa Efek Capital Federation • Sesi Live
-                </span>
-              </div>
-              <h2 className="text-xl md:text-2xl font-black text-slate-100 tracking-tight flex items-center gap-2">
-                <span>IPMC Composite Index</span>
-                <span className="text-xs font-mono font-medium px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-300">
-                  CFX-100
-                </span>
-              </h2>
-              <div className="flex items-baseline gap-3 mt-1.5 flex-wrap">
-                <span className="text-3xl md:text-4xl font-black font-mono tracking-tight text-white">
-                  {ipmcPoints.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
-                <span
-                  className={`text-sm md:text-base font-bold font-mono px-2.5 py-0.5 rounded-lg flex items-center gap-1 ${
-                    isIndexUp
-                      ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                      : 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
-                  }`}
-                >
-                  {isIndexUp ? <ArrowUpRight size={16} /> : <ArrowDownRight size={16} />}
-                  {ipmcChangePts >= 0 ? '+' : ''}
-                  {ipmcChangePts.toFixed(2)} ({signedPct(ipmcChangePct)})
-                </span>
-              </div>
-            </div>
-
-            {/* Sparkline Visual Trend */}
-            <div className="hidden sm:block pl-2 border-l border-slate-800">
-              <div className="text-[10px] font-mono uppercase text-slate-400 mb-1">Tren Intraday (50 Tick)</div>
-              {renderSparkline(mkt?.history, isIndexUp)}
-            </div>
-          </div>
-
-          {/* Sisi Kanan: Market Breadth Bar & Arus Modal Asing */}
-          <div className="w-full lg:w-auto flex flex-col sm:flex-row items-stretch sm:items-center gap-4 lg:gap-6 border-t lg:border-t-0 lg:border-l border-slate-800 pt-4 lg:pt-0 lg:pl-6">
-            {/* Market Breadth */}
-            <div className="space-y-2 min-w-[200px]">
-              <div className="flex items-center justify-between text-xs font-mono">
-                <span className="text-slate-400 font-semibold">Distribusi Emiten</span>
-                <span className="text-slate-300 font-bold">{companies?.length || 107} Emiten</span>
-              </div>
-              <div className="w-full h-2 rounded-full overflow-hidden flex bg-slate-800 border border-slate-700/50">
-                <div style={{ width: `${pctUp}%` }} className="bg-emerald-500 h-full transition-all duration-500" title={`${breadthUp} Naik`} />
-                <div style={{ width: `${pctFlat}%` }} className="bg-slate-500 h-full transition-all duration-500" title={`${breadthFlat} Tetap`} />
-                <div style={{ width: `${pctDown}%` }} className="bg-rose-500 h-full transition-all duration-500" title={`${breadthDown} Turun`} />
-              </div>
-              <div className="flex items-center justify-between text-[11px] font-mono text-slate-300">
-                <span className="text-emerald-400 font-bold">▲ {breadthUp} Naik</span>
-                <span className="text-slate-400">■ {breadthFlat} Tetap</span>
-                <span className="text-rose-400 font-bold">▼ {breadthDown} Turun</span>
-              </div>
-            </div>
-
-            {/* Turnover & Foreign Flow */}
-            <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800/80 space-y-1.5 text-xs font-mono min-w-[190px]">
-              <div className="flex justify-between items-center">
-                <span className="text-slate-400">Turnover Harian:</span>
-                <span className="text-amber-400 font-bold">{ibShort(mkt?.stats?.totalTurnoverIb || overview?.marketVolumeIb || 0)}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-400">Modal Asing (Net):</span>
-                <span className={`font-bold ${(mkt?.stats?.foreignNetIb ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  {(mkt?.stats?.foreignNetIb ?? 0) >= 0 ? '+' : ''}
-                  {ibShort(mkt?.stats?.foreignNetIb || 0)}
-                </span>
-              </div>
-              <div className="flex justify-between items-center text-[10px] text-slate-400 pt-1 border-t border-slate-800/80">
-                <span>Frekuensi:</span>
-                <span className="text-slate-200">{(mkt?.stats?.tradeFrequency || 0).toLocaleString()}x order</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      {/* 1. HERO COMPOSITE INDEX & REALTIME MARKET TERMINAL (1:1 DENGAN APK TERKINI) */}
+      <IpmcMarketHero marketIndex={marketIndex} overview={overview} companies={companies} />
 
       {/* 2. MACRO CRISIS / EMERGENCY EVENT BANNER */}
       {activeEvent && (

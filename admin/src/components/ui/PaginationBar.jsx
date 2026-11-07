@@ -75,3 +75,4 @@ export default function PaginationBar({
     </div>
   );
 }
+
